@@ -1,0 +1,13 @@
+# Get all subdirectories from the current working directory.
+macro(subdirlist result cwd)
+    file(GLOB children RELATIVE ${cwd} ${cwd}/*)
+    set(dirlist "")
+    foreach(child ${children})
+        if(IS_DIRECTORY ${cwd}/${child})
+            if(NOT ${child} STREQUAL "CMakeFiles")
+                list(APPEND dirlist ${child})
+            endif()
+        endif()
+    endforeach()
+    set(${result} ${dirlist})
+endmacro()

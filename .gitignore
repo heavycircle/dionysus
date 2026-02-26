@@ -1,0 +1,15 @@
+# Python Build Files
+__pycache__/
+
+# Build Folders
+build/
+install/
+.cache/
+
+# Intellisense
+compile_commands.json
+
+# OS Files
+.idea/
+.vscode/
+*.sw[op]
