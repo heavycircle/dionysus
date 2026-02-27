@@ -14,9 +14,12 @@ function(setup_app target_name)
     target_compile_options(${target_name} PRIVATE -nostdlib -fno-builtin)
     target_link_options(${target_name} PRIVATE -nostdlib -static -Wl,--gc-sections)
 
-    set(RUNTIME_LIB "${CMAKE_INSTALL_PREFIX}/lib/libdionysus_runtime.a")
     file(GLOB DIONYSUS_LIBS "${CMAKE_INSTALL_PREFIX}/lib/lib*.a")
-    target_link_libraries(${target_name} PRIVATE ${RUNTIME_LIB} ${DIONYSUS_LIBS})
+    target_link_libraries(${target_name} PRIVATE ${DIONYSUS_LIBS})
 
     install(TARGETS ${target_name} DESTINATION bin) # TODO - May be optional
+    install(PROGRAMS "${CMAKE_CURRENT_BINARY_DIR}/${target_name}"
+        DESTINATION ${target_name}
+        RENAME ${target_name}
+    )
 endfunction()

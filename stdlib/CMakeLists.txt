@@ -18,5 +18,7 @@ set(CMAKE_MODULE_PATH "${DIONYSUS_ROOT}/cmake" ${CMAKE_MODULE_PATH})
 message("CMAKE_MODULE_PATH = ${CMAKE_MODULE_PATH}")
 include(framework)
 
+message(STATUS "CMAKE_C_FLAGS:      ${CMAKE_C_FLAGS}")
+
 # Add the code
 add_subdirectory(modules)

@@ -16,19 +16,16 @@ endif()
 # Iterate through architectures
 if(CMAKE_SYSTEM_PLATFORM STREQUAL "x86_64")
     message(STATUS "Compiling for x86_64 ...")
-    set(ARCH "x86_64")
     set(PLATFORM "x86_64")
 elseif(CMAKE_SYSTEM_PLATFORM STREQUAL "x86")
     message(STATUS "Compiling for x86 ...")
-    set(ARCH "x86")
     set(PLATFORM "x86")
     set(CMAKE_C_FLAGS "-m32 ${CMAKE_C_FLAGS}")
 elseif(CMAKE_SYSTEM_PLATFORM STREQUAL "i386")
     message(STATUS "Compiling for i386 ...")
-    set(ARCH "i386")
     set(PLATFORM "i386")
     set(USE_SOCKETCALLS ON)
-    set(CMAKE_C_FLAGS "-march=i386 ${CMAKE_C_FLAGS}")
+    set(CMAKE_C_FLAGS "-m32 -march=i386 ${CMAKE_C_FLAGS}")
 endif()
 
 # Check for socketcalls
@@ -39,7 +36,7 @@ endif()
 
 # Check build type
 if(CMAKE_BUILD_TYPE STREQUAL "release")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os -ffreestanding --ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,-s")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Os -ffreestanding -ffunction-sections -fdata-sections -Wl,--gc-sections -Wl,-s")
 
     if(CMAKE_SYSTEM_PLATFORM MATCHES "win*")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -W")

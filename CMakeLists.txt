@@ -14,10 +14,6 @@ set(DIONYSUS_ROOT   "${CMAKE_SOURCE_DIR}")
 set(DIONYSUS_STDLIB "${CMAKE_SOURCE_DIR}/stdlib")
 set(DIONYSUS_APPS   "${CMAKE_SOURCE_DIR}/sample_apps")
 
-# Default Build Information
-set(PLATFORM x86_64)
-set(CMAKE_BUILD_TYPE debug)
-
 # Add cmake folder to PATH.
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(settings)

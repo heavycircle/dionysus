@@ -32,12 +32,13 @@ macro(add_dionysus_project name source_dir)
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
             -DCMAKE_INSTALL_PREFIX=${install_dir}
             -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
-            -DARCH=${PLATFORM}
             -DDIONYSUS_ROOT=${DIONYSUS_ROOT}
+            -DPLATFORM=${PLATFORM}
             ${AP_CMAKE_ARGS}
         DEPENDS
             ${AP_DEPENDS}
         STEP_TARGETS install
+        BUILD_ALWAYS 1
     )
 
     ExternalProject_Add_StepTargets(${target_name} build install)

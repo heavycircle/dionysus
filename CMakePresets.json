@@ -1,0 +1,123 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    {
+      "name": "Linux",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_SYSTEM_NAME": "Linux"
+      }
+    },
+    {
+      "name": "Windows",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_SYSTEM_NAME": "Windows"
+      }
+    },
+    {
+      "name": "Debug",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "debug"
+      }
+    },
+    {
+      "name": "Release",
+      "hidden": true,
+      "inherits": "base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "release"
+      }
+    },
+    {
+      "name": "x86",
+      "hidden": true,
+      "inherits": ["Linux"],
+      "cacheVariables": {
+        "PLATFORM": "x86",
+        "CMAKE_C_FLAGS": "-m32"
+      }
+    },
+    {
+      "name": "x86_64",
+      "hidden": true,
+      "inherits": ["Linux"],
+      "cacheVariables": {
+        "PLATFORM": "x86_64"
+      }
+    },
+    {
+      "name": "i386",
+      "hidden": true,
+      "inherits": ["Linux"],
+      "cacheVariables": {
+        "PLATFORM": "i386"
+      }
+    },
+    {
+      "name": "x86_64-debug",
+      "inherits": ["x86_64", "Debug"],
+      "displayName": "Linux x86_64 Debug"
+    },
+    {
+      "name": "x86_64-release",
+      "inherits": ["x86_64", "Release"],
+      "displayName": "Linux x86_64 Release"
+    },
+    {
+      "name": "x86-debug",
+      "inherits": ["x86", "Debug"],
+      "displayName": "Linux x86 Debug"
+    },
+    {
+      "name": "x86-release",
+      "inherits": ["x86", "Release"],
+      "displayName": "Linux x86 Release"
+    },
+    {
+      "name": "i386-debug",
+      "inherits": ["i386", "Debug"],
+      "displayName": "Linux i386 Debug"
+    },
+    {
+      "name": "i386-release",
+      "inherits": ["i386", "Release"],
+      "displayName": "Linux i386 Release"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "x86_64-debug",
+      "configurePreset": "x86_64-debug"
+    },
+    {
+      "name": "x86_64-release",
+      "configurePreset": "x86_64-release"
+    },
+    {
+      "name": "x86-debug",
+      "configurePreset": "x86-debug"
+    },
+    {
+      "name": "x86-release",
+      "configurePreset": "x86-release"
+    },
+    {
+      "name": "i386-debug",
+      "configurePreset": "i386-debug"
+    },
+    {
+      "name": "i386-release",
+      "configurePreset": "i386-release"
+    }
+  ]
+}

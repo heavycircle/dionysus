@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+usage() {
+    echo "$(basename "$0") - build the dionysus project"
+    echo
+    echo "This script provides control over building dionysys."
+    echo
+    exit 1
+}
+
+main() {
+    local args=()
+    while (($# > 0)); do
+        case "$1" in
+        -h | --help) usage ;;
+        -*) error "Unknown flag: $1" ;;
+        *) args+=("$1") ;;
+        esac
+        shift
+    done
+    set -- "${args[@]}"
+
+    (($# == 3)) || usage
+
+    local command=("cmake")
+    case "$1" in
+    build) command+=("--build") ;;
+    preset) ;;
+    *) error "Invalid command: $1" ;;
+    esac
+
+    "${command[@]}" --preset "$2-$3"
+}
+
+main "$@"

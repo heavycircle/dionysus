@@ -1,6 +1,6 @@
 # Get all subdirectories from the current working directory.
 macro(subdirlist result cwd)
-    file(GLOB children RELATIVE ${cwd} ${cwd}/*)
+    file(GLOB children RELATIVE ${cwd} CONFIGURE_DEPENDS ${cwd}/*)
     set(dirlist "")
     foreach(child ${children})
         if(IS_DIRECTORY ${cwd}/${child})
