@@ -1,0 +1,19 @@
+
+[1;32m$ make clean [0m
+Cleaning build artifacts...
+rm -rf obj main main.exe
+
+[1;32m$ make target [0m
+zig cc -ffunction-sections -fdata-sections -Wall -Wextra -target arm-linux-musleabihf -Oz -DNDEBUG -c src/cli.c -o obj/release-arm-linux-musleabihf/cli.o
+zig cc -ffunction-sections -fdata-sections -Wall -Wextra -target arm-linux-musleabihf -Oz -DNDEBUG -c src/logic.c -o obj/release-arm-linux-musleabihf/logic.o
+zig cc -ffunction-sections -fdata-sections -Wall -Wextra -target arm-linux-musleabihf -Oz -DNDEBUG -c src/main.c -o obj/release-arm-linux-musleabihf/main.o
+Linking main [release mode, target: arm-linux-musleabihf, STATIC]...
+zig cc  obj/release-arm-linux-musleabihf/cli.o  obj/release-arm-linux-musleabihf/logic.o  obj/release-arm-linux-musleabihf/main.o -o main -Wl,--gc-sections -static -target arm-linux-musleabihf -s
+Build complete.
+
+[1;32m$ stat main [0m
+./main: ELF 32-bit LSB executable, ARM, EABI5 version 1 (SYSV), statically linked, stripped
+-rwxr-xr-x 1 nvimuser nvimuser 20K Mar 19 07:29 ./main
+
+[1;32m$ ./main [0m
+Success! Found 15 prime numbers up to 50.

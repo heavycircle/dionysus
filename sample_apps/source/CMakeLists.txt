@@ -1,2 +1,0 @@
-add_subdirectory(fileio_example)
-add_subdirectory(string_example)
