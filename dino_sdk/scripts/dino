@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+
+fatal() {
+    echo -e "\e[1;31m[-]\e[0m $*" >&2
+    exit 1
+}
+
+dino-build() {
+    local zig_target
+    case "$1" in
+    arm64) zig_target="aarch64-linux-musl" ;;
+    x86_64) zig_target="x86_64-linux-musl" ;;
+    win64) zig_target="x86_64-windows-gnu" ;;
+    *) fatal "Invalid target: $1" ;;
+    esac
+
+    cmake -B "build/$1" \
+        -D DINO_SDK_PATH="$SDK_PATH" \
+        -D CMAKE_TOOLCHAIN_FILE="$SDK_PATH/cmake/toolchain.cmake" \
+        -D ZIG_TARGET="$zig_target"
+
+    cmake --build "build/$1"
+
+    cp "build/$1/compile_commands.json" .
+}
+
+main() {
+    local action="$1"
+    local target="$2"
+
+    declare -g SDK_PATH
+    SDK_PATH="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd -P)"
+
+    case "$action" in
+    build) dino-build "$target" ;;
+    *) fatal "Unknown action: $action" ;;
+    esac
+    exit 0
+}
+
+main "$@"

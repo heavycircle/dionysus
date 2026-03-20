@@ -1,10 +1,6 @@
-# Python Build Files
-__pycache__/
-
 # Build Folders
 build/
-install/
-.cache/
+.*cache/
 
 # Intellisense
 compile_commands.json
