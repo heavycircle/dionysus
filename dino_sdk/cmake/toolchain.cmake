@@ -19,8 +19,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Statically link and minify
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
-set(MINIFY_C_FLAGS "-target ${ZIG_TARGET} -ffunction-sections -fdata-sections -Oz")
-set(MINIFY_LD_FLAGS "-target ${ZIG_TARGET} -Wl,--gc-sections -s -static")
+set(MINIFY_C_FLAGS "-target ${ZIG_TARGET} -ffunction-sections -fdata-sections -Oz -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-ident")
+set(MINIFY_LD_FLAGS "-target ${ZIG_TARGET} -s -static -Wl,--gc-sections")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MINIFY_C_FLAGS}" CACHE STRING "" FORCE)
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MINIFY_LD_FLAGS}" CACHE STRING "" FORCE)

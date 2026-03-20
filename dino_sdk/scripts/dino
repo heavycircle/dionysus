@@ -5,12 +5,44 @@ fatal() {
     exit 1
 }
 
+help() {
+    echo "dino - Minified build chain"
+    echo
+    echo "Usage: dino [COMMAND]"
+    echo
+    echo "Requirements:"
+    echo "    This script requires cmake to build the project and qemu to run"
+    echo "    the cross-compiled targets. You can easily install these with"
+    echo "    your system's package manager."
+    echo
+    echo "Supported Architectures:"
+    echo "    arm       ARM 32-bit"
+    echo "    arm64     ARM 64-bit (i.e., Apple Silicon)"
+    echo "    i386      Intel 80386 (x86)"
+    echo "    ppc       PowerPC 32-bit (Big Endian)"
+    echo "    win32     Windows PE32+"
+    echo "    win64     Windows 64-bit"
+    echo "    x86_64    AMD64"
+    echo
+    echo "Commands:"
+    echo "    build     Compile the current project"
+    echo "    run       Run the binary built for the current project"
+    echo
+    echo "See 'dino help' to print this page."
+    echo
+    exit 1
+}
+
 dino-build() {
     local zig_target
     case "$1" in
+    arm) zig_target="arm-linux-musleabihf" ;;
     arm64) zig_target="aarch64-linux-musl" ;;
-    x86_64) zig_target="x86_64-linux-musl" ;;
+    i386) zig_target="x86-linux-musl" ;;
+    ppc) zig_target="powerpc-linux-musleabihf" ;;
+    win32) zig_target="x86-windows-gnu" ;;
     win64) zig_target="x86_64-windows-gnu" ;;
+    x86_64) zig_target="x86_64-linux-musl" ;;
     *) fatal "Invalid target: $1" ;;
     esac
 
@@ -24,6 +56,21 @@ dino-build() {
     cp "build/$1/compile_commands.json" .
 }
 
+dino-run() {
+    local runtime
+    case "$1" in
+    arm) runtime="qemu-arm-static" ;;
+    arm64) runtime="qemu-aarch64-static" ;;
+    i386) runtime="qemu-i386-static" ;;
+    ppc) runtime="qemu-ppc-static" ;;
+    win32 | win64) runtime="wine" ;;
+    x86_64) runtime="qemu-x86_64-static" ;;
+    *) fatal "Invalid target: $1" ;;
+    esac
+
+    "$runtime" "build/$1/my_app"
+}
+
 main() {
     local action="$1"
     local target="$2"
@@ -33,6 +80,8 @@ main() {
 
     case "$action" in
     build) dino-build "$target" ;;
+    help) help ;;
+    run) dino-run "$target" ;;
     *) fatal "Unknown action: $action" ;;
     esac
     exit 0
