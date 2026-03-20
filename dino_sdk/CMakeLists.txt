@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.15)
 project(DinoSDK C)
 
 add_library(dino_core STATIC
+    src/core/fs.c
     src/core/thread.c
 )
 
