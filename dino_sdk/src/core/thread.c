@@ -2,7 +2,7 @@
 
 #ifdef _WIN32
 
-    #include <windows.h>
+#include <windows.h>
 
 int dino_thread_create(dino_thread_t *thread, dino_thread_worker_t worker, void *arg)
 {
@@ -24,7 +24,7 @@ void dino_thread_join(dino_thread_t thread)
 
 #else
 
-    #include <pthread.h>
+#include <pthread.h>
 
 int dino_thread_create(dino_thread_t *thread, dino_thread_worker_t worker, void *arg)
 {

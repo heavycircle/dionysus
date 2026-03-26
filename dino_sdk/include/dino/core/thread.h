@@ -6,13 +6,13 @@
 typedef uintptr_t dino_thread_t;
 
 #ifdef _WIN32
-    #define DINO_THREAD_RET    unsigned long
-    #define DINO_THREAD_CC     __stdcall
-    #define DINO_THREAD_RETURN return 0
+#define DINO_THREAD_RET    unsigned long
+#define DINO_THREAD_CC     __stdcall
+#define DINO_THREAD_RETURN return 0
 #else
-    #define DINO_THREAD_RET void *
-    #define DINO_THREAD_CC
-    #define DINO_THREAD_RETURN return NULL
+#define DINO_THREAD_RET void *
+#define DINO_THREAD_CC
+#define DINO_THREAD_RETURN return NULL
 #endif
 
 typedef DINO_THREAD_RET(DINO_THREAD_CC *dino_thread_worker_t)(void *arg);

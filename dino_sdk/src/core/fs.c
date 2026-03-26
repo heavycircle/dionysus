@@ -5,7 +5,7 @@
 
 #ifdef _WIN32
 
-    #include <windows.h>
+#include <windows.h>
 
 uint64_t dino_file_size(const char *filepath)
 {
@@ -29,7 +29,7 @@ uint64_t dino_file_size(const char *filepath)
 
 #else
 
-    #include <sys/stat.h>
+#include <sys/stat.h>
 
 uint64_t dino_file_size(const char *filepath)
 {
