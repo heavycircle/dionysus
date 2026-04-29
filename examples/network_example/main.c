@@ -19,7 +19,7 @@ void run_server(void)
     puts("[Server] Client connected!");
 
     char buffer[BUFFER_SIZE] = { 0 };
-    int bytes = dino_socket_recv(client_sock, buffer, BUFFER_SIZE - 1);
+    int  bytes               = dino_socket_recv(client_sock, buffer, BUFFER_SIZE - 1);
     if (bytes > 0)
     {
         printf("[Server] Received: %s\n", buffer);
@@ -52,7 +52,7 @@ void run_client(void)
     puts("[Client] Sent message!");
 
     char buffer[BUFFER_SIZE] = { 0 };
-    int bytes = dino_socket_recv(client_sock, buffer, BUFFER_SIZE - 1);
+    int  bytes               = dino_socket_recv(client_sock, buffer, BUFFER_SIZE - 1);
     if (bytes > 0)
         printf("[Client] Server Response: %s\n", buffer);
 

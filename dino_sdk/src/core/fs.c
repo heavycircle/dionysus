@@ -3,6 +3,9 @@
 
 #include <dino/core/fs.h>
 
+// Base file descriptor for dino_fs_init / dino_fs_cleanup.
+int dino_base_fd = -1;
+
 #ifdef _WIN32
 
 #include <windows.h>
@@ -29,7 +32,9 @@ uint64_t dino_file_size(const char *filepath)
 
 #else
 
+#include <fcntl.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 uint64_t dino_file_size(const char *filepath)
 {
@@ -43,4 +48,28 @@ uint64_t dino_file_size(const char *filepath)
     return (uint64_t)st.st_size;
 }
 
+int dino_fs_init(void)
+{
+    dino_base_fd = open("/dev/null", O_RDWR);
+    if (dino_base_fd == 0)
+    {
+        dup2(0, 1);
+        dup2(0, 2);
+    }
+    else
+    {
+        close(dino_base_fd);
+        dino_base_fd = -1;
+    }
+
+    return 0;
+}
+
+void dino_fs_cleanup(void)
+{
+    if (dino_base_fd == 0)
+    {
+        close(dino_base_fd);
+    }
+}
 #endif

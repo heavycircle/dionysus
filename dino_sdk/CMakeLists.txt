@@ -3,7 +3,10 @@ project(DinoSDK C)
 
 add_library(dino_core STATIC
     src/core/fs.c
+    src/core/io.c
+    src/core/mutex.c
     src/core/network.c
+    src/core/runtime.c
     src/core/thread.c
 )
 

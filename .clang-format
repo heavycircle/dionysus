@@ -1,0 +1,11 @@
+BasedOnStyle: WebKit
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
+AlignTrailingComments: true
+AllowShortFunctionsOnASingleLine: None
+BreakBeforeBraces: Allman
+ColumnLimit: 100
+IncludeBlocks: Preserve
+PointerAlignment: Right
+SortIncludes: false

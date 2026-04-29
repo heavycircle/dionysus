@@ -13,4 +13,25 @@
  */
 uint64_t dino_file_size(const char *filepath);
 
+/**
+ * Initialize fs environment.
+ *
+ * This method is crucial to ensure functionality of modules spawned by
+ * the kernel's call_usermodehelper. call_usermodehelper does not auto-
+ * initialize stdin, stdout, and stderr, which breaks writing functionality
+ * for future file descriptors.
+ *
+ * It's fine for us to initialize all three to /dev/null, since we never
+ * receive output from kernel-spawned modules anyway. TODO: In the future,
+ * find a way to recover their output.
+ *
+ * @return 0 on success, non-zero on failure.
+ */
+int dino_fs_init(void);
+
+/**
+ * Teardown file system environment.
+ */
+void dino_fs_cleanup(void);
+
 #endif

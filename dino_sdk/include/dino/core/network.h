@@ -114,4 +114,53 @@ int dino_socket_send(dino_socket_t sock, const void *buf, int len);
  */
 int dino_socket_recv(dino_socket_t sock, void *buf, int len);
 
+typedef enum
+{
+    DINO_SHUT_RD   = 0,
+    DINO_SHUT_WR   = 1,
+    DINO_SHUT_RDWR = 2
+} dino_shutdown_how_t;
+
+/**
+ * Low-level socket option setter. Level and optname use platform values.
+ *
+ * @param  sock     Socket to configure.
+ * @param  level    Protocol level (e.g. SOL_SOCKET, IPPROTO_TCP).
+ * @param  optname  Option identifier.
+ * @param  val      Pointer to option value.
+ * @param  len      Size of val in bytes.
+ * @return 0 on success, -1 on error.
+ */
+int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, int len);
+
+/**
+ * Enable or disable SO_REUSEADDR on sock.
+ *
+ * @param  sock    Socket to configure.
+ * @param  enable  Non-zero to enable, 0 to disable.
+ * @return 0 on success, -1 on error.
+ */
+int dino_socket_set_reuseaddr(dino_socket_t sock, int enable);
+
+/**
+ * Set sock to non-blocking or blocking mode.
+ *
+ * Linux: uses fcntl(F_SETFL, O_NONBLOCK).
+ * Windows: uses ioctlsocket(FIONBIO).
+ *
+ * @param  sock    Socket to configure.
+ * @param  enable  Non-zero for non-blocking, 0 for blocking.
+ * @return 0 on success, -1 on error.
+ */
+int dino_socket_set_nonblocking(dino_socket_t sock, int enable);
+
+/**
+ * Wrapper for shutdown(2) supporting Windows and POSIX APIs.
+ *
+ * @param  sock  Socket to shut down.
+ * @param  how   Direction to shut down (DINO_SHUT_RD/WR/RDWR).
+ * @return 0 on success, -1 on error.
+ */
+int dino_socket_shutdown(dino_socket_t sock, dino_shutdown_how_t how);
+
 #endif // DINO_CORE_NETWORK_H

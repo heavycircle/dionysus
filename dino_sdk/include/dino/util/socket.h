@@ -1,4 +1,0 @@
-#ifndef DINO_UTIL_SOCKET_H
-#define DINO_UTIL_SOCKET_H
-
-#endif // DINO_UTIL_SOCKET_H

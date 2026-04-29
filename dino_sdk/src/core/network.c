@@ -3,17 +3,16 @@
 
 #ifdef _WIN32
 
-// clang-format off
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <windows.h>
-// clang-format on
 
 typedef int dino_socklen_t;
 
 #else
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -84,8 +83,8 @@ void dino_net_cleanup(void)
 
 dino_socket_t dino_socket_create(dino_domain_t domain, dino_type_t type, dino_protocol_t protocol)
 {
-    int os_domain = translate_domain(domain);
-    int os_type = translate_type(type);
+    int os_domain   = translate_domain(domain);
+    int os_type     = translate_type(type);
     int os_protocol = translate_protocol(protocol);
 
     dino_socket_t s = (dino_socket_t)socket(os_domain, os_type, os_protocol);
@@ -115,7 +114,7 @@ static void dino_sockaddr(struct sockaddr_in *addr, const char *ip, int port)
 {
     memset(addr, 0, sizeof(struct sockaddr_in));
     addr->sin_family = AF_INET;
-    addr->sin_port = htons(port);
+    addr->sin_port   = htons(port);
 
     inet_pton(AF_INET, ip, &addr->sin_addr);
 }
@@ -128,7 +127,7 @@ int dino_socket_bind(dino_socket_t sock, const char *ip, int port)
 #ifdef _WIN32
     int res = bind((SOCKET)sock, (struct sockaddr *)&addr, sizeof(addr));
 #else
-    int res = bind((int)sock, (struct sockaddr *)&addr, sizeof(addr));
+    int res      = bind((int)sock, (struct sockaddr *)&addr, sizeof(addr));
 #endif // _WIN32
 
     return (res == SOCKET_ERROR) ? -1 : 0;
@@ -139,7 +138,7 @@ int dino_socket_listen(dino_socket_t sock, int backlog)
 #ifdef _WIN32
     int res = listen((SOCKET)sock, backlog);
 #else
-    int res = listen((int)sock, backlog);
+    int res      = listen((int)sock, backlog);
 #endif // _WIN32
 
     return (res == SOCKET_ERROR) ? -1 : 0;
@@ -148,12 +147,12 @@ int dino_socket_listen(dino_socket_t sock, int backlog)
 dino_socket_t dino_socket_accept(dino_socket_t sock)
 {
     struct sockaddr_in addr;
-    dino_socklen_t len = sizeof(addr);
+    dino_socklen_t     len = sizeof(addr);
 
 #ifdef _WIN32
     SOCKET client = accept((SOCKET)sock, (struct sockaddr *)&addr, &len);
 #else
-    int client = accept((int)sock, (struct sockaddr *)&addr, &len);
+    int client   = accept((int)sock, (struct sockaddr *)&addr, &len);
 #endif // _WIN32
 
     if (client == SOCKET_ERROR)
@@ -169,7 +168,7 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
 #ifdef _WIN32
     int res = connect((SOCKET)sock, (struct sockaddr *)&addr, sizeof(addr));
 #else
-    int res = connect((int)sock, (struct sockaddr *)&addr, sizeof(addr));
+    int res      = connect((int)sock, (struct sockaddr *)&addr, sizeof(addr));
 #endif
 
     return (res == SOCKET_ERROR) ? -1 : 0;
@@ -180,7 +179,7 @@ int dino_socket_send(dino_socket_t sock, const void *buf, int len)
 #ifdef _WIN32
     int sent = send((SOCKET)sock, (const char *)buf, len, 0);
 #else
-    int sent = send((int)sock, (const char *)buf, len, 0);
+    int sent     = send((int)sock, (const char *)buf, len, 0);
 #endif
     return (sent == SOCKET_ERROR) ? -1 : sent;
 }
@@ -193,4 +192,44 @@ int dino_socket_recv(dino_socket_t sock, void *buf, int len)
     int received = recv((int)sock, (char *)buf, len, 0);
 #endif
     return (received == SOCKET_ERROR) ? -1 : received;
+}
+
+int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, int len)
+{
+#ifdef _WIN32
+    int rc = setsockopt((SOCKET)sock, level, optname, (const char *)val, len);
+#else
+    int rc       = setsockopt((int)sock, level, optname, val, (socklen_t)len);
+#endif
+    return (rc == SOCKET_ERROR) ? -1 : 0;
+}
+
+int dino_socket_set_reuseaddr(dino_socket_t sock, int enable)
+{
+    int flag = enable ? 1 : 0;
+    return dino_socket_setopt(sock, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+}
+
+int dino_socket_set_nonblocking(dino_socket_t sock, int enable)
+{
+#ifdef _WIN32
+    u_long mode = enable ? 1 : 0;
+    return ioctlsocket((SOCKET)sock, FIONBIO, &mode) == 0 ? 0 : -1;
+#else
+    int flags    = fcntl((int)sock, F_GETFL, 0);
+    if (flags == -1)
+        return -1;
+    flags = enable ? (flags | O_NONBLOCK) : (flags & ~O_NONBLOCK);
+    return fcntl((int)sock, F_SETFL, flags) == -1 ? -1 : 0;
+#endif
+}
+
+int dino_socket_shutdown(dino_socket_t sock, dino_shutdown_how_t how)
+{
+#ifdef _WIN32
+    int rc = shutdown((SOCKET)sock, (int)how);
+#else
+    int rc = shutdown((int)sock, (int)how);
+#endif
+    return (rc == SOCKET_ERROR) ? -1 : 0;
 }

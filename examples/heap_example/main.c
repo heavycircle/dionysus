@@ -5,7 +5,7 @@
 int main(void)
 {
     char *buf = calloc(10, sizeof(char));
-    buf = realloc(buf, 100);
+    buf       = realloc(buf, 100);
     strncpy(buf, "Hello from this long string!", 5);
     printf("buf: %s\n", buf);
 
