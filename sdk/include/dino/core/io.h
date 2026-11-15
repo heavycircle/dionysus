@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <dino/core/network.h>
 
-/* ---- Poll event flags (values match Linux and Windows) ---- */
+/* ---- Poll event flags (dino's own values; dino_poll translates them per platform) ---- */
 #define DINO_POLLIN  0x0001
 #define DINO_POLLOUT 0x0004
 #define DINO_POLLERR 0x0008
@@ -34,6 +34,10 @@ typedef uintptr_t dino_fd_set_t;
 
 /**
  * Wait for readiness events on a set of sockets.
+ *
+ * Request DINO_POLLIN and/or DINO_POLLOUT in events. revents always uses DINO_*
+ * values, and DINO_POLLERR and DINO_POLLHUP are reported whether requested or
+ * not. Every revents is reset, so it is 0 on timeout.
  *
  * @param  fds        Array of dino_pollfd_t descriptors.
  * @param  nfds       Number of entries in fds.
