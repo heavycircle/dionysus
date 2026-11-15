@@ -61,9 +61,10 @@ int dino_socket_close(dino_socket_t sock);
  * Wrapper for bind(2) supporting Windows and POSIX APIs.
  *
  * @param  sock     Socket to bind to the port.
- * @param  ip       IP to bind to. Normally 0.0.0.0.
+ * @param  ip       IPv4 or IPv6 address literal to bind to, matching the socket's domain
+ *                  (e.g. "0.0.0.0", "::", "::1"). Host names are not resolved.
  * @param  port     Port to bind to.
- * @return 0 on success, negative on error.
+ * @return 0 on success, negative on error or if ip is not a valid address.
  */
 int dino_socket_bind(dino_socket_t sock, const char *ip, int port);
 
@@ -88,9 +89,10 @@ dino_socket_t dino_socket_accept(dino_socket_t sock);
  * Wrapper for connect(2) supporting Windows and POSIX APIs.
  *
  * @param  sock     Socket to use for connection.
- * @param  ip       Address to connect to.
+ * @param  ip       IPv4 or IPv6 address literal to connect to, matching the socket's domain.
+ *                  Host names are not resolved.
  * @param  port     Port to connect to.
- * @return Zero on connection, -1 on error.
+ * @return Zero on connection, -1 on error or if ip is not a valid address.
  */
 int dino_socket_connect(dino_socket_t sock, const char *ip, int port);
 
