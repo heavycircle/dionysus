@@ -24,8 +24,6 @@ if [[ ${CFLAGS:-} == *-Werror* ]]; then
         known_failures[$(basename "$dir")/win32]="#34"
         known_failures[$(basename "$dir")/win64]="#34"
     done
-    known_failures[fs_example/arm64]="#13"
-    known_failures[fs_example/x86_64]="#13"
 fi
 
 # Billions of loop iterations are fine natively but take minutes under emulation.
