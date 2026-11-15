@@ -110,24 +110,47 @@ int dino_socket_close(dino_socket_t sock)
     return 0;
 }
 
-static void dino_sockaddr(struct sockaddr_in *addr, const char *ip, int port)
+// The address string picks the family, so one call works for both IPv4 and
+// IPv6 sockets. A string that is neither fails instead of silently binding or
+// connecting to 0.0.0.0.
+static int dino_sockaddr(
+    struct sockaddr_storage *addr, dino_socklen_t *len, const char *ip, int port)
 {
-    memset(addr, 0, sizeof(struct sockaddr_in));
-    addr->sin_family = AF_INET;
-    addr->sin_port   = htons(port);
+    struct sockaddr_in  *v4 = (struct sockaddr_in *)addr;
+    struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)addr;
 
-    inet_pton(AF_INET, ip, &addr->sin_addr);
+    memset(addr, 0, sizeof(*addr));
+    if (ip == NULL)
+        return -1;
+
+    if (inet_pton(AF_INET, ip, &v4->sin_addr) == 1)
+    {
+        v4->sin_family = AF_INET;
+        v4->sin_port   = htons((unsigned short)port);
+        *len           = (dino_socklen_t)sizeof(*v4);
+        return 0;
+    }
+    if (inet_pton(AF_INET6, ip, &v6->sin6_addr) == 1)
+    {
+        v6->sin6_family = AF_INET6;
+        v6->sin6_port   = htons((unsigned short)port);
+        *len            = (dino_socklen_t)sizeof(*v6);
+        return 0;
+    }
+    return -1;
 }
 
 int dino_socket_bind(dino_socket_t sock, const char *ip, int port)
 {
-    struct sockaddr_in addr;
-    dino_sockaddr(&addr, ip, port);
+    struct sockaddr_storage addr;
+    dino_socklen_t          len;
+    if (dino_sockaddr(&addr, &len, ip, port) != 0)
+        return -1;
 
 #ifdef _WIN32
-    int res = bind((SOCKET)sock, (struct sockaddr *)&addr, sizeof(addr));
+    int res = bind((SOCKET)sock, (struct sockaddr *)&addr, len);
 #else
-    int res = bind((int)sock, (struct sockaddr *)&addr, sizeof(addr));
+    int res = bind((int)sock, (struct sockaddr *)&addr, len);
 #endif // _WIN32
 
     return (res == SOCKET_ERROR) ? -1 : 0;
@@ -146,8 +169,9 @@ int dino_socket_listen(dino_socket_t sock, int backlog)
 
 dino_socket_t dino_socket_accept(dino_socket_t sock)
 {
-    struct sockaddr_in addr;
-    dino_socklen_t     len = sizeof(addr);
+    // Large enough for an IPv6 peer.
+    struct sockaddr_storage addr;
+    dino_socklen_t          len = sizeof(addr);
 
 #ifdef _WIN32
     SOCKET client = accept((SOCKET)sock, (struct sockaddr *)&addr, &len);
@@ -162,13 +186,15 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
 
 int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
 {
-    struct sockaddr_in addr;
-    dino_sockaddr(&addr, ip, port);
+    struct sockaddr_storage addr;
+    dino_socklen_t          len;
+    if (dino_sockaddr(&addr, &len, ip, port) != 0)
+        return -1;
 
 #ifdef _WIN32
-    int res = connect((SOCKET)sock, (struct sockaddr *)&addr, sizeof(addr));
+    int res = connect((SOCKET)sock, (struct sockaddr *)&addr, len);
 #else
-    int res = connect((int)sock, (struct sockaddr *)&addr, sizeof(addr));
+    int res = connect((int)sock, (struct sockaddr *)&addr, len);
 #endif
 
     return (res == SOCKET_ERROR) ? -1 : 0;
