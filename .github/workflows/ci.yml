@@ -1,0 +1,76 @@
+# Lint, unit tests, and every example built and run on every target (natively,
+# under qemu-user, or under wine) inside the project's Docker image, so CI and
+# local runs of tests/examples.sh match.
+name: ci
+
+on:
+  pull_request:
+    branches: [main, "release-*"]
+  push:
+    branches: [main, "release-*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-zig
+      - uses: astral-sh/setup-uv@v6
+
+      - name: zig fmt
+        run: zig fmt --check build.zig cli
+
+      # Pinned so CI and `uvx` on a contributor's machine format identically.
+      - name: clang-format
+        run: git ls-files '*.c' '*.h' | xargs uvx --from clang-format==19.1.7 clang-format --dry-run --Werror
+
+      - name: shellcheck
+        run: git ls-files '*.sh' | xargs uvx --from shellcheck-py==0.10.0.1 shellcheck
+
+      - name: Commit messages
+        if: github.event_name == 'pull_request'
+        run: scripts/lintcommit.sh "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
+
+  unit:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # build.zig derives the version from `git describe`.
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-zig
+      - run: zig build test
+
+  examples:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [arm, arm64, i386, ppc, win32, win64, x86_64]
+    name: examples (${{ matrix.target }})
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+
+      # The image builds dino from this checkout, so the matrix tests the PR's dino.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: dionysus:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and run every example
+        run: |
+          docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
+            dionysus:ci /repo/tests/examples.sh /repo/examples "${{ matrix.target }}"

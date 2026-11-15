@@ -96,8 +96,10 @@ examples/                  one standalone CMake project per SDK feature
 tests/examples.sh          builds and runs every example on every target
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
+scripts/lintcommit.sh      checks commit messages
 cliff.toml                 release-notes config for git-cliff
-.github/workflows/         release workflow
+.github/workflows/         CI, release and backport workflows
+.github/actions/setup-zig/ installs the pinned Zig in workflows
 Dockerfile                 build and test image
 .devcontainer/             devcontainer using that image
 ```
@@ -158,7 +160,32 @@ targets, and runs the results natively, under qemu-user, or under wine. Run it i
 which has every runner installed. Known failures are listed in the script with their issue number;
 a known failure that starts passing fails the run, so remove its entry in the PR that fixes it.
 
-There is no CI yet. Run `zig build test` and the matrix before asking for review.
+`tests/examples.sh /repo/examples arm64 win64` limits the run to some targets. `CFLAGS` from the
+environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings fail the build.
+
+### CI
+
+`.github/workflows/ci.yml` runs on every PR and on pushes to `main` and `release-*`:
+
+| Job | What it checks |
+| --- | --- |
+| `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, and commit messages |
+| `unit` | `zig build test` |
+| `examples (<target>)` | `tests/examples.sh` for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR, so it tests the PR's `dino` |
+
+Run the same checks locally before asking for review:
+
+```sh
+zig fmt --check build.zig cli && zig build test
+git ls-files '*.c' '*.h' | xargs uvx --from clang-format==19.1.7 clang-format --dry-run --Werror
+git ls-files '*.sh' | xargs uvx --from shellcheck-py==0.10.0.1 shellcheck
+scripts/lintcommit.sh origin/main..HEAD
+docker build -t dionysus . && docker run --rm -e CFLAGS="-Wall -Wextra -Werror" \
+    -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples
+```
+
+The linters are pinned through [uv](https://docs.astral.sh/uv/) so everyone formats with the same
+version as CI. `uvx --from clang-format==19.1.7 clang-format -i <files>` fixes formatting.
 
 ## How the toolchain works
 
@@ -224,7 +251,8 @@ PRIVATE dino_core)`. That is why a user's `CMakeLists.txt` doesn't need to know 
 ## Code style
 
 - **C:** `clang-format` with the repository's `.clang-format` (WebKit base, Allman braces, 100
-  columns). Run `clang-format -i` on the files you touched.
+  columns). Use the pinned version from [CI](#ci) (`uvx --from clang-format==19.1.7 clang-format
+  -i <files>`); other versions can format differently.
 - **Zig:** `zig fmt`. Its output is the style; there are no options to argue about.
 - **CMake and shell:** match the surrounding file (4-space indents, lowercase commands).
 - **Comments explain why, not what.** Code should be readable without narration; save comments for
@@ -236,7 +264,7 @@ We follow [Conventional Commits](https://www.conventionalcommits.org), as
 [neovim does](https://github.com/neovim/neovim/blob/master/CONTRIBUTING.md#commit-messages):
 
 ```
-type(scope): subject in the imperative, under 72 characters
+type(scope): lowercase subject in the imperative, no period, at most 72 characters
 
 Problem:
 What is wrong or missing, and why it matters.
@@ -245,13 +273,17 @@ Solution:
 What this commit changes, and anything a reviewer should know.
 ```
 
-- **type:** `build`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `test`.
+- **type:** `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `test`.
+  `chore` is for maintenance that fits nowhere else; it's listed under "Other changes" in the
+  release notes.
   `release: vX.Y.Z` is reserved for `scripts/release.sh`.
 - **scope** (optional) is an area label: `sdk`, `cli`, `build`, `examples`, `ci`, `docker`, or a
   module such as `network`.
 - **Breaking changes** add `!` after the type or scope and a `BREAKING CHANGE:` footer explaining
   what users have to change.
 - Small commits can skip the `Problem:`/`Solution:` body if the subject says it all.
+- `scripts/lintcommit.sh origin/main..HEAD` checks subjects; CI runs it on every PR. Merge commits
+  are skipped. Squash `fixup!` commits and reword `Revert "..."` to `revert: ...` before review.
 
 ```
 feat(cli): add dino doctor
@@ -320,9 +352,13 @@ include `<dino/version.h>` for `DINO_VERSION`, `DINO_VERSION_MAJOR`, `DINO_VERSI
   breaking changes.
 - **`release-X.Y`** is created from the `vX.Y.0` tag and exists only to produce `vX.Y.Z` patch
   releases. It gets bug, security and documentation fixes, and never features or breaking changes.
-- **Never commit directly to a release branch.** Merge the fix to `main` first, label the PR
-  `needs:backport`, then cherry-pick it with `git cherry-pick -x` onto `release-X.Y` in a PR of its
-  own. (Automating this with a `ci:backport release-X.Y` label is tracked in #21.)
+- **Never commit directly to a release branch.** Merge the fix to `main` first, then add the
+  `ci:backport release-X.Y` label to the PR (before or after merging). `.github/workflows/backport.yml`
+  (adapted from neovim's) opens a `backport: <title>` PR that cherry-picks the commits with
+  `git cherry-pick -x` onto `release-X.Y`. Review and merge it like any PR. If the cherry-pick
+  conflicts, the workflow comments on the original PR; then backport by hand with
+  `git cherry-pick -x` in a PR of your own. Use `needs:backport` on issues whose fix should be
+  backported.
 - **Only the newest `release-X.Y` is supported.** When `release-X.(Y+1)` is cut, the old branch is
   frozen.
 
