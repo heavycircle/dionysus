@@ -19,7 +19,12 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Statically link and minify
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
-set(MINIFY_C_FLAGS "-target ${ZIG_TARGET} -ffunction-sections -fdata-sections -Oz -fno-unwind-tables -fno-asynchronous-unwind-tables -fno-ident")
+set(MINIFY_C_FLAGS "-target ${ZIG_TARGET} -ffunction-sections -fdata-sections -Oz -fno-ident")
+
+# 64-bit Windows SEH requires unwind tables, and zig builds the mingw CRT with these flags.
+if(NOT ZIG_TARGET MATCHES "(x86_64|aarch64)-windows")
+    string(APPEND MINIFY_C_FLAGS " -fno-unwind-tables -fno-asynchronous-unwind-tables")
+endif()
 set(MINIFY_LD_FLAGS "-target ${ZIG_TARGET} -s -static -Wl,--gc-sections")
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MINIFY_C_FLAGS}" CACHE STRING "" FORCE)

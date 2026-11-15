@@ -1,6 +1,7 @@
 # Build Folders
 build/
 .*cache/
+zig-out/
 
 # Intellisense
 compile_commands.json
