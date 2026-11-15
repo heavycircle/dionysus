@@ -75,3 +75,4 @@ git log --oneline --graph --decorate -4 "${refs[@]}"
 echo
 echo "Tagged v$release. Review the commits above, then publish with:"
 echo "    git push origin ${refs[*]} v$release"
+echo "Pushing the tag runs .github/workflows/release.yml, which creates the GitHub Release."

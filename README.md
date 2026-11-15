@@ -40,22 +40,34 @@ Dionysus is two things:
 ## Status
 
 Pre-1.0 and under active development. The toolchain, the `dino` tool and the core SDK modules work
-on all seven targets. Timing, process spawning, an epoll/IOCP event loop, `dino test`, and
-prebuilt releases are on the [v1.0 roadmap](https://github.com/heavycircle/dionysus/issues/25).
+on all seven targets. Timing, process spawning, an epoll/IOCP event loop and `dino test` are on the
+[v1.0 roadmap](https://github.com/heavycircle/dionysus/issues/25).
 
 ## Getting dino
 
-There are no prebuilt binaries yet. Build `dino` from source with
-[Zig 0.17.1](https://ziglang.org/download/) and install it somewhere on your `PATH`:
+Download the archive for your platform from the
+[latest release](https://github.com/heavycircle/dionysus/releases/latest) (Linux x86_64 and
+aarch64 as `.tar.xz`, Windows x86_64 as `.zip`; Windows hosts are not yet tested), and put `dino`
+on your `PATH`:
+
+```sh
+tar -xJf dino-<version>-x86_64-linux.tar.xz
+install -m755 dino-<version>-x86_64-linux/dino ~/.local/bin/
+dino doctor                               # checks for zig, cmake, a generator, qemu and wine
+```
+
+`dino` is a single static executable with the SDK inside it. Building projects with it requires
+[Zig 0.17.1](https://ziglang.org/download/) and CMake 3.15+ on your `PATH`. `qemu-user` and
+`wine` are only needed to *run* foreign targets.
+
+To build `dino` from source instead:
 
 ```sh
 git clone https://github.com/heavycircle/dionysus && cd dionysus
 zig build -Drelease --prefix ~/.local     # installs ~/.local/bin/dino
-dino doctor                               # checks for cmake, a generator, qemu and wine
 ```
 
-`dino` needs Zig and CMake (3.15+) at build time. `qemu-user` and `wine` are only needed to *run*
-foreign targets. Alternatively, the Docker image has everything:
+Alternatively, the Docker image has everything:
 
 ```sh
 docker build -t dionysus .

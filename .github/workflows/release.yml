@@ -1,0 +1,65 @@
+# Publishes a GitHub Release for every vX.Y.Z tag pushed by scripts/release.sh:
+# dino archives for each supported platform, SHA256SUMS, and notes generated
+# from the commits since the previous tag (cliff.toml).
+name: release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+permissions:
+  contents: write
+
+env:
+  ZIG_VERSION: 0.17.1
+  ZIG_SHA256: 3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # git-cliff and `git describe` need the full history and tags.
+          fetch-depth: 0
+
+      - name: Check the tag matches build.zig.zon
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          if ! grep -q "^    \.version = \"$version\",\$" build.zig.zon; then
+            echo "::error::$GITHUB_REF_NAME is not on a release commit (build.zig.zon does not say $version)"
+            exit 1
+          fi
+          echo "VERSION=$version" >>"$GITHUB_ENV"
+
+      - name: Install Zig
+        run: |
+          curl -fsSL "https://ziglang.org/download/$ZIG_VERSION/zig-x86_64-linux-$ZIG_VERSION.tar.xz" -o "$RUNNER_TEMP/zig.tar.xz"
+          echo "$ZIG_SHA256  $RUNNER_TEMP/zig.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/zig"
+          tar -xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
+          echo "$RUNNER_TEMP/zig" >>"$GITHUB_PATH"
+
+      - run: zig build test
+
+      - run: scripts/dist.sh "$VERSION" dist
+
+      - name: Generate release notes
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: ${{ runner.temp }}/notes.md
+
+      # Re-running the workflow for an existing release replaces its assets.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag \
+              --title "dino $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          fi
