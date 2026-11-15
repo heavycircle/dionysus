@@ -6,6 +6,9 @@ zig-out/
 # Intellisense
 compile_commands.json
 
+# Environment
+/.env*
+
 # OS Files
 .idea/
 .vscode/

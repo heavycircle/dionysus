@@ -3,17 +3,30 @@
 # (natively, under qemu-user, or under wine). Intended for the Docker image,
 # which has all runners installed:
 #
-#   docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples
+#   docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples [targets...]
 #
-# Examples are copied to a scratch directory, so the source tree is never written.
+# With no targets, every target is tested. CFLAGS from the environment reaches
+# every compile (CI sets -Wall -Wextra -Werror). Examples are copied to a
+# scratch directory, so the source tree is never written.
 set -uo pipefail
 
 src=${1:-examples}
-targets=(arm arm64 i386 ppc win32 win64 x86_64)
+shift || true
+targets=("$@")
+((${#targets[@]})) || targets=(arm arm64 i386 ppc win32 win64 x86_64)
 
 # Failures tracked in issues. Remove an entry once it's fixed; an unexpected
 # pass fails the run so this list can't go stale.
 declare -A known_failures=()
+if [[ ${CFLAGS:-} == *-Werror* ]]; then
+    # The SDK's network.c warns on Windows, and every example links it.
+    for dir in "$src"/*/; do
+        known_failures[$(basename "$dir")/win32]="#34"
+        known_failures[$(basename "$dir")/win64]="#34"
+    done
+    known_failures[fs_example/arm64]="#13"
+    known_failures[fs_example/x86_64]="#13"
+fi
 
 # Billions of loop iterations are fine natively but take minutes under emulation.
 declare -A build_only=([thread_example]=1)
