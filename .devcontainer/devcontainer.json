@@ -1,0 +1,23 @@
+{
+    "name": "dionysus",
+    // The project's own image: zig, cmake, ninja, qemu-user and wine, with a non-root `dino` user.
+    "build": {
+        "dockerfile": "../Dockerfile",
+        "context": ".."
+    },
+    "remoteUser": "dino",
+    // git for source control and `dino version`, without adding it to the distributed image.
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": { "version": "os-provided" }
+    },
+    // The image's dino is built at image build time; prefer the one built from the checkout.
+    "remoteEnv": {
+        "PATH": "${containerWorkspaceFolder}/zig-out/bin:${containerEnv:PATH}"
+    },
+    "postCreateCommand": "zig build && dino doctor",
+    "customizations": {
+        "vscode": {
+            "extensions": ["ziglang.vscode-zig", "llvm-vs-code-extensions.vscode-clangd"]
+        }
+    }
+}

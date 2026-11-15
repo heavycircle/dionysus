@@ -76,6 +76,11 @@ docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/exampl
 The image has `dino` built from the source tree at image build time, so rebuild the image after
 changing `cli/` or `sdk/`.
 
+**Devcontainer.** `.devcontainer/devcontainer.json` uses the same image, for VS Code ("Reopen in
+Container"), GitHub Codespaces, or the `devcontainer` CLI. It runs `zig build` on creation and puts
+`zig-out/bin` first on `PATH`, so `dino` is the one built from your checkout. Run `zig build` again
+after changing `cli/` or `sdk/`.
+
 ## Repository layout
 
 ```
@@ -91,6 +96,7 @@ examples/                  one standalone CMake project per SDK feature
 tests/examples.sh          builds and runs every example on every target
 scripts/release.sh         cuts a release (see Releases)
 Dockerfile                 build and test image
+.devcontainer/             devcontainer using that image
 ```
 
 Some history explains a few of the leftover pieces. The project started as a hand-written, no-libc
