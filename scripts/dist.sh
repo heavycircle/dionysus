@@ -22,7 +22,7 @@ tar_flags=(
     --format=gnu --sort=name
     --mtime="@$SOURCE_DATE_EPOCH"
     --numeric-owner --owner=0 --group=0
-    --mode=go+u,go-w
+    '--mode=go+u,go-w'
 )
 
 # <asset suffix> <zig target>. macOS is not supported yet.

@@ -1,0 +1,45 @@
+# Adapted from neovim/neovim. Labeling a merged PR `ci:backport release-X.Y`
+# (before or after merging) opens a PR cherry-picking its commits onto
+# release-X.Y with `git cherry-pick -x`. See CONTRIBUTING.md#versioning.
+#
+# Backport PRs get CI only when opened by a GitHub App, configured as the
+# BACKPORT_APP variable (app ID) and BACKPORT_KEY secret (private key). The app
+# needs Contents, Pull requests and Workflows read & write, installed on this
+# repo only; Workflows lets it cherry-pick commits that touch .github/workflows.
+name: backport
+
+on:
+  pull_request_target:
+    types: [closed, labeled]
+
+permissions: {}
+
+jobs:
+  backport:
+    permissions:
+      contents: write
+      pull-requests: write
+    name: Backport Pull Request
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Trusted base-branch code only; never the PR's head.
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      # PRs opened with the default GITHUB_TOKEN don't trigger other workflows,
+      # so backport PRs only get CI when a GitHub App token is configured.
+      - uses: actions/create-github-app-token@v3.2.0
+        id: app-token
+        if: vars.BACKPORT_APP != ''
+        with:
+          app-id: ${{ vars.BACKPORT_APP }}
+          private-key: ${{ secrets.BACKPORT_KEY }}
+
+      - name: Create backport PR
+        uses: korthout/backport-action@8560fb503c275d433c56f05a2f64850093baa9f7 # v4.7.0
+        with:
+          pull_title: "backport: ${pull_title}"
+          label_pattern: "^ci:backport ([^ ]+)$"
+          github_token: ${{ steps.app-token.outputs.token || github.token }}

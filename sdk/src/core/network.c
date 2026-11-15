@@ -127,7 +127,7 @@ int dino_socket_bind(dino_socket_t sock, const char *ip, int port)
 #ifdef _WIN32
     int res = bind((SOCKET)sock, (struct sockaddr *)&addr, sizeof(addr));
 #else
-    int res      = bind((int)sock, (struct sockaddr *)&addr, sizeof(addr));
+    int res = bind((int)sock, (struct sockaddr *)&addr, sizeof(addr));
 #endif // _WIN32
 
     return (res == SOCKET_ERROR) ? -1 : 0;
@@ -138,7 +138,7 @@ int dino_socket_listen(dino_socket_t sock, int backlog)
 #ifdef _WIN32
     int res = listen((SOCKET)sock, backlog);
 #else
-    int res      = listen((int)sock, backlog);
+    int res = listen((int)sock, backlog);
 #endif // _WIN32
 
     return (res == SOCKET_ERROR) ? -1 : 0;
@@ -152,7 +152,7 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
 #ifdef _WIN32
     SOCKET client = accept((SOCKET)sock, (struct sockaddr *)&addr, &len);
 #else
-    int client   = accept((int)sock, (struct sockaddr *)&addr, &len);
+    int client = accept((int)sock, (struct sockaddr *)&addr, &len);
 #endif // _WIN32
 
     if (client == SOCKET_ERROR)
@@ -168,7 +168,7 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
 #ifdef _WIN32
     int res = connect((SOCKET)sock, (struct sockaddr *)&addr, sizeof(addr));
 #else
-    int res      = connect((int)sock, (struct sockaddr *)&addr, sizeof(addr));
+    int res = connect((int)sock, (struct sockaddr *)&addr, sizeof(addr));
 #endif
 
     return (res == SOCKET_ERROR) ? -1 : 0;
@@ -179,7 +179,7 @@ int dino_socket_send(dino_socket_t sock, const void *buf, int len)
 #ifdef _WIN32
     int sent = send((SOCKET)sock, (const char *)buf, len, 0);
 #else
-    int sent     = send((int)sock, (const char *)buf, len, 0);
+    int sent = send((int)sock, (const char *)buf, len, 0);
 #endif
     return (sent == SOCKET_ERROR) ? -1 : sent;
 }
@@ -199,7 +199,7 @@ int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *v
 #ifdef _WIN32
     int rc = setsockopt((SOCKET)sock, level, optname, (const char *)val, len);
 #else
-    int rc       = setsockopt((int)sock, level, optname, val, (socklen_t)len);
+    int rc = setsockopt((int)sock, level, optname, val, (socklen_t)len);
 #endif
     return (rc == SOCKET_ERROR) ? -1 : 0;
 }
@@ -216,7 +216,7 @@ int dino_socket_set_nonblocking(dino_socket_t sock, int enable)
     u_long mode = enable ? 1 : 0;
     return ioctlsocket((SOCKET)sock, FIONBIO, &mode) == 0 ? 0 : -1;
 #else
-    int flags    = fcntl((int)sock, F_GETFL, 0);
+    int flags = fcntl((int)sock, F_GETFL, 0);
     if (flags == -1)
         return -1;
     flags = enable ? (flags | O_NONBLOCK) : (flags & ~O_NONBLOCK);
