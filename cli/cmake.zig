@@ -9,12 +9,10 @@ pub const Mode = enum {
     debug,
     release,
 
-    /// Release maps to no build type: the toolchain's size flags live in
-    /// CMAKE_C_FLAGS, and CMake's Release defaults (-O3) would override -Oz.
     pub fn cmakeName(m: Mode) []const u8 {
         return switch (m) {
             .debug => "Debug",
-            .release => "",
+            .release => "Release",
         };
     }
 };

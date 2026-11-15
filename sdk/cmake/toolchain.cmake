@@ -11,9 +11,10 @@ else()
     set(CMAKE_SYSTEM_NAME Generic)
 endif()
 
-# Use zig cc
-set(CMAKE_C_COMPILER "zig;cc" CACHE STRING "C Compiler" FORCE)
-set(CMAKE_CXX_COMPILER "zig;c++" CACHE STRING "C++ Compiler" FORCE)
+# The target rides along with the compiler command rather than CMAKE_C_FLAGS,
+# so user-supplied flags can never drop it and silently build for the host.
+set(CMAKE_C_COMPILER "zig;cc;-target;${ZIG_TARGET}" CACHE STRING "C Compiler" FORCE)
+set(CMAKE_CXX_COMPILER "zig;c++;-target;${ZIG_TARGET}" CACHE STRING "C++ Compiler" FORCE)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -38,18 +39,18 @@ endfunction()
 dino_zig_tool(ar)
 dino_zig_tool(ranlib)
 
-# Statically link and minify
+# Statically link. _INIT values only seed the cache on the first configure, so
+# reconfiguring never duplicates them and user-supplied flags are kept.
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
-set(MINIFY_C_FLAGS "-target ${ZIG_TARGET} -ffunction-sections -fdata-sections -Oz -fno-ident")
+set(CMAKE_EXE_LINKER_FLAGS_INIT "-static")
 
-# 64-bit Windows SEH requires unwind tables, and zig builds the mingw CRT with these flags.
-if(NOT ZIG_TARGET MATCHES "(x86_64|aarch64)-windows")
-    string(APPEND MINIFY_C_FLAGS " -fno-unwind-tables -fno-asynchronous-unwind-tables")
+# Per-configuration flags (minified Release, symbols in Debug) live in flags.cmake.
+set(CMAKE_USER_MAKE_RULES_OVERRIDE "${CMAKE_CURRENT_LIST_DIR}/flags.cmake")
+
+# Projects configured without a build type still get the minified build.
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type: Debug, Release, RelWithDebInfo, MinSizeRel")
 endif()
-set(MINIFY_LD_FLAGS "-target ${ZIG_TARGET} -s -static -Wl,--gc-sections")
-
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${MINIFY_C_FLAGS}" CACHE STRING "" FORCE)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${MINIFY_LD_FLAGS}" CACHE STRING "" FORCE)
 
 # Don't use host machine glibc
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
