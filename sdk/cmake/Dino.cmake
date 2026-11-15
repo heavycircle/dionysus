@@ -2,8 +2,12 @@
 # This is what lets a plain CMakeLists.txt link `dino_core` without vendoring the SDK.
 include_guard(GLOBAL)
 
+if(NOT DINO_SDK_PATH)
+    get_filename_component(DINO_SDK_PATH "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
+endif()
+
 if(NOT TARGET dino_core)
-    add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/.." "${CMAKE_BINARY_DIR}/_dino" EXCLUDE_FROM_ALL)
+    add_subdirectory("${DINO_SDK_PATH}" "${CMAKE_BINARY_DIR}/_dino" EXCLUDE_FROM_ALL)
 endif()
 
 function(dino_executable name)
