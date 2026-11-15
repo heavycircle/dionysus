@@ -30,6 +30,17 @@ uint64_t dino_file_size(const char *filepath)
     return (uint64_t)size.QuadPart;
 }
 
+// The missing-stdio problem only affects processes spawned by the Linux kernel's
+// call_usermodehelper, so there is nothing to set up on Windows.
+int dino_fs_init(void)
+{
+    return 0;
+}
+
+void dino_fs_cleanup(void)
+{
+}
+
 #else
 
 #include <fcntl.h>
