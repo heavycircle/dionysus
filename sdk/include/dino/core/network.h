@@ -80,7 +80,7 @@ int dino_socket_listen(dino_socket_t sock, int backlog);
  * Wrapper for accept(2) supporting Windows and POSIX APIs.
  *
  * @param  sock     Socket to accept connection.
- * @return Client socket.
+ * @return Client socket, or DINO_INVALID_SOCKET on failure.
  */
 dino_socket_t dino_socket_accept(dino_socket_t sock);
 

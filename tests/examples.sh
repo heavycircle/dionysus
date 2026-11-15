@@ -18,13 +18,6 @@ targets=("$@")
 # Failures tracked in issues. Remove an entry once it's fixed; an unexpected
 # pass fails the run so this list can't go stale.
 declare -A known_failures=()
-if [[ ${CFLAGS:-} == *-Werror* ]]; then
-    # The SDK's network.c warns on Windows, and every example links it.
-    for dir in "$src"/*/; do
-        known_failures[$(basename "$dir")/win32]="#34"
-        known_failures[$(basename "$dir")/win64]="#34"
-    done
-fi
 
 # Billions of loop iterations are fine natively but take minutes under emulation.
 declare -A build_only=([thread_example]=1)

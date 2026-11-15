@@ -155,8 +155,8 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
     int client = accept((int)sock, (struct sockaddr *)&addr, &len);
 #endif // _WIN32
 
-    if (client == SOCKET_ERROR)
-        return -1;
+    if (client == INVALID_SOCKET)
+        return DINO_INVALID_SOCKET;
     return (dino_socket_t)client;
 }
 
