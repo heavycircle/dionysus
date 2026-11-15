@@ -37,7 +37,9 @@ WORKDIR /src
 COPY build.zig build.zig.zon ./
 COPY cli cli
 COPY sdk sdk
-RUN zig build test && zig build -Drelease --prefix /usr/local ${DINO_VERSION:+-Dversion-string=$DINO_VERSION}
+# Zig defaults to -mcpu=native; layers are cached and shared across machines
+# (CI runners, pulled images), so build for the baseline CPU instead.
+RUN zig build test && zig build -Drelease -Dcpu=baseline --prefix /usr/local ${DINO_VERSION:+-Dversion-string=$DINO_VERSION}
 
 FROM base
 COPY --from=build /usr/local/bin/dino /usr/local/bin/dino
