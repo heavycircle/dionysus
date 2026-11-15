@@ -5,71 +5,115 @@
 #define PORT        8080
 #define BUFFER_SIZE 1024
 
-void run_server(void)
+static dino_socket_t listen_on(int port)
 {
-    dino_socket_t server_sock
-        = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
-    if (server_sock == DINO_INVALID_SOCKET)
-        return;
+    dino_socket_t sock = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    if (sock == DINO_INVALID_SOCKET)
+        return DINO_INVALID_SOCKET;
 
-    dino_socket_bind(server_sock, "0.0.0.0", PORT);
-    dino_socket_listen(server_sock, 5);
-
-    dino_socket_t client_sock = dino_socket_accept(server_sock);
-    puts("[Server] Client connected!");
-
-    char buffer[BUFFER_SIZE] = { 0 };
-    int  bytes               = dino_socket_recv(client_sock, buffer, BUFFER_SIZE - 1);
-    if (bytes > 0)
+    dino_socket_set_reuseaddr(sock, 1);
+    if (dino_socket_bind(sock, "0.0.0.0", port) != 0 || dino_socket_listen(sock, 5) != 0)
     {
-        printf("[Server] Received: %s\n", buffer);
-
-        const char *response = "Pong!";
-        dino_socket_send(client_sock, response, strlen(response));
-        puts("[Server] Response sent.");
+        dino_socket_close(sock);
+        return DINO_INVALID_SOCKET;
     }
-
-    dino_socket_close(client_sock);
-    dino_socket_close(server_sock);
+    return sock;
 }
 
-void run_client(void)
+static dino_socket_t connect_to(int port)
 {
-    dino_socket_t client_sock
-        = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
-    if (client_sock == DINO_INVALID_SOCKET)
-        return;
-
-    if (dino_socket_connect(client_sock, "127.0.0.1", PORT) != 0)
+    dino_socket_t sock = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    if (sock != DINO_INVALID_SOCKET && dino_socket_connect(sock, "127.0.0.1", port) != 0)
     {
-        fprintf(stderr, "Connection failed!\n");
-        dino_socket_close(client_sock);
-        return;
+        dino_socket_close(sock);
+        return DINO_INVALID_SOCKET;
+    }
+    return sock;
+}
+
+static int send_msg(const char *who, dino_socket_t sock, const char *msg)
+{
+    int ok = dino_socket_send(sock, msg, (int)strlen(msg)) == (int)strlen(msg);
+    printf("[%s] Sent: %s%s\n", who, msg, ok ? "" : " (FAILED)");
+    return ok;
+}
+
+static int expect_msg(const char *who, dino_socket_t sock, const char *expected)
+{
+    char buf[BUFFER_SIZE] = { 0 };
+    int  n                = dino_socket_recv(sock, buf, BUFFER_SIZE - 1);
+    int  ok               = n > 0 && strcmp(buf, expected) == 0;
+    printf("[%s] Received: %s%s\n", who, n > 0 ? buf : "(nothing)", ok ? "" : " (FAILED)");
+    return ok;
+}
+
+static int run_server(void)
+{
+    dino_socket_t server = listen_on(PORT);
+    if (server == DINO_INVALID_SOCKET)
+        return 0;
+    printf("[Server] Listening on port %d\n", PORT);
+
+    dino_socket_t client = dino_socket_accept(server);
+    int           ok     = client != DINO_INVALID_SOCKET && expect_msg("Server", client, "Ping!")
+        && send_msg("Server", client, "Pong!");
+
+    if (client != DINO_INVALID_SOCKET)
+        dino_socket_close(client);
+    dino_socket_close(server);
+    return ok;
+}
+
+static int run_client(void)
+{
+    dino_socket_t sock = connect_to(PORT);
+    if (sock == DINO_INVALID_SOCKET)
+    {
+        fprintf(stderr, "[Client] Connection failed\n");
+        return 0;
     }
 
-    const char *msg = "Ping!";
-    dino_socket_send(client_sock, msg, strlen(msg));
-    puts("[Client] Sent message!");
+    int ok = send_msg("Client", sock, "Ping!") && expect_msg("Client", sock, "Pong!");
+    dino_socket_close(sock);
+    return ok;
+}
 
-    char buffer[BUFFER_SIZE] = { 0 };
-    int  bytes               = dino_socket_recv(client_sock, buffer, BUFFER_SIZE - 1);
-    if (bytes > 0)
-        printf("[Client] Server Response: %s\n", buffer);
+// Both ends in one process: connect() completes against the listen backlog
+// before accept(), so interleaving the steps needs no threads.
+static int run_self_test(void)
+{
+    dino_socket_t server = listen_on(PORT);
+    dino_socket_t client = connect_to(PORT);
+    dino_socket_t peer
+        = server != DINO_INVALID_SOCKET ? dino_socket_accept(server) : DINO_INVALID_SOCKET;
 
-    dino_socket_close(client_sock);
+    int ok = server != DINO_INVALID_SOCKET && client != DINO_INVALID_SOCKET
+        && peer != DINO_INVALID_SOCKET && send_msg("Client", client, "Ping!")
+        && expect_msg("Server", peer, "Ping!") && send_msg("Server", peer, "Pong!")
+        && expect_msg("Client", client, "Pong!");
+
+    if (peer != DINO_INVALID_SOCKET)
+        dino_socket_close(peer);
+    if (client != DINO_INVALID_SOCKET)
+        dino_socket_close(client);
+    if (server != DINO_INVALID_SOCKET)
+        dino_socket_close(server);
+    return ok;
 }
 
 int main(int argc, char *argv[])
 {
-    dino_net_init();
+    if (dino_net_init() != 0)
+        return 1;
 
+    int ok;
     if (argc > 1 && strcmp(argv[1], "server") == 0)
-        run_server();
+        ok = run_server();
     else if (argc > 1 && strcmp(argv[1], "client") == 0)
-        run_client();
+        ok = run_client();
     else
-        printf("Usage: %s [server|client]\n", argv[0]);
+        ok = run_self_test();
 
     dino_net_cleanup();
-    return 0;
+    return ok ? 0 : 1;
 }
