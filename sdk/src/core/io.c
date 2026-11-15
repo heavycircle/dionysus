@@ -6,6 +6,34 @@
 #include <winsock2.h>
 #include <windows.h>
 
+// WSAPoll numbers its flags differently from POSIX (POLLIN is 0x0300, 0x0001
+// is POLLERR), so DINO_* flags must be translated both ways. POLLERR and
+// POLLHUP are never requested: WSAPoll always reports them, and some versions
+// reject them in events with WSAEINVAL.
+static SHORT to_os_events(short events)
+{
+    SHORT os = 0;
+    if (events & DINO_POLLIN)
+        os |= POLLRDNORM;
+    if (events & DINO_POLLOUT)
+        os |= POLLWRNORM;
+    return os;
+}
+
+static short from_os_revents(SHORT os)
+{
+    short revents = 0;
+    if (os & (POLLRDNORM | POLLRDBAND))
+        revents |= DINO_POLLIN;
+    if (os & POLLWRNORM)
+        revents |= DINO_POLLOUT;
+    if (os & (POLLERR | POLLNVAL))
+        revents |= DINO_POLLERR;
+    if (os & POLLHUP)
+        revents |= DINO_POLLHUP;
+    return revents;
+}
+
 int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
 {
     WSAPOLLFD  stack_buf[64];
@@ -16,17 +44,14 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
     for (int i = 0; i < nfds; i++)
     {
         wfds[i].fd      = (SOCKET)fds[i].sock;
-        wfds[i].events  = fds[i].events;
+        wfds[i].events  = to_os_events(fds[i].events);
         wfds[i].revents = 0;
     }
 
     int rc = WSAPoll(wfds, (ULONG)nfds, timeout_ms);
 
-    if (rc > 0)
-    {
-        for (int i = 0; i < nfds; i++)
-            fds[i].revents = wfds[i].revents;
-    }
+    for (int i = 0; i < nfds; i++)
+        fds[i].revents = rc > 0 ? from_os_revents(wfds[i].revents) : 0;
 
     if (wfds != stack_buf)
         free(wfds);
@@ -105,6 +130,32 @@ int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, di
 #include <sys/select.h>
 #include <sys/time.h>
 
+// The DINO_* values happen to equal Linux's, but translating keeps that an
+// implementation detail rather than something every target must share.
+static short to_os_events(short events)
+{
+    short os = 0;
+    if (events & DINO_POLLIN)
+        os |= POLLIN;
+    if (events & DINO_POLLOUT)
+        os |= POLLOUT;
+    return os;
+}
+
+static short from_os_revents(short os)
+{
+    short revents = 0;
+    if (os & POLLIN)
+        revents |= DINO_POLLIN;
+    if (os & POLLOUT)
+        revents |= DINO_POLLOUT;
+    if (os & (POLLERR | POLLNVAL))
+        revents |= DINO_POLLERR;
+    if (os & POLLHUP)
+        revents |= DINO_POLLHUP;
+    return revents;
+}
+
 int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
 {
     struct pollfd  stack_buf[64];
@@ -115,17 +166,14 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
     for (int i = 0; i < nfds; i++)
     {
         pfds[i].fd      = (int)fds[i].sock;
-        pfds[i].events  = fds[i].events;
+        pfds[i].events  = to_os_events(fds[i].events);
         pfds[i].revents = 0;
     }
 
     int rc = poll(pfds, (nfds_t)nfds, timeout_ms);
 
-    if (rc > 0)
-    {
-        for (int i = 0; i < nfds; i++)
-            fds[i].revents = pfds[i].revents;
-    }
+    for (int i = 0; i < nfds; i++)
+        fds[i].revents = rc > 0 ? from_os_revents(pfds[i].revents) : 0;
 
     if (pfds != stack_buf)
         free(pfds);
