@@ -13,10 +13,7 @@ targets=(arm arm64 i386 ppc win32 win64 x86_64)
 
 # Failures tracked in issues. Remove an entry once it's fixed; an unexpected
 # pass fails the run so this list can't go stale.
-declare -A known_failures=(
-    [runtime_example/win32]="#6"
-    [runtime_example/win64]="#6"
-)
+declare -A known_failures=()
 
 # Billions of loop iterations are fine natively but take minutes under emulation.
 declare -A build_only=([thread_example]=1)
