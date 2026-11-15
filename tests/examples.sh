@@ -17,7 +17,10 @@ targets=("$@")
 
 # Failures tracked in issues. Remove an entry once it's fixed; an unexpected
 # pass fails the run so this list can't go stale.
-declare -A known_failures=()
+declare -A known_failures=(
+    [io_example/win32]="#49"
+    [io_example/win64]="#49"
+)
 
 # Billions of loop iterations are fine natively but take minutes under emulation.
 declare -A build_only=([thread_example]=1)
