@@ -76,3 +76,7 @@ echo
 echo "Tagged v$release. Review the commits above, then publish with:"
 echo "    git push origin ${refs[*]} v$release"
 echo "Pushing the tag runs .github/workflows/release.yml, which creates the GitHub Release."
+if [[ $branch == main ]]; then
+    echo "Then create the backport label for the new branch:"
+    echo "    gh label create 'ci:backport release-$major.$minor' --color FBCA04"
+fi
