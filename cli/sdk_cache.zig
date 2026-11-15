@@ -15,9 +15,10 @@ pub fn path(ctx: *Ctx) Ctx.Error![]const u8 {
         if (override.len != 0) return checkOverride(ctx, override);
     }
     const dir = ctx.join(&.{ try home(ctx), "sdk", ctx.sprint("{s}-{s}", .{ build_options.version, &contentHash() }) });
-    if (ctx.exists(ctx.join(&.{ dir, marker }))) return dir;
-    try unpack(ctx, dir);
-    return dir;
+    if (!ctx.exists(ctx.join(&.{ dir, marker }))) try unpack(ctx, dir);
+    // CMake resolves a relative CMAKE_TOOLCHAIN_FILE against the build directory.
+    return Io.Dir.cwd().realPathFileAlloc(ctx.io, dir, ctx.arena) catch |e|
+        ctx.fail("resolving SDK path {s}: {t}", .{ dir, e });
 }
 
 /// Root of dino's per-user state: $DINO_HOME, else the platform cache directory.
