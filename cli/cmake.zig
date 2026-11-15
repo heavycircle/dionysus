@@ -9,10 +9,12 @@ pub const Mode = enum {
     debug,
     release,
 
+    /// Release maps to no build type: the toolchain's size flags live in
+    /// CMAKE_C_FLAGS, and CMake's Release defaults (-O3) would override -Oz.
     pub fn cmakeName(m: Mode) []const u8 {
         return switch (m) {
             .debug => "Debug",
-            .release => "Release",
+            .release => "",
         };
     }
 };
@@ -86,8 +88,7 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
         return ctx.fail("writing CMake file API query: {t}", .{e});
 
     var argv: std.ArrayList([]const u8) = .empty;
-    // DINO_SDK_PATH is only read by older projects that add_subdirectory() the SDK.
-    argv.appendSlice(ctx.arena, &.{ "cmake", "-S", cfg.source_dir, "-B", cfg.build_dir, "--no-warn-unused-cli" }) catch @panic("OOM");
+    argv.appendSlice(ctx.arena, &.{ "cmake", "-S", cfg.source_dir, "-B", cfg.build_dir }) catch @panic("OOM");
     if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }))) {
         if (try generator(ctx)) |g| argv.appendSlice(ctx.arena, &.{ "-G", g }) catch @panic("OOM");
     }
