@@ -30,11 +30,14 @@ RUN curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${Z
 ENV PATH=/opt/zig:$PATH
 
 FROM base AS build
+# The build context has no .git, so dino reports build.zig.zon's version unless
+# the release workflow passes the exact one (e.g. --build-arg DINO_VERSION=1.0.0).
+ARG DINO_VERSION
 WORKDIR /src
 COPY build.zig build.zig.zon ./
 COPY cli cli
 COPY sdk sdk
-RUN zig build test && zig build -Drelease --prefix /usr/local
+RUN zig build test && zig build -Drelease --prefix /usr/local ${DINO_VERSION:+-Dversion-string=$DINO_VERSION}
 
 FROM base
 COPY --from=build /usr/local/bin/dino /usr/local/bin/dino

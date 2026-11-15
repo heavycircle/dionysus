@@ -107,6 +107,7 @@ test {
     _ = @import("cmake.zig");
     _ = @import("sdk_cache.zig");
     _ = @import("targets.zig");
+    _ = @import("version.zig");
     _ = @import("commands/build.zig");
     _ = @import("commands/doctor.zig");
     _ = @import("commands/init.zig");

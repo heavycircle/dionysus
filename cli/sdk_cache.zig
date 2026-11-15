@@ -14,7 +14,7 @@ pub fn path(ctx: *Ctx) Ctx.Error![]const u8 {
     if (ctx.env.get("DINO_SDK_PATH")) |override| {
         if (override.len != 0) return checkOverride(ctx, override);
     }
-    const dir = ctx.join(&.{ try home(ctx), "sdk", ctx.sprint("{s}-{s}", .{ build_options.version, &contentHash() }) });
+    const dir = ctx.join(&.{ try home(ctx), "sdk", ctx.sprint("{s}-{s}", .{ build_options.sdk_version, &contentHash() }) });
     if (!ctx.exists(ctx.join(&.{ dir, marker }))) try unpack(ctx, dir);
     // CMake resolves a relative CMAKE_TOOLCHAIN_FILE against the build directory.
     return Io.Dir.cwd().realPathFileAlloc(ctx.io, dir, ctx.arena) catch |e|
@@ -77,7 +77,7 @@ fn unpack(ctx: *Ctx, dir: []const u8) Ctx.Error!void {
         cwd.writeFile(ctx.io, .{ .sub_path = dest, .data = file.data }) catch |e|
             return ctx.fail("writing {s}: {t}", .{ dest, e });
     }
-    cwd.writeFile(ctx.io, .{ .sub_path = ctx.join(&.{ tmp, marker }), .data = build_options.version }) catch |e|
+    cwd.writeFile(ctx.io, .{ .sub_path = ctx.join(&.{ tmp, marker }), .data = build_options.sdk_version }) catch |e|
         return ctx.fail("writing SDK marker in {s}: {t}", .{ tmp, e });
 
     if (ctx.exists(ctx.join(&.{ dir, marker }))) return;
@@ -101,6 +101,23 @@ test "embedded sdk contents" {
         if (std.mem.eql(u8, file.path, "cmake/Dino.cmake")) has_module = true;
     }
     try std.testing.expect(has_cmake and has_toolchain and has_module);
+}
+
+test "sdk CMake version matches build.zig.zon" {
+    const cmake = for (embedded.files) |file| {
+        if (std.mem.eql(u8, file.path, "CMakeLists.txt")) break file.data;
+    } else return error.MissingCMakeLists;
+    const number = try between(cmake, "project(DinoSDK VERSION ", " ");
+    const pre = try between(cmake, "set(DINO_VERSION_PRERELEASE \"", "\")");
+    const expected = try std.fmt.allocPrint(std.testing.allocator, "{s}{s}", .{ number, pre });
+    defer std.testing.allocator.free(expected);
+    try std.testing.expectEqualStrings(build_options.sdk_version, expected);
+}
+
+fn between(haystack: []const u8, start: []const u8, end: []const u8) ![]const u8 {
+    const i = (std.mem.indexOf(u8, haystack, start) orelse return error.NotFound) + start.len;
+    const len = std.mem.indexOf(u8, haystack[i..], end) orelse return error.NotFound;
+    return haystack[i..][0..len];
 }
 
 test "content hash is stable hex" {

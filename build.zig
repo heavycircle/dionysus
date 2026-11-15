@@ -1,12 +1,14 @@
 const std = @import("std");
 const zon = @import("build.zig.zon");
+const version = @import("cli/version.zig");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSmall });
 
     const options = b.addOptions();
-    options.addOption([]const u8, "version", zon.version);
+    options.addOption([]const u8, "version", versionString(b));
+    options.addOption([]const u8, "sdk_version", zon.version);
 
     const mod = b.createModule(.{
         .root_source_file = b.path("cli/main.zig"),
@@ -32,6 +34,44 @@ pub fn build(b: *std.Build) void {
     // ZLS runs this step on save to report errors that need full semantic analysis.
     const check = b.addExecutable(.{ .name = "dino", .root_module = mod });
     b.step("check", "Compile without installing").dependOn(&check.step);
+}
+
+fn versionString(b: *std.Build) []const u8 {
+    if (b.option([]const u8, "version-string", "Override the reported version (default: build.zig.zon + git describe)")) |v| return v;
+    const io = b.graph.io;
+
+    // Source tarballs and the Docker build context have no .git.
+    const git_dir = b.root.statFile(io, ".git") catch return zon.version;
+    // Configure results are cached, so re-run when HEAD moves or a tag is created.
+    // A worktree's .git is a file and its refs live elsewhere; those builds
+    // refresh on the next build.zig change instead.
+    if (git_dir.kind == .directory) {
+        for ([_][]const u8{ ".git/logs/HEAD", ".git/packed-refs" }) |path| {
+            if (b.root.access(io, path, .{})) b.dependOnFileMetadata(b.path(path)) else |_| {}
+        }
+        if (b.root.access(io, ".git/refs/tags", .{})) b.dependOnDirectoryContents(b.path(".git/refs/tags")) else |_| {}
+    }
+
+    var code: u8 = undefined;
+    const raw = b.runAllowFail(&.{
+        "git",        "-C",      b.fmt("{f}", .{b.root}),
+        "describe",   "--tags",  "--always",
+        "--abbrev=9", "--match", "v[0-9]*.[0-9]*.[0-9]*",
+    }, &code, .ignore) catch return zon.version;
+    const describe = std.mem.trim(u8, raw, " \r\n");
+
+    return version.fromDescribe(b.allocator, zon.version, describe) catch |err| switch (err) {
+        error.TagMismatch => std.process.fatal("HEAD is tagged {s} but build.zig.zon says {s}", .{ describe, zon.version }),
+        error.NotBumped => std.process.fatal(
+            "build.zig.zon version {s} must be a -dev version newer than the last tag ({s}); see CONTRIBUTING.md#versioning",
+            .{ zon.version, describe },
+        ),
+        error.UnexpectedDescribe => blk: {
+            std.log.warn("unexpected git describe output: {s}", .{describe});
+            break :blk zon.version;
+        },
+        error.OutOfMemory => @panic("OOM"),
+    };
 }
 
 /// @embedFile cannot reach outside a module's directory, so sdk/ is copied next

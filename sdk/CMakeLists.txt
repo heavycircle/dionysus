@@ -6,7 +6,9 @@ if(TARGET dino_core)
     return()
 endif()
 
-project(DinoSDK C)
+project(DinoSDK VERSION 0.1.0 LANGUAGES C)
+# Dropped only on the release commit; must match build.zig.zon (CONTRIBUTING.md#versioning).
+set(DINO_VERSION_PRERELEASE "-dev")
 
 add_library(dino_core STATIC
     src/core/fs.c
@@ -17,7 +19,8 @@ add_library(dino_core STATIC
     src/core/thread.c
 )
 
-target_include_directories(dino_core PUBLIC include)
+configure_file(cmake/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/include/dino/version.h" @ONLY)
+target_include_directories(dino_core PUBLIC include "${CMAKE_CURRENT_BINARY_DIR}/include")
 
 if(WIN32)
     target_link_libraries(dino_core PRIVATE ws2_32)
