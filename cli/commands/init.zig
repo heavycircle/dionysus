@@ -4,6 +4,7 @@ const Ctx = @import("../Ctx.zig");
 const Args = @import("../Args.zig");
 const build = @import("build.zig");
 const targets = @import("../targets.zig");
+const templates = @import("templates");
 
 pub const usage =
     \\Usage: dino init [directory] [options]
@@ -15,6 +16,8 @@ pub const usage =
     \\    CMakeLists.txt         Builds every .c file under src/ and links the SDK
     \\    src/main.c             A starting point that uses the dino SDK
     \\    .gitignore             Ignores build output
+    \\    .clang-format          The SDK's formatting rules, for clang-format and editors
+    \\    .clang-tidy            The SDK's clang-tidy checks, for clangd and clang-tidy
     \\    compile_commands.json  For clangd and other editors; init configures the
     \\                           project for this machine so it exists before the
     \\                           first build
@@ -94,6 +97,8 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         .{ .path = "CMakeLists.txt", .data = ctx.sprint(cmake_template, .{name}) },
         .{ .path = "src/main.c", .data = ctx.sprint(main_template, .{name}) },
         .{ .path = ".gitignore", .data = gitignore_template },
+        .{ .path = ".clang-format", .data = templates.clang_format },
+        .{ .path = ".clang-tidy", .data = templates.clang_tidy },
     };
     for (files) |file| {
         const dest = ctx.join(&.{ root, file.path });

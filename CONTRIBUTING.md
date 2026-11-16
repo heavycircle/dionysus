@@ -107,6 +107,8 @@ tests/examples.sh          builds and runs every example on every target
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
 scripts/lintcommit.sh      checks commit messages
+scripts/tidy.sh            clang-tidy on the SDK for x86_64 and win64
+.clang-format, .clang-tidy C style and static-analysis rules (also written by dino init)
 cliff.toml                 release-notes config for git-cliff
 .github/workflows/         CI, release and backport workflows
 .github/actions/setup-zig/ installs the pinned Zig in workflows
@@ -179,7 +181,7 @@ environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings 
 
 | Job | What it checks |
 | --- | --- |
-| `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, and commit messages |
+| `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
 | `unit` | `zig build test` |
 | `examples (<target>)` | `tests/examples.sh` for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR, so it tests the PR's `dino` |
 
@@ -189,6 +191,7 @@ Run the same checks locally before asking for review:
 zig fmt --check build.zig cli && zig build test
 git ls-files '*.c' '*.h' | xargs uvx --from clang-format==19.1.7 clang-format --dry-run --Werror
 git ls-files '*.sh' | xargs uvx --from shellcheck-py==0.10.0.1 shellcheck
+scripts/tidy.sh uvx --from clang-tidy==19.1.0 clang-tidy
 scripts/lintcommit.sh origin/main..HEAD
 docker build -t dionysus . && docker run --rm -e CFLAGS="-Wall -Wextra -Werror" \
     -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples
@@ -267,6 +270,11 @@ PRIVATE dino_core)`. That is why a user's `CMakeLists.txt` doesn't need to know 
   (`io.c` starts with `<dino/core/io.h>`, which keeps headers self-contained), then system and
   standard headers, then other `<dino/...>` headers in their own block. On Windows,
   `<winsock2.h>` and `<ws2tcpip.h>` always come before `<windows.h>`; the config pins that order.
+- **Static analysis:** `.clang-tidy` enables `clang-analyzer-*` and `bugprone-*`, minus a couple of
+  noisy checks. The SDK must be clean under it; `scripts/tidy.sh` runs it with warnings as errors on
+  every SDK source, once with the x86_64 and once with the win64 compile database, so the Windows
+  halves are analyzed too. `dino init` copies the same `.clang-format` and `.clang-tidy` into new
+  projects, where findings stay warnings.
 - **Zig:** `zig fmt`. Its output is the style; there are no options to argue about.
 - **CMake and shell:** match the surrounding file (4-space indents, lowercase commands).
 - **Comments explain why, not what.** Code should be readable without narration; save comments for

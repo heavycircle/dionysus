@@ -207,7 +207,8 @@ int dino_socket_send(dino_socket_t sock, const void *buf, int len)
 #ifdef _WIN32
     int sent = send((SOCKET)sock, (const char *)buf, len, 0);
 #else
-    int sent = send((int)sock, (const char *)buf, len, 0);
+    // send() never returns more than len, so the result fits in an int.
+    int sent = (int)send((int)sock, (const char *)buf, len, 0);
 #endif
     return (sent == SOCKET_ERROR) ? -1 : sent;
 }
@@ -217,7 +218,7 @@ int dino_socket_recv(dino_socket_t sock, void *buf, int len)
 #ifdef _WIN32
     int received = recv((SOCKET)sock, (char *)buf, len, 0);
 #else
-    int received = recv((int)sock, (char *)buf, len, 0);
+    int received = (int)recv((int)sock, (char *)buf, len, 0);
 #endif
     return (received == SOCKET_ERROR) ? -1 : received;
 }

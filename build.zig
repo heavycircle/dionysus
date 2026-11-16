@@ -17,6 +17,7 @@ pub fn build(b: *std.Build) void {
         .imports = &.{
             .{ .name = "build_options", .module = options.createModule() },
             .{ .name = "sdk", .module = sdkModule(b) },
+            .{ .name = "templates", .module = templatesModule(b) },
         },
     });
 
@@ -72,6 +73,19 @@ fn versionString(b: *std.Build) []const u8 {
         },
         error.OutOfMemory => @panic("OOM"),
     };
+}
+
+/// Config files `dino init` writes into new projects, embedded from the repo
+/// root so user projects follow the same rules as the SDK.
+fn templatesModule(b: *std.Build) *std.Build.Module {
+    const wf = b.addWriteFiles();
+    _ = wf.addCopyFile(b.path(".clang-format"), "clang-format");
+    _ = wf.addCopyFile(b.path(".clang-tidy"), "clang-tidy");
+    return b.createModule(.{ .root_source_file = wf.add("templates.zig",
+        \\pub const clang_format = @embedFile("clang-format");
+        \\pub const clang_tidy = @embedFile("clang-tidy");
+        \\
+    ) });
 }
 
 /// @embedFile cannot reach outside a module's directory, so sdk/ is copied next
