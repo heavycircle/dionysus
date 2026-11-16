@@ -92,7 +92,7 @@ fn templatesModule(b: *std.Build) *std.Build.Module {
 /// to a generated index that embeds every file the CLI needs to unpack.
 fn sdkModule(b: *std.Build) *std.Build.Module {
     const io = b.graph.io;
-    const embedded = [_][]const u8{ "CMakeLists.txt", "cmake", "include", "src" };
+    const embedded = [_][]const u8{ "CMakeLists.txt", "cmake", "include", "src", "testing" };
 
     const sdk_root = b.root.join(b.allocator, "sdk") catch @panic("OOM");
     var sdk_dir = sdk_root.root_dir.handle.openDir(io, sdk_root.sub_path, .{ .iterate = true }) catch |err|

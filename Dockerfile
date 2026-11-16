@@ -1,6 +1,6 @@
 # Everything needed to build dino, build projects for every target, and run
-# the results: zig, cmake, ninja, qemu-user for the Linux targets and wine for
-# the Windows targets.
+# the results: zig, cmake, ninja, qemu-user for the Linux targets, wine for
+# the Windows targets, and valgrind for `dino test --memcheck`.
 #
 #   docker build -t dionysus .
 #   docker run --rm -v "$PWD:/work" dionysus dino build --all
@@ -18,7 +18,7 @@ RUN dpkg --add-architecture i386 \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl xz-utils file \
         cmake ninja-build make \
-        qemu-user \
+        qemu-user valgrind \
         wine wine64 wine32:i386 \
     && rm -rf /var/lib/apt/lists/*
 

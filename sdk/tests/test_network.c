@@ -1,0 +1,143 @@
+#include <string.h>
+#include <utest.h>
+
+#include <dino/core/network.h>
+
+// Each test file has its own port range: ctest runs test executables in parallel.
+#define PORT 18100
+
+struct pair
+{
+    dino_socket_t server, client, peer;
+};
+
+// Listener, connected client and the accepted peer, all in one thread:
+// connect() completes against the listen backlog before accept().
+static int open_pair(struct pair *p, dino_domain_t domain, const char *ip, int port)
+{
+    p->server = dino_socket_create(domain, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    p->client = dino_socket_create(domain, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    p->peer   = DINO_INVALID_SOCKET;
+    if (p->server == DINO_INVALID_SOCKET || p->client == DINO_INVALID_SOCKET)
+        return -1;
+    dino_socket_set_reuseaddr(p->server, 1);
+    if (dino_socket_bind(p->server, ip, port) != 0 || dino_socket_listen(p->server, 1) != 0)
+        return -1;
+    if (dino_socket_connect(p->client, ip, port) != 0)
+        return -1;
+    p->peer = dino_socket_accept(p->server);
+    return p->peer == DINO_INVALID_SOCKET ? -1 : 0;
+}
+
+static void close_pair(struct pair *p)
+{
+    if (p->peer != DINO_INVALID_SOCKET)
+        dino_socket_close(p->peer);
+    if (p->client != DINO_INVALID_SOCKET)
+        dino_socket_close(p->client);
+    if (p->server != DINO_INVALID_SOCKET)
+        dino_socket_close(p->server);
+}
+
+static void echo(int *utest_result, dino_domain_t domain, const char *ip, int port)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, domain, ip, port));
+
+    char buf[8] = { 0 };
+    EXPECT_EQ(4, dino_socket_send(p.client, "ping", 4));
+    EXPECT_EQ(4, dino_socket_recv(p.peer, buf, 4));
+    EXPECT_STREQ("ping", buf);
+    EXPECT_EQ(4, dino_socket_send(p.peer, "pong", 4));
+    memset(buf, 0, sizeof(buf));
+    EXPECT_EQ(4, dino_socket_recv(p.client, buf, 4));
+    EXPECT_STREQ("pong", buf);
+
+    close_pair(&p);
+}
+
+UTEST(network, create_and_close)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    EXPECT_EQ(0, dino_socket_close(s));
+}
+
+UTEST(network, close_invalid_socket_fails)
+{
+    EXPECT_NE(0, dino_socket_close(DINO_INVALID_SOCKET));
+}
+
+UTEST(network, udp_socket)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    EXPECT_EQ(0, dino_socket_bind(s, "127.0.0.1", 0));
+    EXPECT_EQ(0, dino_socket_close(s));
+}
+
+UTEST(network, echo_ipv4)
+{
+    echo(utest_result, DINO_AF_INET, "127.0.0.1", PORT);
+}
+
+UTEST(network, echo_ipv6)
+{
+    echo(utest_result, DINO_AF_INET6, "::1", PORT + 1);
+}
+
+UTEST(network, invalid_addresses_are_rejected)
+{
+    const char *bad[] = { "localhost", "256.0.0.1", "::zz", "", NULL };
+    for (int i = 0; i < 5; i++)
+    {
+        dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+        ASSERT_NE(DINO_INVALID_SOCKET, s);
+        // Port 0 binds anywhere, so only rejecting the string can make this fail.
+        EXPECT_NE(0, dino_socket_bind(s, bad[i], 0));
+        EXPECT_NE(0, dino_socket_connect(s, bad[i], PORT + 2));
+        dino_socket_close(s);
+    }
+}
+
+UTEST(network, accept_on_unlistened_socket_fails)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    EXPECT_EQ(DINO_INVALID_SOCKET, dino_socket_accept(s));
+    dino_socket_close(s);
+}
+
+UTEST(network, nonblocking_accept_returns_immediately)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    dino_socket_set_reuseaddr(s, 1);
+    ASSERT_EQ(0, dino_socket_bind(s, "127.0.0.1", PORT + 3));
+    ASSERT_EQ(0, dino_socket_listen(s, 1));
+    EXPECT_EQ(0, dino_socket_set_nonblocking(s, 1));
+    // Nobody is connecting: a blocking accept would hang here.
+    EXPECT_EQ(DINO_INVALID_SOCKET, dino_socket_accept(s));
+    dino_socket_close(s);
+}
+
+UTEST(network, recv_sees_orderly_shutdown)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, DINO_AF_INET, "127.0.0.1", PORT + 4));
+    EXPECT_EQ(0, dino_socket_shutdown(p.client, DINO_SHUT_WR));
+    char buf[4];
+    EXPECT_EQ(0, dino_socket_recv(p.peer, buf, sizeof(buf)));
+    close_pair(&p);
+}
+
+UTEST_STATE();
+
+int main(int argc, const char *const argv[])
+{
+    if (dino_net_init() != 0)
+        return 1;
+    int rc = utest_main(argc, argv);
+    dino_net_cleanup();
+    return rc;
+}

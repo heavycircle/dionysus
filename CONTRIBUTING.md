@@ -102,8 +102,11 @@ sdk/
   src/core/                implementations, one file per header, POSIX and Win32 in each
   cmake/                   toolchain.cmake, flags.cmake, Dino.cmake, version.h.in
   CMakeLists.txt           the dino_core static library
+  testing/                 utest.h (vendored) and the leak counter, for dino_test()
+  tests/                   the SDK's own tests, one test_<module>.c per module
 examples/                  one standalone CMake project per SDK feature
 tests/examples.sh          builds and runs every example on every target
+tests/sdk.sh               runs sdk/tests with `dino test`
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
 scripts/lintcommit.sh      checks commit messages
@@ -165,6 +168,47 @@ cmake -S examples/mutex_example -B build/arm64 -G Ninja \
 cmake --build build/arm64
 ```
 
+### SDK tests
+
+The SDK's own tests live in `sdk/tests/`, one `test_<module>.c` per module, written with
+[utest.h](https://github.com/sheredom/utest.h) (vendored in `sdk/testing/`):
+
+```c
+#include <utest.h>
+
+#include <dino/core/mutex.h>
+
+UTEST(mutex, is_recursive)
+{
+    dino_mutex_t m = dino_mutex_create();
+    ASSERT_NE(DINO_INVALID_MUTEX, m);
+    EXPECT_EQ(0, dino_mutex_lock(m));
+    EXPECT_EQ(0, dino_mutex_lock(m));
+    ...
+}
+
+UTEST_MAIN()
+```
+
+Every file is one `dino_test()` executable and one CTest test. Run them with `dino test`:
+
+```sh
+DINO_SDK_PATH=$PWD/sdk dino test --all -C sdk/tests     # every target (needs qemu-user and wine)
+DINO_SDK_PATH=$PWD/sdk dino test --memcheck -C sdk/tests # host, under valgrind
+tests/sdk.sh --all                                     # same, from a scratch copy (what CI runs)
+```
+
+- **Leaks fail tests.** On the Linux targets, `dino_test()` links an allocation counter
+  (`-Wl,--wrap=malloc,...`, `sdk/testing/leakcheck.c`); anything still allocated at exit fails the
+  test. Release builds can optimize away an allocation that never escapes the test itself, so use
+  `--debug` when testing the counter on test code; SDK allocations are always counted.
+- **`--memcheck`** builds a dynamically linked x86_64 glibc variant (valgrind can't see the allocator
+  in a static binary) and runs each test under valgrind: invalid reads and writes, uninitialized
+  memory, use after free and lost memory.
+- Every `UTEST` needs at least one `ASSERT_*` or `EXPECT_*`; one without leaves utest's result
+  parameter unused, which `-Wextra -Werror` rejects.
+- Tests run in parallel, so each file uses its own port range (`#define PORT 18100`, 18200, ...).
+
 ### Test matrix
 
 `tests/examples.sh` copies `examples/` to a temporary directory, builds each one for all seven
@@ -183,7 +227,7 @@ environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings 
 | --- | --- |
 | `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
 | `unit` | `zig build test` |
-| `examples (<target>)` | `tests/examples.sh` for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR, so it tests the PR's `dino` |
+| `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, then the SDK tests with `tests/sdk.sh`; the x86_64 job also runs them under valgrind (`--memcheck`) |
 
 Run the same checks locally before asking for review:
 
@@ -195,6 +239,7 @@ scripts/tidy.sh uvx --from clang-tidy==19.1.0 clang-tidy
 scripts/lintcommit.sh origin/main..HEAD
 docker build -t dionysus . && docker run --rm -e CFLAGS="-Wall -Wextra -Werror" \
     -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples
+docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/sdk.sh --all
 ```
 
 The linters are pinned through [uv](https://docs.astral.sh/uv/) so everyone formats with the same
@@ -257,9 +302,12 @@ PRIVATE dino_core)`. That is why a user's `CMakeLists.txt` doesn't need to know 
 3. Add the source file to `add_library(dino_core ...)` in `sdk/CMakeLists.txt`.
 4. If it needs process-wide setup (like `WSAStartup`), call it from `dino_runtime_init()` and
    `dino_runtime_cleanup()` in `src/core/runtime.c`.
-5. Add `examples/<name>_example/` (a `CMakeLists.txt` with `dino_executable` and a `main.c` that
-   exits nonzero on failure, so the test matrix notices) and a row in `examples/README.md`. The test matrix picks it up
-   automatically.
+5. Add `sdk/tests/test_<name>.c` covering every function, including the error paths
+   (`DINO_INVALID_*` handles, bad arguments). `dino test --all` and CI pick it up automatically;
+   make sure it passes on all seven targets and under `--memcheck`.
+6. Add `examples/<name>_example/` (a `CMakeLists.txt` with `dino_executable` and a `main.c` that
+   exits nonzero on failure, so the test matrix notices) and a row in `examples/README.md`. The
+   test matrix picks it up automatically.
 
 ## Code style
 
