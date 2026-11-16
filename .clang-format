@@ -6,6 +6,19 @@ AlignTrailingComments: true
 AllowShortFunctionsOnASingleLine: None
 BreakBeforeBraces: Allman
 ColumnLimit: 100
-IncludeBlocks: Preserve
 PointerAlignment: Right
-SortIncludes: false
+# Includes: the file's own header, then system headers, then other dino headers.
+IncludeBlocks: Regroup
+SortIncludes: CaseSensitive
+# <dino/core/io.h> is io.c's main header even though it uses angle brackets.
+MainIncludeChar: Any
+IncludeCategories:
+  # Must precede <windows.h>, which otherwise pulls in the old winsock.h.
+  - Regex: '^<(winsock2|ws2tcpip)\.h>$'
+    Priority: 2
+  - Regex: '^<windows\.h>$'
+    Priority: 3
+  - Regex: '^<dino/'
+    Priority: 4
+  - Regex: '^<'
+    Priority: 1

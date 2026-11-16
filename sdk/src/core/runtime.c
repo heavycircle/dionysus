@@ -1,6 +1,7 @@
+#include <dino/core/runtime.h>
+
 #include <dino/core/fs.h>
 #include <dino/core/network.h>
-#include <dino/core/runtime.h>
 
 int dino_runtime_init(void)
 {

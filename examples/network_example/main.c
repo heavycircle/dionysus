@@ -1,6 +1,7 @@
-#include <dino/core/network.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <dino/core/network.h>
 
 #define PORT        8080
 #define BUFFER_SIZE 1024

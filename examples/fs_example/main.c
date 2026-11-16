@@ -1,6 +1,7 @@
-#include <dino/core/fs.h>
 #include <inttypes.h>
 #include <stdio.h>
+
+#include <dino/core/fs.h>
 
 #define BIG_FILE "bigfile.img"
 

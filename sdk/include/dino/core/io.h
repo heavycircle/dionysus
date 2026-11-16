@@ -2,6 +2,7 @@
 #define DINO_CORE_IO_H
 
 #include <stdint.h>
+
 #include <dino/core/network.h>
 
 /* ---- Poll event flags (dino's own values; dino_poll translates them per platform) ---- */

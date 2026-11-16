@@ -1,5 +1,6 @@
-#include <dino/core/thread.h>
 #include <stdio.h>
+
+#include <dino/core/thread.h>
 
 #define NUM_THREADS 4
 

@@ -1,9 +1,11 @@
 #include <dino/core/io.h>
+
 #include <stdlib.h>
 
 #ifdef _WIN32
 
 #include <winsock2.h>
+
 #include <windows.h>
 
 // WSAPoll numbers its flags differently from POSIX (POLLIN is 0x0300, 0x0001
