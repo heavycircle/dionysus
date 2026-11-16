@@ -79,4 +79,8 @@ echo "Pushing the tag runs .github/workflows/release.yml, which creates the GitH
 if [[ $branch == main ]]; then
     echo "Then create the backport label for the new branch:"
     echo "    gh label create 'ci:backport release-$major.$minor' --color FBCA04"
+    if ((minor > 0)); then
+        echo "and retire the previous one, since only the newest release branch is supported:"
+        echo "    gh label delete 'ci:backport release-$major.$((minor - 1))' --yes"
+    fi
 fi

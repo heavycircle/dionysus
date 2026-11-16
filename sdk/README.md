@@ -1,6 +1,8 @@
 # Dino SDK
 
-The DINO SDK contains the bridge between the MUSL and MINGW64 library.
+The `dino_*` portability layer: one C API over the places where Linux (musl) and Windows
+(MinGW-w64) differ. See [CONTRIBUTING.md](../CONTRIBUTING.md#working-on-the-sdk) for the design
+rules and how to add a module.
 
 ## API Changes
 
