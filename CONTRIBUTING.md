@@ -65,6 +65,13 @@ For C, `dino init` and `dino build` write `compile_commands.json` to the project
 refreshes it right after configuring, even when compiling fails. The SDK's own sources resolve
 `<dino/...>` through `sdk/compile_flags.txt` with no build at all.
 
+That root copy is rewritten for clang tools (`cli/compdb.zig`): each `zig cc -target <t> ...` entry
+becomes `clang --target=<triple> -nostdlibinc -isystem <zig's musl/MinGW headers> ...`, so clangd
+and clang-tidy need no extra flags and see the same libc the build uses. The database follows the
+first target of the last `dino build`: `dino build win64` shows Windows-only code (`#ifdef _WIN32`,
+`<windows.h>`) to your editor, and `dino build` switches back to the host. Projects configured with
+plain `cmake` and the toolchain file get CMake's unrewritten database, which clang tools can't read.
+
 ### Docker
 
 The `Dockerfile` builds an image with everything above, plus a wine prefix that's already set up.
