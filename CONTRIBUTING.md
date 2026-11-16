@@ -60,7 +60,10 @@ sudo apt install cmake ninja-build qemu-user wine wine64 wine32:i386
 
 **Editor setup.** [ZLS](https://github.com/zigtools/zls) is the Zig language server; build the
 release that matches Zig 0.17.1. ZLS runs `zig build check` on save to report full compile errors.
-For C, `dino build` writes `compile_commands.json` to the project root for clangd.
+For C, `dino init` and `dino build` write `compile_commands.json` to the project root for clangd.
+`dino init` configures for the host, so the file exists before anything has compiled, and `dino build`
+refreshes it right after configuring, even when compiling fails. The SDK's own sources resolve
+`<dino/...>` through `sdk/compile_flags.txt` with no build at all.
 
 ### Docker
 
