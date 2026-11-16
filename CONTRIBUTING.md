@@ -256,6 +256,10 @@ PRIVATE dino_core)`. That is why a user's `CMakeLists.txt` doesn't need to know 
 - **C:** `clang-format` with the repository's `.clang-format` (WebKit base, Allman braces, 100
   columns). Use the pinned version from [CI](#ci) (`uvx --from clang-format==19.1.7 clang-format
   -i <files>`); other versions can format differently.
+- **Includes** are sorted and grouped by clang-format, in this order: the file's own header first
+  (`io.c` starts with `<dino/core/io.h>`, which keeps headers self-contained), then system and
+  standard headers, then other `<dino/...>` headers in their own block. On Windows,
+  `<winsock2.h>` and `<ws2tcpip.h>` always come before `<windows.h>`; the config pins that order.
 - **Zig:** `zig fmt`. Its output is the style; there are no options to argue about.
 - **CMake and shell:** match the surrounding file (4-space indents, lowercase commands).
 - **Comments explain why, not what.** Code should be readable without narration; save comments for

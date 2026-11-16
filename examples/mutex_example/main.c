@@ -1,6 +1,7 @@
+#include <stdio.h>
+
 #include <dino/core/mutex.h>
 #include <dino/core/thread.h>
-#include <stdio.h>
 
 #define NUM_THREADS 8
 #define INCREMENTS  1000000

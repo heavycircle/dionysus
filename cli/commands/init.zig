@@ -38,8 +38,9 @@ const cmake_template =
 ;
 
 const main_template =
-    \\#include <dino/core/network.h>
     \\#include <stdio.h>
+    \\
+    \\#include <dino/core/network.h>
     \\
     \\int main(void)
     \\{{

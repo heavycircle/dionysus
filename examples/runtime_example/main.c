@@ -1,7 +1,8 @@
-#include <dino/core/network.h>
-#include <dino/core/runtime.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <dino/core/network.h>
+#include <dino/core/runtime.h>
 
 /* Subsystems start up before main() and tear down after — no explicit
    dino_net_init() or dino_net_cleanup() calls needed anywhere. On Windows,
