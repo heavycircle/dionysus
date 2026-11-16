@@ -67,12 +67,16 @@ git clone https://github.com/heavycircle/dionysus && cd dionysus
 zig build -Drelease --prefix ~/.local     # installs ~/.local/bin/dino
 ```
 
-Alternatively, the Docker image has everything:
+Alternatively, the Docker image has everything (dino, Zig, CMake, qemu-user and wine):
 
 ```sh
-docker build -t dionysus .
-docker run --rm -v "$PWD:/work" dionysus dino build --all
+docker run --rm -v "$PWD:/work" ghcr.io/heavycircle/dionysus:stable dino build --all
+docker run --rm -v "$PWD:/work" ghcr.io/heavycircle/dionysus:stable dino run arm64
 ```
+
+Tags: `:stable` (newest release), `:X.Y.Z`, and `:nightly` (latest `main`). The
+[nightly prerelease](https://github.com/heavycircle/dionysus/releases/tag/nightly) has `main`'s
+dino as downloads too.
 
 ## Using it
 

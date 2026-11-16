@@ -433,8 +433,9 @@ include `<dino/version.h>` for `DINO_VERSION`, `DINO_VERSION_MAJOR`, `DINO_VERSI
   frozen and its `ci:backport release-X.Y` label is deleted, so nothing can be backported to it by
   accident. `scripts/release.sh` prints both label commands.
 
-**Tags:** `vX.Y.Z` tags are annotated and never moved. `stable` (newest release) and `nightly`
-(latest `main` build) are planned as moving tags, along with a published Docker image (#21).
+**Tags:** `vX.Y.Z` tags are annotated and never moved. Two tags move, both set by CI:
+`stable` points at the newest release (a patch for an older line doesn't move it), and `nightly`
+at the last `main` commit the nightly build published. Never push either by hand.
 
 ## Releases
 
@@ -464,5 +465,15 @@ Pushing the tag runs `.github/workflows/release.yml`, which publishes the GitHub
   changelog. Preview the next release's notes with `git cliff --unreleased`, and edit the notes on
   GitHub afterwards if they need context.
 
-Re-running the workflow for a tag that already has a release replaces its assets and keeps the
-notes.
+- The Docker image `ghcr.io/heavycircle/dionysus`, tagged `:X.Y.Z` and `:X.Y`. If the tag is the
+  newest version, `:stable` and `:latest` move to it too, and so does the `stable` git tag.
+
+To redo a release (a failed run, a fixed workflow), run **release** from the Actions tab with the
+tag as input, or `gh workflow run release -f tag=vX.Y.Z`. It replaces the assets, keeps the notes,
+and republishes the image.
+
+**Nightly.** `.github/workflows/nightly.yml` runs daily (and on demand) from `main`. When `main` has
+moved since the last nightly, it rebuilds the `nightly` prerelease: archives named
+`dino-nightly-<platform>` (stable download URLs; the binaries report the exact
+`X.Y.0-dev.N+g<sha>` version), notes for everything since the last release, and the `:nightly`
+image.
