@@ -41,8 +41,12 @@ dino_zig_tool(ranlib)
 
 # Statically link. _INIT values only seed the cache on the first configure, so
 # reconfiguring never duplicates them and user-supplied flags are kept.
+# DINO_DYNAMIC is only for `dino test --memcheck`: valgrind can't see the
+# allocator inside a static binary.
 set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
-set(CMAKE_EXE_LINKER_FLAGS_INIT "-static")
+if(NOT DINO_DYNAMIC)
+    set(CMAKE_EXE_LINKER_FLAGS_INIT "-static")
+endif()
 
 # Per-configuration flags (minified Release, symbols in Debug) live in flags.cmake.
 set(CMAKE_USER_MAKE_RULES_OVERRIDE "${CMAKE_CURRENT_LIST_DIR}/flags.cmake")

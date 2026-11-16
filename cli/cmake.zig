@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const Io = std.Io;
 const Ctx = @import("Ctx.zig");
 const Target = @import("targets.zig").Target;
+const targets = @import("targets.zig");
 
 pub const Mode = enum {
     debug,
@@ -43,6 +44,10 @@ pub fn defines(ctx: *Ctx, cfg: Config) []const []const u8 {
         ctx.sprint("-DCMAKE_BUILD_TYPE={s}", .{cfg.mode.cmakeName()}),
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     }) catch @panic("OOM");
+    // Lets ctest (and add_custom_command) run foreign binaries through qemu or wine.
+    if (targets.emulator(ctx, cfg.target)) |e| {
+        list.append(ctx.arena, ctx.sprint("-DCMAKE_CROSSCOMPILING_EMULATOR={s}", .{cmakePath(ctx, e)})) catch @panic("OOM");
+    }
     list.appendSlice(ctx.arena, cfg.extra) catch @panic("OOM");
     return list.items;
 }
@@ -133,6 +138,8 @@ pub const Executable = struct {
     name: []const u8,
     /// Path relative to the current working directory.
     path: []const u8,
+    /// Defined with dino_test(); `dino run` skips these unless asked for by name.
+    is_test: bool = false,
 };
 
 const Index = struct {
@@ -153,7 +160,11 @@ const TargetInfo = struct {
     name: []const u8,
     type: []const u8,
     artifacts: []const Artifact = &.{},
+    folder: ?struct { name: []const u8 } = null,
 };
+
+/// The FOLDER dino_test() puts test targets in (cmake/Dino.cmake).
+const test_folder = "dino_tests";
 
 const parse_options: std.json.ParseOptions = .{ .ignore_unknown_fields = true };
 
@@ -175,6 +186,7 @@ pub fn executables(ctx: *Ctx, cfg: Config) Ctx.Error![]const Executable {
         list.append(ctx.arena, .{
             .name = info.name,
             .path = ctx.join(&.{ cfg.build_dir, artifact }),
+            .is_test = if (info.folder) |f| std.mem.eql(u8, f.name, test_folder) else false,
         }) catch @panic("OOM");
     }
     return list.items;

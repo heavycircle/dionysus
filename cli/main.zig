@@ -13,6 +13,7 @@ const commands = [_]Command{
     command("init", "Create a new project", @import("commands/init.zig")),
     command("build", "Build the project for one or more targets", @import("commands/build.zig")),
     command("run", "Build and run the project's executable", @import("commands/run.zig")),
+    command("test", "Build and run the project's tests", @import("commands/test.zig")),
     command("targets", "List supported targets", @import("commands/targets.zig")),
     command("doctor", "Check that required tools are installed", @import("commands/doctor.zig")),
     command("clean", "Remove build directories", @import("commands/clean.zig")),
@@ -112,4 +113,5 @@ test {
     _ = @import("commands/build.zig");
     _ = @import("commands/doctor.zig");
     _ = @import("commands/init.zig");
+    _ = @import("commands/test.zig");
 }

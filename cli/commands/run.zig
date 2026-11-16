@@ -68,12 +68,12 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     switch (targets.runnerFor(target)) {
         .native => {},
         .qemu => |name| {
-            const qemu = ctx.findProgram(ctx.sprint("{s}-static", .{name})) orelse ctx.findProgram(name) orelse
+            const qemu = targets.emulator(ctx, target) orelse
                 return ctx.fail("{s} is needed to run {s} binaries; install qemu-user (or use the dino Docker image)", .{ name, target.name });
             argv.append(ctx.arena, qemu) catch @panic("OOM");
         },
         .wine => {
-            const wine = ctx.findProgram("wine") orelse
+            const wine = targets.emulator(ctx, target) orelse
                 return ctx.fail("wine is needed to run {s} binaries on Linux; install wine (or use the dino Docker image)", .{target.name});
             argv.append(ctx.arena, wine) catch @panic("OOM");
             env = try quietWine(ctx);
@@ -107,10 +107,15 @@ fn pick(ctx: *Ctx, executables: []const cmake.Executable, name: ?[]const u8) Ctx
         }
         return ctx.fail("no executable named '{s}'; available: {s}", .{ n, names(ctx, executables) });
     }
-    return switch (executables.len) {
+    // Tests run through `dino test`; only an explicit --exe picks one here.
+    var programs: std.ArrayList(cmake.Executable) = .empty;
+    for (executables) |exe| {
+        if (!exe.is_test) programs.append(ctx.arena, exe) catch @panic("OOM");
+    }
+    return switch (programs.items.len) {
         0 => ctx.fail("the project does not define any executables", .{}),
-        1 => executables[0],
-        else => ctx.fail("the project defines several executables; choose one with --exe ({s})", .{names(ctx, executables)}),
+        1 => programs.items[0],
+        else => ctx.fail("the project defines several executables; choose one with --exe ({s})", .{names(ctx, programs.items)}),
     };
 }
 
@@ -124,7 +129,7 @@ fn names(ctx: *Ctx, executables: []const cmake.Executable) []const u8 {
 }
 
 /// wine prints fixme/err chatter that drowns out the program's own output.
-fn quietWine(ctx: *Ctx) Ctx.Error!*const std.process.Environ.Map {
+pub fn quietWine(ctx: *Ctx) Ctx.Error!*const std.process.Environ.Map {
     const env = ctx.arena.create(std.process.Environ.Map) catch @panic("OOM");
     env.* = ctx.env.clone(ctx.arena) catch @panic("OOM");
     if (env.get("WINEDEBUG") == null) env.put("WINEDEBUG", "-all") catch @panic("OOM");

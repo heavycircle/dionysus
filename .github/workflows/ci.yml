@@ -1,6 +1,6 @@
-# Lint, unit tests, and every example built and run on every target (natively,
-# under qemu-user, or under wine) inside the project's Docker image, so CI and
-# local runs of tests/examples.sh match.
+# Lint, unit tests, and per target: every example built and run, and the SDK's
+# own tests (sdk/tests) run with `dino test`, natively, under qemu-user or under
+# wine, inside the project's Docker image so CI and local runs match.
 name: ci
 
 on:
@@ -55,13 +55,13 @@ jobs:
       - uses: ./.github/actions/setup-zig
       - run: zig build test
 
-  examples:
+  targets:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
         target: [arm, arm64, i386, ppc, win32, win64, x86_64]
-    name: examples (${{ matrix.target }})
+    name: targets (${{ matrix.target }})
     steps:
       - uses: actions/checkout@v5
       - uses: docker/setup-buildx-action@v3
@@ -79,3 +79,16 @@ jobs:
         run: |
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
             dionysus:ci /repo/tests/examples.sh /repo/examples "${{ matrix.target }}"
+
+      # sdk/tests with `dino test`: utest.h tests under qemu/wine, plus the leak
+      # counter on the Linux targets.
+      - name: SDK tests
+        run: |
+          docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
+            dionysus:ci /repo/tests/sdk.sh "${{ matrix.target }}"
+
+      - name: SDK tests under valgrind
+        if: matrix.target == 'x86_64'
+        run: |
+          docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
+            dionysus:ci /repo/tests/sdk.sh --memcheck

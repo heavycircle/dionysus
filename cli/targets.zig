@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const Ctx = @import("Ctx.zig");
 
 const Arch = std.Target.Cpu.Arch;
 const Os = std.Target.Os.Tag;
@@ -70,6 +71,16 @@ pub const Runner = union(enum) {
 
 pub fn runnerFor(t: Target) Runner {
     return runnerOn(t, builtin.os.tag, builtin.cpu.arch);
+}
+
+/// The installed program that runs `t`'s binaries on this host (qemu or wine),
+/// or null when they run natively or no runner is installed.
+pub fn emulator(ctx: *Ctx, t: Target) ?[]const u8 {
+    return switch (runnerFor(t)) {
+        .native, .unsupported => null,
+        .qemu => |name| ctx.findProgram(ctx.sprint("{s}-static", .{name})) orelse ctx.findProgram(name),
+        .wine => ctx.findProgram("wine"),
+    };
 }
 
 fn runnerOn(t: Target, host_os: Os, host_arch: Arch) Runner {

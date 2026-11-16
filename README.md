@@ -40,7 +40,7 @@ Dionysus is two things:
 ## Status
 
 Pre-1.0 and under active development. The toolchain, the `dino` tool and the core SDK modules work
-on all seven targets. Timing, process spawning, an epoll/IOCP event loop and `dino test` are on the
+on all seven targets. Timing, process spawning and an epoll/IOCP event loop are on the
 [v1.0 roadmap](https://github.com/heavycircle/dionysus/issues/25).
 
 ## Getting dino
@@ -81,6 +81,7 @@ dino build                    # host target, Release, output in build/<target>/
 dino build arm64 win64        # specific targets
 dino build --debug            # unoptimized, with symbols
 dino run arm64 -- --port 80   # build, then run under qemu-aarch64
+dino test arm64 win64          # build and run tests/ (utest.h) under qemu/wine
 dino targets                  # what this machine can build and run
 dino help <command>
 ```

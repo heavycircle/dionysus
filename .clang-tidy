@@ -9,5 +9,6 @@ Checks: >
 # System headers stay excluded; the SDK headers are clean, so they don't add noise.
 HeaderFilterRegex: '.*'
 CheckOptions:
-  # Feature-test macros are reserved names that code is meant to define.
-  bugprone-reserved-identifier.AllowedIdentifiers: '_LARGEFILE64_SOURCE;_FILE_OFFSET_BITS;_GNU_SOURCE;_POSIX_C_SOURCE;_XOPEN_SOURCE;_DEFAULT_SOURCE'
+  # Reserved names code is meant to use: feature-test macros, and the
+  # __wrap_/__real_ symbols the linker's --wrap requires (sdk/testing/leakcheck.c).
+  bugprone-reserved-identifier.AllowedIdentifiers: '_LARGEFILE64_SOURCE;_FILE_OFFSET_BITS;_GNU_SOURCE;_POSIX_C_SOURCE;_XOPEN_SOURCE;_DEFAULT_SOURCE;^__(wrap|real)_.*$'

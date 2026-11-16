@@ -15,6 +15,7 @@ pub const usage =
     \\Creates:
     \\    CMakeLists.txt         Builds every .c file under src/ and links the SDK
     \\    src/main.c             A starting point that uses the dino SDK
+    \\    tests/test_main.c      A first test (utest.h); run with `dino test`
     \\    .gitignore             Ignores build output
     \\    .clang-format          The SDK's formatting rules, for clang-format and editors
     \\    .clang-tidy            The SDK's clang-tidy checks, for clangd and clang-tidy
@@ -37,6 +38,31 @@ const cmake_template =
     \\# dino_executable() is add_executable() plus linking the dino SDK (dino_core).
     \\dino_executable({0s} ${{SOURCES}})
     \\target_include_directories({0s} PRIVATE src)
+    \\
+    \\# Every tests/test_*.c is a test executable (utest.h); `dino test` runs them.
+    \\file(GLOB TESTS CONFIGURE_DEPENDS tests/test_*.c)
+    \\foreach(test ${{TESTS}})
+    \\    get_filename_component(test_name ${{test}} NAME_WE)
+    \\    dino_test(${{test_name}} ${{test}})
+    \\endforeach()
+    \\
+;
+
+const test_template =
+    \\#include <utest.h>
+    \\
+    \\#include <dino/core/network.h>
+    \\
+    \\UTEST(app, creates_a_socket)
+    \\{{
+    \\    ASSERT_EQ(0, dino_net_init());
+    \\    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    \\    EXPECT_NE(DINO_INVALID_SOCKET, s);
+    \\    dino_socket_close(s);
+    \\    dino_net_cleanup();
+    \\}}
+    \\
+    \\UTEST_MAIN()
     \\
 ;
 
@@ -87,7 +113,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     }
     const root = dir orelse ".";
     const cwd = Io.Dir.cwd();
-    cwd.createDirPath(ctx.io, ctx.join(&.{ root, "src" })) catch |e|
+    for ([_][]const u8{ "src", "tests" }) |sub| cwd.createDirPath(ctx.io, ctx.join(&.{ root, sub })) catch |e|
         return ctx.fail("creating {s}: {t}", .{ root, e });
     const abs = cwd.realPathFileAlloc(ctx.io, root, ctx.arena) catch |e|
         return ctx.fail("resolving {s}: {t}", .{ root, e });
@@ -96,6 +122,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     const files = [_]struct { path: []const u8, data: []const u8 }{
         .{ .path = "CMakeLists.txt", .data = ctx.sprint(cmake_template, .{name}) },
         .{ .path = "src/main.c", .data = ctx.sprint(main_template, .{name}) },
+        .{ .path = "tests/test_main.c", .data = ctx.sprint(test_template, .{}) },
         .{ .path = ".gitignore", .data = gitignore_template },
         .{ .path = ".clang-format", .data = templates.clang_format },
         .{ .path = ".clang-tidy", .data = templates.clang_tidy },
@@ -118,6 +145,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     ctx.print("    dino build        # build for this machine\n", .{});
     ctx.print("    dino run          # build and run\n", .{});
     ctx.print("    dino build --all  # build for every target\n", .{});
+    ctx.print("    dino test         # build and run tests/\n", .{});
     return status;
 }
 

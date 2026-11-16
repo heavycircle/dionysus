@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build every example for every target with dino, then run each result
-# (natively, under qemu-user, or under wine). Intended for the Docker image,
+# (natively, under qemu-user, or under wine), and run `dino test` for examples
+# that have a tests/ directory. Intended for the Docker image,
 # which has all runners installed:
 #
 #   docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples [targets...]
@@ -40,16 +41,20 @@ for dir in "$src"/*/; do
         elif [[ -z ${build_only[$name]:-} ]] &&
             ! timeout 120 dino run "$target" --no-build -C "$work/$name" >>"$log" 2>&1 </dev/null; then
             result="run failed"
+        elif [[ -d $dir/tests ]] && ! timeout 300 dino test "$target" -C "$work/$name" >>"$log" 2>&1 </dev/null; then
+            result="tests failed"
+        elif [[ -d $dir/tests ]]; then
+            result="ok (+ tests)"
         fi
 
         if [[ -n ${known_failures[$key]:-} ]]; then
-            if [[ $result == ok ]]; then
+            if [[ $result == ok* ]]; then
                 result="UNEXPECTED PASS (remove from known_failures, ${known_failures[$key]})"
                 unexpected=$((unexpected + 1))
             else
                 result="expected failure (${known_failures[$key]})"
             fi
-        elif [[ $result != ok ]]; then
+        elif [[ $result != ok* ]]; then
             unexpected=$((unexpected + 1))
             result="FAILED: $result"
             sed 's/^/        /' "$log" | tail -n 20
