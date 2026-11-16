@@ -17,6 +17,7 @@ add_library(dino_core STATIC
     src/core/network.c
     src/core/runtime.c
     src/core/thread.c
+    src/core/time.c
 )
 
 configure_file(cmake/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/include/dino/version.h" @ONLY)
