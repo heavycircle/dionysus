@@ -360,7 +360,8 @@ include `<dino/version.h>` for `DINO_VERSION`, `DINO_VERSION_MAJOR`, `DINO_VERSI
   `git cherry-pick -x` in a PR of your own. Use `needs:backport` on issues whose fix should be
   backported.
 - **Only the newest `release-X.Y` is supported.** When `release-X.(Y+1)` is cut, the old branch is
-  frozen.
+  frozen and its `ci:backport release-X.Y` label is deleted, so nothing can be backported to it by
+  accident. `scripts/release.sh` prints both label commands.
 
 **Tags:** `vX.Y.Z` tags are annotated and never moved. `stable` (newest release) and `nightly`
 (latest `main` build) are planned as moving tags, along with a published Docker image (#21).
