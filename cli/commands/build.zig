@@ -115,41 +115,61 @@ pub fn resolveTargets(ctx: *Ctx, names: []const []const u8) Ctx.Error![]const Ta
 
 /// Builds each target in turn, continuing past failures so `--all` reports everything.
 pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
+    const project = try setup(ctx, opts);
+
+    const results = ctx.arena.alloc(Result, opts.targets.len) catch @panic("OOM");
+    var exported = false;
+    for (opts.targets, results) |target, *result| {
+        const cfg = config(ctx, opts, project, target);
+        result.* = .{ .cfg = cfg, .ok = false };
+        ctx.step("{s} ({s}, {t})", .{ target.name, target.triple, opts.mode });
+
+        if (cmake.needsConfigure(ctx, cfg) and !try cmake.configure(ctx, cfg, opts.run)) continue;
+        // Before compiling: editors need the compile database most when the code doesn't build.
+        if (!exported) {
+            exported = true;
+            exportCompileCommands(ctx, cfg, opts.project);
+        }
+        if (!try cmake.build(ctx, cfg, opts.run)) continue;
+
+        result.executables = try cmake.executables(ctx, cfg);
+        result.ok = true;
+        for (result.executables) |exe| ctx.print("    {s} ({s})\n", .{ exe.path, size(ctx, exe.path) });
+    }
+    return results;
+}
+
+/// Configures the first target without building, so `dino init` leaves a
+/// compile_commands.json behind before the project has ever been compiled.
+pub fn configureOnly(ctx: *Ctx, opts: Options) Ctx.Error!bool {
+    const project = try setup(ctx, opts);
+    const cfg = config(ctx, opts, project, opts.targets[0]);
+    if (cmake.needsConfigure(ctx, cfg) and !try cmake.configure(ctx, cfg, opts.run)) return false;
+    exportCompileCommands(ctx, cfg, opts.project);
+    return true;
+}
+
+const Project = struct { source_dir: []const u8, sdk: []const u8 };
+
+fn setup(ctx: *Ctx, opts: Options) Ctx.Error!Project {
     try requireTools(ctx);
     if (!ctx.exists(ctx.join(&.{ opts.project, "CMakeLists.txt" }))) {
         return ctx.fail("no CMakeLists.txt in '{s}' (create one with `dino init`)", .{opts.project});
     }
     const source_dir = Io.Dir.cwd().realPathFileAlloc(ctx.io, opts.project, ctx.arena) catch |e|
         return ctx.fail("resolving project directory '{s}': {t}", .{ opts.project, e });
-    const sdk = try sdk_cache.path(ctx);
+    return .{ .source_dir = source_dir, .sdk = try sdk_cache.path(ctx) };
+}
 
-    const results = ctx.arena.alloc(Result, opts.targets.len) catch @panic("OOM");
-    var exported = false;
-    for (opts.targets, results) |target, *result| {
-        const cfg: cmake.Config = .{
-            .source_dir = source_dir,
-            .build_dir = buildDir(ctx, opts.project, target),
-            .sdk = sdk,
-            .target = target,
-            .mode = opts.mode,
-            .extra = opts.extra,
-        };
-        result.* = .{ .cfg = cfg, .ok = false };
-        ctx.step("{s} ({s}, {t})", .{ target.name, target.triple, opts.mode });
-
-        if (cmake.needsConfigure(ctx, cfg) and !try cmake.configure(ctx, cfg, opts.run)) continue;
-        if (!try cmake.build(ctx, cfg, opts.run)) continue;
-
-        result.executables = try cmake.executables(ctx, cfg);
-        result.ok = true;
-        for (result.executables) |exe| ctx.print("    {s} ({s})\n", .{ exe.path, size(ctx, exe.path) });
-
-        if (!exported) {
-            exported = true;
-            exportCompileCommands(ctx, cfg, opts.project);
-        }
-    }
-    return results;
+fn config(ctx: *Ctx, opts: Options, project: Project, target: Target) cmake.Config {
+    return .{
+        .source_dir = project.source_dir,
+        .build_dir = buildDir(ctx, opts.project, target),
+        .sdk = project.sdk,
+        .target = target,
+        .mode = opts.mode,
+        .extra = opts.extra,
+    };
 }
 
 pub fn buildDir(ctx: *Ctx, project: []const u8, target: Target) []const u8 {
@@ -157,8 +177,10 @@ pub fn buildDir(ctx: *Ctx, project: []const u8, target: Target) []const u8 {
     return ctx.join(&.{ project, "build", target.name });
 }
 
+pub const required_tools = [_][]const u8{ "cmake", "zig" };
+
 fn requireTools(ctx: *Ctx) Ctx.Error!void {
-    for ([_][]const u8{ "cmake", "zig" }) |tool| {
+    for (required_tools) |tool| {
         if (ctx.findProgram(tool) == null) {
             return ctx.fail("{s} was not found on PATH (run `dino doctor`)", .{tool});
         }
