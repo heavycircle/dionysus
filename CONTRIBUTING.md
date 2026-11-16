@@ -86,6 +86,14 @@ docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/exampl
 The image has `dino` built from the source tree at image build time, so rebuild the image after
 changing `cli/` or `sdk/`.
 
+The container starts as root only to pick a user (`scripts/docker-entrypoint.sh`): the owner of the
+working directory, so files written into a mounted project keep their owner. `dino` (UID 1000) is
+remapped to that UID; a root-owned mount (rootless Docker, Docker Desktop) runs as root; `--user` is
+respected. Wine is the hard part: it refuses a prefix owned by another user, and re-owning the
+1.4 GB one built into the image takes minutes. So the real prefix lives in `/opt/wine-prefix`,
+world-writable, and each user's `~/.wine` is a few KB of registry copies and links into it.
+`tests/docker.sh dionysus` checks the cases; CI runs it.
+
 **Devcontainer.** `.devcontainer/devcontainer.json` uses the same image, for VS Code ("Reopen in
 Container"), GitHub Codespaces, or the `devcontainer` CLI. It runs `zig build` on creation and puts
 `zig-out/bin` first on `PATH`, so `dino` is the one built from your checkout. Run `zig build` again

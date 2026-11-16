@@ -43,12 +43,25 @@ RUN zig build test && zig build -Drelease -Dcpu=baseline --prefix /usr/local ${D
 
 FROM base
 COPY --from=build /usr/local/bin/dino /usr/local/bin/dino
+COPY scripts/docker-entrypoint.sh /usr/local/bin/dino-entrypoint
 
-RUN useradd --create-home dino
-USER dino
+RUN useradd --create-home dino && install -d -o dino -g dino /work
+
 ENV WINEDEBUG=-all
-# Creating the wine prefix takes several seconds; do it once at image build time.
-RUN wineboot --init >/dev/null 2>&1; wineserver --wait || true
+# A wine prefix takes ~40 s to create, so it's built once here, in /opt, as dino,
+# and made writable by anyone. Every user's own ~/.wine (dino's below, others'
+# from the entrypoint) is a few KB that links into it. The chmod has to share
+# the layer, or Docker copies all 1.4 GB again.
+RUN install -d -o dino -g dino /opt/wine-prefix \
+    && setpriv --reuid=dino --regid=dino --init-groups sh -c \
+        'HOME=/home/dino WINEPREFIX=/opt/wine-prefix wineboot --init >/dev/null 2>&1; \
+         WINEPREFIX=/opt/wine-prefix wineserver --wait' \
+    && chmod -R a+rwX /opt/wine-prefix \
+    && setpriv --reuid=dino --regid=dino --init-groups \
+        env HOME=/home/dino dino-entrypoint --own-wine-prefix
 
+# Starts as root only to pick the user: the owner of the working directory
+# (see scripts/docker-entrypoint.sh), so files in a mounted project stay yours.
 WORKDIR /work
+ENTRYPOINT ["dino-entrypoint"]
 CMD ["dino", "doctor"]

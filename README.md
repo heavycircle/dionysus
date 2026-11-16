@@ -74,6 +74,10 @@ docker run --rm -v "$PWD:/work" ghcr.io/heavycircle/dionysus:stable dino build -
 docker run --rm -v "$PWD:/work" ghcr.io/heavycircle/dionysus:stable dino run arm64
 ```
 
+Files dino writes into your project (`build/`, `compile_commands.json`) belong to you: the image
+runs as the owner of the mounted directory, with no `-u` flag needed, including under rootless
+Docker and Docker Desktop.
+
 Tags: `:stable` (newest release), `:X.Y.Z`, and `:nightly` (latest `main`). The
 [nightly prerelease](https://github.com/heavycircle/dionysus/releases/tag/nightly) has `main`'s
 dino as downloads too.

@@ -92,3 +92,8 @@ jobs:
         run: |
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
             dionysus:ci /repo/tests/sdk.sh --memcheck
+
+      # The image's entrypoint: files in a mounted project keep their owner.
+      - name: Docker image ownership
+        if: matrix.target == 'x86_64'
+        run: tests/docker.sh dionysus:ci
