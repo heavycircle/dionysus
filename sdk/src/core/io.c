@@ -53,7 +53,11 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
     int rc = WSAPoll(wfds, (ULONG)nfds, timeout_ms);
 
     for (int i = 0; i < nfds; i++)
-        fds[i].revents = rc > 0 ? from_os_revents(wfds[i].revents) : 0;
+    {
+        fds[i].revents = 0;
+        if (rc > 0)
+            fds[i].revents = from_os_revents(wfds[i].revents);
+    }
 
     if (wfds != stack_buf)
         free(wfds);
@@ -175,7 +179,11 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
     int rc = poll(pfds, (nfds_t)nfds, timeout_ms);
 
     for (int i = 0; i < nfds; i++)
-        fds[i].revents = rc > 0 ? from_os_revents(pfds[i].revents) : 0;
+    {
+        fds[i].revents = 0;
+        if (rc > 0)
+            fds[i].revents = from_os_revents(pfds[i].revents);
+    }
 
     if (pfds != stack_buf)
         free(pfds);

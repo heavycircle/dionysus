@@ -34,7 +34,7 @@ FROM base AS build
 # the release workflow passes the exact one (e.g. --build-arg DINO_VERSION=1.0.0).
 ARG DINO_VERSION
 WORKDIR /src
-COPY build.zig build.zig.zon ./
+COPY build.zig build.zig.zon .clang-format .clang-tidy ./
 COPY cli cli
 COPY sdk sdk
 # Zig defaults to -mcpu=native; layers are cached and shared across machines

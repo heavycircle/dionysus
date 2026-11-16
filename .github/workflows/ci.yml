@@ -36,6 +36,11 @@ jobs:
       - name: shellcheck
         run: git ls-files '*.sh' | xargs uvx --from shellcheck-py==0.10.0.1 shellcheck
 
+      # Analyzes the SDK under x86_64 and win64 compile databases, so both
+      # sides of every #ifdef _WIN32 are checked. Needs the dino from this checkout.
+      - name: clang-tidy
+        run: zig build && scripts/tidy.sh uvx --from clang-tidy==19.1.0 clang-tidy
+
       - name: Commit messages
         if: github.event_name == 'pull_request'
         run: scripts/lintcommit.sh "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
