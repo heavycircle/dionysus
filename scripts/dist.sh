@@ -4,12 +4,17 @@
 #
 #   scripts/dist.sh 0.1.0 dist
 #
+# Archives are named dino-<version>-<platform>; DINO_DIST_LABEL replaces the
+# version in the names (nightly builds use "nightly": stable download URLs, and
+# no "+" in file names, which GitHub renames).
+#
 # Archives are reproducible: the same commit, Zig version and SOURCE_DATE_EPOCH
 # (default: the commit time) give byte-identical files, so anyone can rebuild a
 # release and compare it against SHA256SUMS.
 set -euo pipefail
 
 version=${1:?usage: scripts/dist.sh VERSION [OUTDIR]}
+label=${DINO_DIST_LABEL:-$version}
 mkdir -p "${2:-dist}"
 out=$(cd "${2:-dist}" && pwd)
 cd "$(dirname "$0")/.."
@@ -37,7 +42,7 @@ trap 'rm -rf "$work"' EXIT
 
 for platform in "${platforms[@]}"; do
     read -r name triple <<<"$platform"
-    dir=dino-$version-$name
+    dir=dino-$label-$name
     echo "==> $dir"
     zig build -Drelease -Dtarget="$triple" -Dversion-string="$version" --prefix "$work/prefix-$name"
     mkdir "$work/$dir"
@@ -53,5 +58,5 @@ for platform in "${platforms[@]}"; do
     fi
 done
 
-(cd "$out" && sha256sum dino-"$version"-* >SHA256SUMS)
+(cd "$out" && sha256sum dino-"$label"-* >SHA256SUMS)
 cat "$out/SHA256SUMS"

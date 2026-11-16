@@ -1,55 +1,126 @@
-# Publishes a GitHub Release for every vX.Y.Z tag pushed by scripts/release.sh:
-# dino archives for each supported platform, SHA256SUMS, and notes generated
-# from the commits since the previous tag (cliff.toml).
+# Publishes a release for every vX.Y.Z tag pushed by scripts/release.sh:
+# - a GitHub Release with dino archives for each supported platform,
+#   SHA256SUMS, and notes generated from the commits in the release (cliff.toml)
+# - the Docker image as ghcr.io/<repo>:X.Y.Z and :X.Y
+# - if it's the newest version, the moving `stable` git tag and the :stable and
+#   :latest images. A patch for an older line (v0.1.3 after v0.2.0) leaves them alone.
+#
+# Run it by hand (Actions > release > Run workflow) to redo an existing tag.
 name: release
 
 on:
   push:
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to (re)publish, e.g. v0.1.0
+        required: true
 
 permissions:
   contents: write
 
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
 jobs:
   release:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      newest: ${{ steps.version.outputs.newest }}
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: refs/tags/${{ env.TAG }}
           # git-cliff and `git describe` need the full history and tags.
           fetch-depth: 0
 
-      - name: Check the tag matches build.zig.zon
+      - name: Check the tag is a release commit
+        id: version
         run: |
-          version=${GITHUB_REF_NAME#v}
+          version=${TAG#v}
           if ! grep -q "^    \.version = \"$version\",\$" build.zig.zon; then
-            echo "::error::$GITHUB_REF_NAME is not on a release commit (build.zig.zon does not say $version)"
+            echo "::error::$TAG is not on a release commit (build.zig.zon does not say $version)"
             exit 1
           fi
-          echo "VERSION=$version" >>"$GITHUB_ENV"
+          newest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n 1)
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "newest=$([[ $newest == "$TAG" ]] && echo true || echo false)" >>"$GITHUB_OUTPUT"
+          echo "$TAG: version $version, newest release: $newest"
 
       - uses: ./.github/actions/setup-zig
 
       - run: zig build test
 
-      - run: scripts/dist.sh "$VERSION" dist
+      - run: scripts/dist.sh "${{ steps.version.outputs.version }}" dist
 
       - name: Generate release notes
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --latest --strip header
+          # The tag at HEAD, so a re-run of an older tag gets its own notes.
+          args: --current --strip header
         env:
           OUTPUT: ${{ runner.temp }}/notes.md
 
-      # Re-running the workflow for an existing release replaces its assets.
+      # Re-running for an existing release replaces its assets and keeps the notes.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag \
+            gh release create "$TAG" dist/* --verify-tag \
               --title "dino $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
           fi
+
+      # Tags pushed with the workflow token don't trigger workflows, and
+      # `stable` doesn't match the vX.Y.Z filter anyway.
+      - name: Move the stable tag
+        if: steps.version.outputs.newest == 'true'
+        run: |
+          git tag -f stable "$TAG^{commit}"
+          git push -f origin refs/tags/stable
+
+  docker:
+    needs: release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ env.TAG }}
+
+      - name: Image tags
+        id: tags
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+          NEWEST: ${{ needs.release.outputs.newest }}
+        run: |
+          image=ghcr.io/${GITHUB_REPOSITORY,,}
+          tags="$image:$VERSION,$image:${VERSION%.*}"
+          [[ $NEWEST == true ]] && tags="$tags,$image:stable,$image:latest"
+          echo "tags=$tags" >>"$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          # The build context has no .git; pass the exact version.
+          build-args: DINO_VERSION=${{ needs.release.outputs.version }}
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha
