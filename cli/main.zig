@@ -105,6 +105,7 @@ fn find(name: []const u8) ?Command {
 test {
     _ = @import("Args.zig");
     _ = @import("cmake.zig");
+    _ = @import("compdb.zig");
     _ = @import("sdk_cache.zig");
     _ = @import("targets.zig");
     _ = @import("version.zig");

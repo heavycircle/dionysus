@@ -3,6 +3,7 @@ const Io = std.Io;
 const Ctx = @import("../Ctx.zig");
 const Args = @import("../Args.zig");
 const cmake = @import("../cmake.zig");
+const compdb = @import("../compdb.zig");
 const sdk_cache = @import("../sdk_cache.zig");
 const targets = @import("../targets.zig");
 const Target = targets.Target;
@@ -191,9 +192,7 @@ fn requireTools(ctx: *Ctx) Ctx.Error!void {
 fn exportCompileCommands(ctx: *Ctx, cfg: cmake.Config, project: []const u8) void {
     const src = ctx.join(&.{ cfg.build_dir, "compile_commands.json" });
     if (!ctx.exists(src)) return;
-    const cwd = Io.Dir.cwd();
-    cwd.copyFile(src, cwd, ctx.join(&.{ project, "compile_commands.json" }), ctx.io, .{}) catch |e|
-        ctx.warn("could not copy compile_commands.json: {t}", .{e});
+    compdb.write(ctx, src, ctx.join(&.{ project, "compile_commands.json" }), cfg.target.triple);
 }
 
 fn size(ctx: *Ctx, path: []const u8) []const u8 {
