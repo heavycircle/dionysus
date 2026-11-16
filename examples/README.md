@@ -22,7 +22,7 @@ targets and runs it that way; the socket examples check every step and exit nonz
 | Mutexes      | [`mutex_example`](./mutex_example/main.c)     | `dino/core/mutex.h`     | Eight threads increment a shared counter under `dino_mutex_lock`, then compare it with the expected total.                          |
 | Networking   | [`network_example`](./network_example/main.c) | `dino/core/network.h`   | TCP ping/pong with `dino_socket_*`.                                                                                                 |
 | Runtime      | [`runtime_example`](./runtime_example/main.c) | `dino/core/runtime.h`   | Same ping/pong with `DINO_ENABLE_AUTO_RUNTIME`, which runs `dino_net_init` and friends before `main` and cleans up after it.         |
-| Sleep        | [`sleep_example`](./sleep_example/main.c)     | none yet                | Sleeps 3 seconds with plain `sleep(3)`. Switches to the SDK's sleep call once the time module (#17) exists.                         |
+| Sleep        | [`sleep_example`](./sleep_example/main.c)     | `dino/core/time.h`      | Sleeps 3 seconds with `dino_sleep_ms`, measures it with `dino_time_monotonic_ns`, and fails if it woke early.                        |
 | Threading    | [`thread_example`](./thread_example/main.c)   | `dino/core/thread.h`    | Four `dino_thread_create` workers counting to a billion, then `dino_thread_join`. Built but not run in CI: too slow under emulation. |
 
 `network_example`, `io_example` and `runtime_example` also run as two processes for a
