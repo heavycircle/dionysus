@@ -51,11 +51,13 @@ ENV WINEDEBUG=-all
 # A wine prefix takes ~40 s to create, so it's built once here, in /opt, as dino,
 # and made writable by anyone. Every user's own ~/.wine (dino's below, others'
 # from the entrypoint) is a few KB that links into it. The chmod has to share
-# the layer, or Docker copies all 1.4 GB again.
+# the layer, or Docker copies all 1.4 GB again. The build's wineserver directory
+# and the prefix's pointer to it are dropped: each user's prefix names its own.
 RUN install -d -o dino -g dino /opt/wine-prefix \
     && setpriv --reuid=dino --regid=dino --init-groups sh -c \
         'HOME=/home/dino WINEPREFIX=/opt/wine-prefix wineboot --init >/dev/null 2>&1; \
          WINEPREFIX=/opt/wine-prefix wineserver --wait' \
+    && rm -rf /tmp/wine-* /opt/wine-prefix/wineserver \
     && chmod -R a+rwX /opt/wine-prefix \
     && setpriv --reuid=dino --regid=dino --init-groups \
         env HOME=/home/dino dino-entrypoint --own-wine-prefix

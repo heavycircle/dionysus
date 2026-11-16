@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Checks the image's entrypoint (scripts/docker-entrypoint.sh): files dino
 # writes into a mounted project belong to the project's owner, whatever its UID,
-# and wine starts for that user. Runs on the host, against a built image:
+# and wine starts for that user, including several processes at once on a fresh
+# container the way `dino test` starts them (#71). Runs on the host, against a
+# built image:
 #
 #   docker build -t dionysus . && tests/docker.sh dionysus
 set -uo pipefail
@@ -13,6 +15,12 @@ trap 'docker run --rm -v "$work:/w" --entrypoint sh "$image" -c "rm -rf /w/*"; r
 
 failed=0
 
+# Expanded by the container's sh. A bare `wait` always succeeds, so wait for
+# each process by PID.
+# shellcheck disable=SC2016
+parallel_wine='pids=; for i in 1 2 3 4 5 6; do wine cmd /c exit 0 & pids="$pids $!"; done
+    for pid in $pids; do wait "$pid" || exit 1; done'
+
 # Usage: check NAME OWNER_UID [docker run args...]
 check() {
     local name=$1 owner=$2
@@ -22,7 +30,7 @@ check() {
     docker run --rm -v "$dir:/p" --entrypoint chown "$image" "$owner:$owner" /p
 
     if ! docker run --rm "$@" -v "$dir:/work" "$image" sh -c \
-        'dino init app >/dev/null && dino build -C app >/dev/null && wine cmd /c exit 0' \
+        "dino init app >/dev/null && dino build -C app >/dev/null && $parallel_wine" \
         >"$work/$name.log" 2>&1; then
         echo "FAILED: $name"
         sed 's/^/        /' "$work/$name.log" | tail -n 20
@@ -37,7 +45,7 @@ check() {
         failed=1
         return
     fi
-    echo "ok      $name: project files owned by UID $owner, wine starts"
+    echo "ok      $name: project files owned by UID $owner, parallel wine starts"
 }
 
 check uid-1000 1000
