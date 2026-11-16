@@ -3,9 +3,6 @@
 
 #include <dino/core/fs.h>
 
-// Base file descriptor for dino_fs_init / dino_fs_cleanup.
-int dino_base_fd = -1;
-
 #ifdef _WIN32
 
 #include <windows.h>
@@ -43,6 +40,7 @@ void dino_fs_cleanup(void)
 
 #else
 
+#include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -61,26 +59,28 @@ uint64_t dino_file_size(const char *filepath)
 
 int dino_fs_init(void)
 {
-    dino_base_fd = open("/dev/null", O_RDWR);
-    if (dino_base_fd == 0)
+    // Only fill descriptors that are missing: stdio the program was started
+    // with, even just stdout or stderr, must survive.
+    for (int fd = 0; fd <= 2; fd++)
     {
-        dup2(0, 1);
-        dup2(0, 2);
-    }
-    else
-    {
-        close(dino_base_fd);
-        dino_base_fd = -1;
+        if (fcntl(fd, F_GETFD) != -1 || errno != EBADF)
+            continue;
+
+        int null = open("/dev/null", O_RDWR);
+        if (null < 0)
+            return -1;
+        if (null != fd)
+        {
+            dup2(null, fd);
+            close(null);
+        }
     }
 
     return 0;
 }
 
+// Stdio belongs to the program, so there is nothing to undo.
 void dino_fs_cleanup(void)
 {
-    if (dino_base_fd == 0)
-    {
-        close(dino_base_fd);
-    }
 }
 #endif
