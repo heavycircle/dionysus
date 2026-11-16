@@ -98,8 +98,32 @@ static int run_client(void)
     return ok;
 }
 
+static int check_writable(dino_socket_t sock)
+{
+    dino_pollfd_t pfd = { sock, DINO_POLLOUT, 0 };
+    int           ok  = dino_poll(&pfd, 1, TIMEOUT_MS) == 1 && (pfd.revents & DINO_POLLOUT);
+    printf("[Client] Writable%s\n", ok ? "" : " (FAILED)");
+    return ok;
+}
+
+// Closes *closing and expects its peer to report it. Linux signals a closed
+// peer as readable, Windows as DINO_POLLHUP; either way recv() returns 0.
+static int check_hangup(dino_socket_t sock, dino_socket_t *closing)
+{
+    dino_socket_close(*closing);
+    *closing = DINO_INVALID_SOCKET;
+
+    char          buf[1];
+    dino_pollfd_t pfd = { sock, DINO_POLLIN, 0 };
+    int ok = dino_poll(&pfd, 1, TIMEOUT_MS) == 1 && (pfd.revents & (DINO_POLLIN | DINO_POLLHUP))
+        && dino_socket_recv(sock, buf, sizeof(buf)) == 0;
+    printf("[Server] Peer hang-up seen (revents 0x%x)%s\n", pfd.revents, ok ? "" : " (FAILED)");
+    return ok;
+}
+
 // Both ends in one process, every receive gated by dino_poll. Also checks that
-// an idle socket times out instead of reporting readiness.
+// an idle socket times out, a connected socket polls writable, and a closed
+// peer is reported.
 static int run_self_test(void)
 {
     dino_socket_t server = listen_on(PORT);
@@ -124,7 +148,8 @@ static int run_self_test(void)
     printf("[Server] Idle socket timed out after %dms\n", IDLE_MS);
 
     ok = send_msg("Client", client, "Ping!") && expect_msg("Server", peer, "Ping!")
-        && send_msg("Server", peer, "Pong!") && expect_msg("Client", client, "Pong!");
+        && send_msg("Server", peer, "Pong!") && expect_msg("Client", client, "Pong!")
+        && check_writable(client) && check_hangup(peer, &client);
 
 done:
     if (peer != DINO_INVALID_SOCKET)
