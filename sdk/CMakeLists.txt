@@ -11,17 +11,39 @@ project(DinoSDK VERSION 0.5.0 LANGUAGES C)
 set(DINO_VERSION_PRERELEASE "-dev")
 
 add_library(dino_core STATIC
-    src/core/fs.c
-    src/core/io.c
-    src/core/mutex.c
-    src/core/network.c
-    src/core/pipe.c
     src/core/process.c
     src/core/runtime.c
     src/core/runtime_auto.c
-    src/core/thread.c
     src/core/time.c
 )
+
+# Modules that differ by platform: <module>_win32.c or <module>_posix.c is built,
+# next to the shared <module>.c if it has one. Both halves must exist, checked
+# here on every platform, so a module missing its Windows half fails a Linux
+# configure too instead of only the Windows build.
+set(DINO_PLATFORM_MODULES
+    fs
+    io
+    mutex
+    network
+    pipe
+    process
+    thread
+    time
+)
+if(WIN32)
+    set(DINO_PLATFORM win32)
+else()
+    set(DINO_PLATFORM posix)
+endif()
+foreach(module ${DINO_PLATFORM_MODULES})
+    foreach(platform win32 posix)
+        if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/core/${module}_${platform}.c")
+            message(FATAL_ERROR "src/core/${module}_${platform}.c is missing: every platform module needs both halves")
+        endif()
+    endforeach()
+    target_sources(dino_core PRIVATE "src/core/${module}_${DINO_PLATFORM}.c")
+endforeach()
 
 configure_file(cmake/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/include/dino/version.h" @ONLY)
 target_include_directories(dino_core PUBLIC include "${CMAKE_CURRENT_BINARY_DIR}/include")

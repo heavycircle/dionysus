@@ -3,26 +3,10 @@
 
 #include <dino/core/network.h>
 
-#include <string.h>
-
-#ifdef _WIN32
-
-#include <winsock2.h>
-#include <ws2tcpip.h>
-
-#include <windows.h>
-
-typedef int dino_socklen_t;
-
-#ifndef WSA_FLAG_NO_HANDLE_INHERIT
-#define WSA_FLAG_NO_HANDLE_INHERIT 0x80
-#endif
-
-#else
-
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -30,8 +14,6 @@ typedef socklen_t dino_socklen_t;
 
 #define INVALID_SOCKET (-1)
 #define SOCKET_ERROR   (-1)
-
-#endif // _WIN32
 
 static int translate_domain(dino_domain_t domain)
 {
@@ -72,45 +54,6 @@ static int translate_protocol(dino_protocol_t protocol)
     }
 }
 
-#ifdef _WIN32
-
-// Winsock is started on first use rather than once for good, so that a
-// cleanup followed by more socket calls starts it again.
-static SRWLOCK       wsa_lock = SRWLOCK_INIT;
-static volatile LONG wsa_started;
-
-int dino_net_init(void)
-{
-    if (InterlockedCompareExchange(&wsa_started, 0, 0))
-        return 0;
-
-    int rc = 0;
-    AcquireSRWLockExclusive(&wsa_lock);
-    if (!wsa_started)
-    {
-        WSADATA wsaData;
-        if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0)
-            InterlockedExchange(&wsa_started, 1);
-        else
-            rc = 1;
-    }
-    ReleaseSRWLockExclusive(&wsa_lock);
-    return rc;
-}
-
-void dino_net_cleanup(void)
-{
-    AcquireSRWLockExclusive(&wsa_lock);
-    if (wsa_started)
-    {
-        WSACleanup();
-        InterlockedExchange(&wsa_started, 0);
-    }
-    ReleaseSRWLockExclusive(&wsa_lock);
-}
-
-#else
-
 int dino_net_init(void)
 {
     return 0;
@@ -119,8 +62,6 @@ int dino_net_init(void)
 void dino_net_cleanup(void)
 {
 }
-
-#endif // _WIN32
 
 dino_socket_t dino_socket_create(dino_domain_t domain, dino_type_t type, dino_protocol_t protocol)
 {
@@ -133,13 +74,7 @@ dino_socket_t dino_socket_create(dino_domain_t domain, dino_type_t type, dino_pr
 
     // Never inherited by child processes: a child holding a copy keeps a
     // listening port bound, or a connection open, after the parent closes it.
-#ifdef _WIN32
-    // WSA_FLAG_OVERLAPPED keeps what socket() would give, for IOCP.
-    SOCKET s = WSASocketW(
-        os_domain, os_type, os_protocol, NULL, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
-#else
     int s = socket(os_domain, os_type | SOCK_CLOEXEC, os_protocol);
-#endif // _WIN32
     if (s == INVALID_SOCKET)
         return DINO_INVALID_SOCKET;
 
@@ -151,13 +86,8 @@ int dino_socket_close(dino_socket_t sock)
     if (sock == DINO_INVALID_SOCKET)
         return -1;
 
-#ifdef _WIN32
-    if (closesocket((SOCKET)sock) == SOCKET_ERROR)
-        return -1;
-#else
     if (close((int)sock) < 0)
         return -1;
-#endif // _WIN32
 
     return 0;
 }
@@ -199,22 +129,14 @@ int dino_socket_bind(dino_socket_t sock, const char *ip, int port)
     if (dino_sockaddr(&addr, &len, ip, port) != 0)
         return -1;
 
-#ifdef _WIN32
-    int res = bind((SOCKET)sock, (struct sockaddr *)&addr, len);
-#else
     int res = bind((int)sock, (struct sockaddr *)&addr, len);
-#endif // _WIN32
 
     return (res == SOCKET_ERROR) ? -1 : 0;
 }
 
 int dino_socket_listen(dino_socket_t sock, int backlog)
 {
-#ifdef _WIN32
-    int res = listen((SOCKET)sock, backlog);
-#else
     int res = listen((int)sock, backlog);
-#endif // _WIN32
 
     return (res == SOCKET_ERROR) ? -1 : 0;
 }
@@ -225,21 +147,9 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
     struct sockaddr_storage addr;
     dino_socklen_t          len = sizeof(addr);
 
-#ifdef _WIN32
-    SOCKET client = accept((SOCKET)sock, (struct sockaddr *)&addr, &len);
-    if (client == INVALID_SOCKET)
-        return DINO_INVALID_SOCKET;
-    // Not documented to carry over from the listening socket.
-    if (!SetHandleInformation((HANDLE)client, HANDLE_FLAG_INHERIT, 0))
-    {
-        closesocket(client);
-        return DINO_INVALID_SOCKET;
-    }
-#else
     int client = accept4((int)sock, (struct sockaddr *)&addr, &len, SOCK_CLOEXEC);
     if (client == INVALID_SOCKET)
         return DINO_INVALID_SOCKET;
-#endif // _WIN32
 
     return (dino_socket_t)client;
 }
@@ -251,45 +161,29 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
     if (dino_sockaddr(&addr, &len, ip, port) != 0)
         return -1;
 
-#ifdef _WIN32
-    int res = connect((SOCKET)sock, (struct sockaddr *)&addr, len);
-#else
     int res = connect((int)sock, (struct sockaddr *)&addr, len);
-#endif
 
     return (res == SOCKET_ERROR) ? -1 : 0;
 }
 
 int dino_socket_send(dino_socket_t sock, const void *buf, int len)
 {
-#ifdef _WIN32
-    int sent = send((SOCKET)sock, (const char *)buf, len, 0);
-#else
     // send() never returns more than len, so the result fits in an int.
     // MSG_NOSIGNAL: a closed peer fails the call with EPIPE, as on Windows,
     // instead of raising SIGPIPE, which would end the process.
     int sent = (int)send((int)sock, (const char *)buf, len, MSG_NOSIGNAL);
-#endif
     return (sent == SOCKET_ERROR) ? -1 : sent;
 }
 
 int dino_socket_recv(dino_socket_t sock, void *buf, int len)
 {
-#ifdef _WIN32
-    int received = recv((SOCKET)sock, (char *)buf, len, 0);
-#else
     int received = (int)recv((int)sock, (char *)buf, len, 0);
-#endif
     return (received == SOCKET_ERROR) ? -1 : received;
 }
 
 int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, int len)
 {
-#ifdef _WIN32
-    int rc = setsockopt((SOCKET)sock, level, optname, (const char *)val, len);
-#else
     int rc = setsockopt((int)sock, level, optname, val, (socklen_t)len);
-#endif
     return (rc == SOCKET_ERROR) ? -1 : 0;
 }
 
@@ -301,24 +195,15 @@ int dino_socket_set_reuseaddr(dino_socket_t sock, int enable)
 
 int dino_socket_set_nonblocking(dino_socket_t sock, int enable)
 {
-#ifdef _WIN32
-    u_long mode = enable ? 1 : 0;
-    return ioctlsocket((SOCKET)sock, FIONBIO, &mode) == 0 ? 0 : -1;
-#else
     int flags = fcntl((int)sock, F_GETFL, 0);
     if (flags == -1)
         return -1;
     flags = enable ? (flags | O_NONBLOCK) : (flags & ~O_NONBLOCK);
     return fcntl((int)sock, F_SETFL, flags) == -1 ? -1 : 0;
-#endif
 }
 
 int dino_socket_shutdown(dino_socket_t sock, dino_shutdown_how_t how)
 {
-#ifdef _WIN32
-    int rc = shutdown((SOCKET)sock, (int)how);
-#else
     int rc = shutdown((int)sock, (int)how);
-#endif
     return (rc == SOCKET_ERROR) ? -1 : 0;
 }

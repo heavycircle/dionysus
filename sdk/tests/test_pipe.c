@@ -152,7 +152,7 @@ static int inheritable(dino_pipe_t p)
         return -1;
     return (flags & HANDLE_FLAG_INHERIT) != 0;
 #else
-    // Handles are fd + 1 (pipe.c).
+    // Handles are fd + 1 (pipe_posix.c).
     int flags = fcntl((int)p - 1, F_GETFD);
     if (flags < 0)
         return -1;
