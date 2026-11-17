@@ -350,9 +350,10 @@ of `core` and `DINO_CORE_` below.
   columns). Use the pinned version from [CI](#ci) (`uvx --from clang-format==19.1.7 clang-format
   -i <files>`); other versions can format differently.
 - **Includes** are sorted and grouped by clang-format, in this order: the file's own header first
-  (`io.c` starts with `<dino/core/io.h>`, which keeps headers self-contained), then system and
-  standard headers, then other `<dino/...>` headers in their own block. On Windows,
-  `<winsock2.h>` and `<ws2tcpip.h>` always come before `<windows.h>`; the config pins that order.
+  (`io_posix.c` and `io_win32.c` start with `<dino/core/io.h>`, which keeps headers
+  self-contained), then system and standard headers, then other `<dino/...>` headers in their own
+  block. On Windows, `<winsock2.h>` and `<ws2tcpip.h>` always come before `<windows.h>`; the config
+  pins that order.
 - **Static analysis:** `.clang-tidy` enables `clang-analyzer-*` and `bugprone-*`, minus a couple of
   noisy checks. The SDK must be clean under it; `scripts/tidy.sh` runs it with warnings as errors on
   every SDK source, once with the x86_64 and once with the win64 compile database, so the Windows
