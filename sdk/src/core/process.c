@@ -656,15 +656,8 @@ struct feeder
 static int feed(void *arg)
 {
     struct feeder *f = arg;
-#ifndef _WIN32
-    // A child that exits without reading all its input would otherwise kill
-    // the whole process with SIGPIPE. Blocked in this thread only, the write
-    // fails with EPIPE, and the pending signal goes away with the thread.
-    sigset_t pipe_only;
-    sigemptyset(&pipe_only);
-    sigaddset(&pipe_only, SIGPIPE);
-    pthread_sigmask(SIG_BLOCK, &pipe_only, NULL);
-#endif
+    // dino_pipe_write fails instead of raising SIGPIPE when the child has
+    // stopped reading.
     for (size_t sent = 0; sent < f->len;)
     {
         size_t chunk = f->len - sent < 65536 ? f->len - sent : 65536;

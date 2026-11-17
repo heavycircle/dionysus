@@ -3,6 +3,8 @@
 #include <windows.h>
 #else
 #include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
 #endif
 
 #include <stdint.h>
@@ -167,6 +169,65 @@ UTEST(pipe, ends_are_not_inherited_by_children)
     dino_pipe_close(r);
     dino_pipe_close(w);
 }
+
+#ifndef _WIN32
+static int pipe_pending(void)
+{
+    sigset_t pending;
+    sigpending(&pending);
+    return sigismember(&pending, SIGPIPE);
+}
+#endif
+
+// Without the fix the write raises SIGPIPE and this process ends (#82).
+UTEST(pipe, write_after_the_read_end_closes_fails_without_killing_the_process)
+{
+#ifndef _WIN32
+    struct sigaction before_action, after_action;
+    sigset_t         before_mask, after_mask;
+    sigaction(SIGPIPE, NULL, &before_action);
+    pthread_sigmask(SIG_SETMASK, NULL, &before_mask);
+#endif
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    EXPECT_EQ(0, dino_pipe_close(r));
+    EXPECT_EQ(-1, dino_pipe_write(w, "x", 1));
+    EXPECT_EQ(-1, dino_pipe_write(w, "x", 1));
+    dino_pipe_close(w);
+#ifndef _WIN32
+    // Nothing left behind: no pending SIGPIPE, same mask, same disposition.
+    EXPECT_FALSE(pipe_pending());
+    sigaction(SIGPIPE, NULL, &after_action);
+    pthread_sigmask(SIG_SETMASK, NULL, &after_mask);
+    EXPECT_TRUE(before_action.sa_handler == after_action.sa_handler);
+    EXPECT_EQ(sigismember(&before_mask, SIGPIPE), sigismember(&after_mask, SIGPIPE));
+#endif
+}
+
+#ifndef _WIN32
+// A SIGPIPE that was already pending (blocked by the caller) belongs to the
+// caller; the write must not swallow it.
+UTEST(pipe, an_earlier_pending_sigpipe_is_left_alone)
+{
+    sigset_t pipe_only, old;
+    sigemptyset(&pipe_only);
+    sigaddset(&pipe_only, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &pipe_only, &old);
+    pthread_kill(pthread_self(), SIGPIPE);
+    ASSERT_TRUE(pipe_pending());
+
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    dino_pipe_close(r);
+    EXPECT_EQ(-1, dino_pipe_write(w, "x", 1));
+    dino_pipe_close(w);
+    EXPECT_TRUE(pipe_pending());
+
+    const struct timespec now = { 0, 0 };
+    EXPECT_EQ(SIGPIPE, sigtimedwait(&pipe_only, NULL, &now));
+    pthread_sigmask(SIG_SETMASK, &old, NULL);
+}
+#endif
 
 UTEST(pipe, invalid_arguments_are_rejected)
 {

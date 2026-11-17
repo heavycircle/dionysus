@@ -105,6 +105,9 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port);
 /**
  * Wrapper for send(2) supporting Windows and POSIX APIs.
  *
+ * Sending to a peer that has closed the connection returns -1 and never raises
+ * SIGPIPE, so the process survives on every platform.
+ *
  * @param  sock     Socket to send information.
  * @param  buf      Buffer to send to sock.
  * @param  len      Maximum length of buf.
