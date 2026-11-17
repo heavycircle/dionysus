@@ -4,7 +4,7 @@
 
 #define NUM_THREADS 4
 
-DINO_THREAD_FUNC counter(void *arg)
+static int counter(void *arg)
 {
     int id = (int)(intptr_t)arg;
     printf("  [Thread %d] Starting ....\n", id);
@@ -14,7 +14,7 @@ DINO_THREAD_FUNC counter(void *arg)
         sum += 1;
 
     printf("  [Thread %d] Counted to %d\n", id, sum);
-    DINO_THREAD_RETURN;
+    return sum;
 }
 
 int main(void)
@@ -31,9 +31,17 @@ int main(void)
         }
     }
 
+    long long total = 0;
     for (int i = 0; i < NUM_THREADS; ++i)
     {
-        dino_thread_join(threads[i]);
+        int sum = 0;
+        if (dino_thread_join(threads[i], &sum) != 0)
+        {
+            fprintf(stderr, "FATAL: Failed to join thread %d\n", i);
+            return -1;
+        }
+        total += sum;
     }
+    printf("Total: %lld\n", total);
     return 0;
 }

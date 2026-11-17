@@ -164,12 +164,12 @@ UTEST(logging, errno_is_preserved)
     EXPECT_EQ(ERANGE, errno);
 }
 
-static DINO_THREAD_FUNC log_lines(void *arg)
+static int log_lines(void *arg)
 {
     int id = *(int *)arg;
     for (int i = 0; i < LINES_PER_THREAD; i++)
         DINO_LOG_INFO("thread %d line %d end", id, i);
-    DINO_THREAD_RETURN;
+    return 0;
 }
 
 static int thread_errors;
@@ -185,7 +185,7 @@ static void emit_from_threads(void)
             thread_errors++;
     }
     for (int i = 0; i < NUM_THREADS; i++)
-        dino_thread_join(threads[i]);
+        dino_thread_join(threads[i], NULL);
 }
 
 // Each line is one write, so lines from different threads never interleave.

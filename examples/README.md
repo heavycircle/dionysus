@@ -24,7 +24,7 @@ targets and runs it that way; the socket examples check every step and exit nonz
 | Networking   | [`network_example`](./network_example/main.c) | `dino/core/network.h`   | TCP ping/pong with `dino_socket_*`.                                                                                                 |
 | Runtime      | [`runtime_example`](./runtime_example/main.c) | `dino/core/runtime.h`   | Setup is automatic; this one opts out (`DINO_NO_AUTO_RUNTIME`) and checks `dino_runtime_init` up front, then shows cleanup isn't final. |
 | Sleep        | [`sleep_example`](./sleep_example/main.c)     | `dino/core/time.h`      | Sleeps 3 seconds with `dino_sleep_ms`, measures it with `dino_time_monotonic_ns`, and fails if it woke early.                        |
-| Threading    | [`thread_example`](./thread_example/main.c)   | `dino/core/thread.h`    | Four `dino_thread_create` workers counting to a billion, then `dino_thread_join`. Built but not run in CI: too slow under emulation. |
+| Threading    | [`thread_example`](./thread_example/main.c)   | `dino/core/thread.h`    | Four `dino_thread_create` workers counting to a billion, each sum returned through `dino_thread_join`. Built but not run in CI: too slow under emulation. |
 
 `network_example` and `io_example` also run as two processes for a
 two-terminal demo: start one with `server`, then the other with `client`.
