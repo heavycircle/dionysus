@@ -11,7 +11,6 @@ project(DinoSDK VERSION 0.5.0 LANGUAGES C)
 set(DINO_VERSION_PRERELEASE "-dev")
 
 add_library(dino_core STATIC
-    src/core/fs.c
     src/core/io.c
     src/core/mutex.c
     src/core/network.c
@@ -28,6 +27,7 @@ add_library(dino_core STATIC
 # here on every platform, so a module missing its Windows half fails a Linux
 # configure too instead of only the Windows build.
 set(DINO_PLATFORM_MODULES
+    fs
 )
 if(WIN32)
     set(DINO_PLATFORM win32)
