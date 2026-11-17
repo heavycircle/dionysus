@@ -1,10 +1,10 @@
+#include <dino/core/io.h>
+
 #include <stdlib.h>
 
 #include <winsock2.h>
 
 #include <windows.h>
-
-#include <dino/core/io.h>
 
 // WSAPoll numbers its flags differently from POSIX (POLLIN is 0x0300, 0x0001
 // is POLLERR), so DINO_* flags must be translated both ways. POLLERR and

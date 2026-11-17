@@ -1,12 +1,12 @@
 #define _LARGEFILE64_SOURCE
 #define _FILE_OFFSET_BITS 64
 
+#include <dino/core/fs.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
-#include <dino/core/fs.h>
 
 uint64_t dino_file_size(const char *filepath)
 {

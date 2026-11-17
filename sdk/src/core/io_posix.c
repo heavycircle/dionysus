@@ -1,9 +1,9 @@
+#include <dino/core/io.h>
+
 #include <poll.h>
 #include <stdlib.h>
 #include <sys/select.h>
 #include <sys/time.h>
-
-#include <dino/core/io.h>
 
 // The DINO_* values happen to equal Linux's, but translating keeps that an
 // implementation detail rather than something every target must share.

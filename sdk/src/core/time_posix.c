@@ -1,9 +1,10 @@
-#include <errno.h>
-#include <time.h>
-
 #include <dino/core/time.h>
 
 #include "time_internal.h"
+
+// Its own block: <time.h> would otherwise count as this file's main header.
+#include <errno.h>
+#include <time.h>
 
 uint64_t dino_time_monotonic_ns(void)
 {

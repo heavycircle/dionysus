@@ -1,6 +1,6 @@
-#include <windows.h>
-
 #include <dino/core/time.h>
+
+#include <windows.h>
 
 #include "time_internal.h"
 

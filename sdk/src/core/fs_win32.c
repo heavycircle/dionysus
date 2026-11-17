@@ -1,6 +1,6 @@
-#include <windows.h>
-
 #include <dino/core/fs.h>
+
+#include <windows.h>
 
 uint64_t dino_file_size(const char *filepath)
 {

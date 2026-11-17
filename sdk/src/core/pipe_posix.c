@@ -2,6 +2,7 @@
 #define _GNU_SOURCE
 
 #include <dino/core/pipe.h>
+
 #include <dino/core/time.h>
 
 #include "pipe_internal.h"

@@ -1,8 +1,9 @@
+#include <dino/core/mutex.h>
+
 #include <stdlib.h>
 
 #include <windows.h>
 
-#include <dino/core/mutex.h>
 #include <dino/core/time.h>
 
 dino_mutex_t dino_mutex_create(void)
