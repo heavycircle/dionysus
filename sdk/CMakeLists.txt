@@ -16,6 +16,7 @@ add_library(dino_core STATIC
     src/core/mutex.c
     src/core/network.c
     src/core/runtime.c
+    src/core/runtime_auto.c
     src/core/thread.c
     src/core/time.c
 )
@@ -25,6 +26,13 @@ target_include_directories(dino_core PUBLIC include "${CMAKE_CURRENT_BINARY_DIR}
 
 if(WIN32)
     target_link_libraries(dino_core PRIVATE ws2_32)
+endif()
+
+# Links runtime_auto.c's constructor into every program, which wouldn't otherwise
+# pull that object from the archive. Its only job (closed stdio) is Linux-only.
+option(DINO_NO_AUTO_RUNTIME "Don't run the SDK's setup before main() (see dino/core/runtime.h)" OFF)
+if(NOT WIN32 AND NOT DINO_NO_AUTO_RUNTIME)
+    target_link_options(dino_core INTERFACE "LINKER:-u,dino__runtime_auto")
 endif()
 
 # Optional extras built on dino_core (logging, ...), kept out of the core library.

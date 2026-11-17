@@ -22,11 +22,11 @@ targets and runs it that way; the socket examples check every step and exit nonz
 | Logging      | [`logging_example`](./logging_example/main.c) | `dino/util/logging.h`   | `DINO_LOG_*` lines on stderr, the level picked by `DINO_LOG` or `dino_log_set_level`; debug and trace compile out under `NDEBUG`.   |
 | Mutexes      | [`mutex_example`](./mutex_example/main.c)     | `dino/core/mutex.h`     | Eight threads increment a shared counter under `dino_mutex_lock`, then compare it with the expected total.                          |
 | Networking   | [`network_example`](./network_example/main.c) | `dino/core/network.h`   | TCP ping/pong with `dino_socket_*`.                                                                                                 |
-| Runtime      | [`runtime_example`](./runtime_example/main.c) | `dino/core/runtime.h`   | Same ping/pong with `DINO_ENABLE_AUTO_RUNTIME`, which runs `dino_net_init` and friends before `main` and cleans up after it.         |
+| Runtime      | [`runtime_example`](./runtime_example/main.c) | `dino/core/runtime.h`   | Setup is automatic; this one opts out (`DINO_NO_AUTO_RUNTIME`) and checks `dino_runtime_init` up front, then shows cleanup isn't final. |
 | Sleep        | [`sleep_example`](./sleep_example/main.c)     | `dino/core/time.h`      | Sleeps 3 seconds with `dino_sleep_ms`, measures it with `dino_time_monotonic_ns`, and fails if it woke early.                        |
 | Threading    | [`thread_example`](./thread_example/main.c)   | `dino/core/thread.h`    | Four `dino_thread_create` workers counting to a billion, then `dino_thread_join`. Built but not run in CI: too slow under emulation. |
 
-`network_example`, `io_example` and `runtime_example` also run as two processes for a
+`network_example` and `io_example` also run as two processes for a
 two-terminal demo: start one with `server`, then the other with `client`.
 
 ```sh

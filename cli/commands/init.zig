@@ -55,11 +55,9 @@ const test_template =
     \\
     \\UTEST(app, creates_a_socket)
     \\{{
-    \\    ASSERT_EQ(0, dino_net_init());
     \\    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
     \\    EXPECT_NE(DINO_INVALID_SOCKET, s);
     \\    dino_socket_close(s);
-    \\    dino_net_cleanup();
     \\}}
     \\
     \\UTEST_MAIN()
@@ -69,19 +67,9 @@ const test_template =
 const main_template =
     \\#include <stdio.h>
     \\
-    \\#include <dino/core/network.h>
-    \\
     \\int main(void)
     \\{{
-    \\    if (dino_net_init() != 0)
-    \\    {{
-    \\        fprintf(stderr, "network init failed\n");
-    \\        return 1;
-    \\    }}
-    \\
     \\    puts("Hello from {0s}!");
-    \\
-    \\    dino_net_cleanup();
     \\    return 0;
     \\}}
     \\

@@ -59,9 +59,6 @@ static int rejects(const char *ip)
 
 int main(void)
 {
-    if (dino_net_init() != 0)
-        return 1;
-
     int ok = echo(DINO_AF_INET, "127.0.0.1");
     ok &= echo(DINO_AF_INET6, "::1");
     ok &= rejects("localhost");
@@ -69,6 +66,5 @@ int main(void)
     ok &= rejects("::zz");
     ok &= rejects("");
 
-    dino_net_cleanup();
     return ok ? 0 : 1;
 }
