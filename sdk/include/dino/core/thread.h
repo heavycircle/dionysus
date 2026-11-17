@@ -5,38 +5,59 @@
 
 typedef uintptr_t dino_thread_t;
 
-#ifdef _WIN32
-#define DINO_THREAD_RET    unsigned long
-#define DINO_THREAD_CC     __stdcall
-#define DINO_THREAD_RETURN return 0
-#else
-#define DINO_THREAD_RET void *
-#define DINO_THREAD_CC
-#define DINO_THREAD_RETURN return NULL
-#endif
-
-typedef DINO_THREAD_RET(DINO_THREAD_CC *dino_thread_worker_t)(void *arg);
-#define DINO_THREAD_FUNC DINO_THREAD_RET DINO_THREAD_CC
+#define DINO_INVALID_THREAD ((dino_thread_t)0)
 
 /**
- * OS-agnostic wrapper for pthread_create.
+ * A thread's entry point: an ordinary function on every platform.
  *
- * This method either uses pthread_create or the WinAPI for closing threads.
- *
- * @param  thread       Thread to await.
- * @param  worker       Worker function to run inside the thread.
- * @param  arg          Argument to worker function.
- * @return Returns 0. On error returns the error number.
+ * @param  arg  The argument given to dino_thread_create.
+ * @return A result for dino_thread_join.
  */
-int dino_thread_create(dino_thread_t *thread, dino_thread_worker_t worker, void *arg);
+typedef int (*dino_thread_fn)(void *arg);
 
 /**
- * OS-agnostic wrapper for pthread_join.
+ * Start a thread running fn(arg).
  *
- * This method either uses pthread_join or the WinAPI for closing threads.
+ * Its stack is the platform default: 8 MB on the Linux targets (zig raises
+ * musl's default) and 1 MB on Windows. Every thread must be either joined or
+ * detached exactly once.
  *
- * @param  dino_thread_t    Thread to await.
+ * @param  thread  Receives the handle, or DINO_INVALID_THREAD on failure.
+ * @param  fn      Function to run.
+ * @param  arg     Argument passed to fn.
+ * @return 0 on success, -1 on failure.
  */
-void dino_thread_join(dino_thread_t thread);
+int dino_thread_create(dino_thread_t *thread, dino_thread_fn fn, void *arg);
+
+/**
+ * Wait for a thread to finish and release it. The handle is invalid afterwards.
+ *
+ * @param  thread  Handle from dino_thread_create, not yet joined or detached.
+ * @param  result  Receives fn's return value; may be NULL.
+ * @return 0 on success, -1 for DINO_INVALID_THREAD or the calling thread itself.
+ */
+int dino_thread_join(dino_thread_t thread, int *result);
+
+/**
+ * Let a thread finish on its own; its resources are released when it does. The
+ * handle is invalid afterwards.
+ *
+ * @param  thread  Handle from dino_thread_create, not yet joined or detached.
+ * @return 0 on success, -1 for DINO_INVALID_THREAD.
+ */
+int dino_thread_detach(dino_thread_t thread);
+
+/**
+ * Identify the calling thread.
+ *
+ * @return The OS thread ID (gettid / GetCurrentThreadId), unique among running
+ *         threads of the system.
+ */
+uint64_t dino_thread_current_id(void);
+
+/**
+ * Give up the rest of the calling thread's time slice.
+ */
+void dino_thread_yield(void);
 
 #endif // DINO_CORE_THREAD_H

@@ -10,11 +10,11 @@
 
 #define NUM_THREADS 8
 
-static DINO_THREAD_FUNC create_socket(void *arg)
+static int create_socket(void *arg)
 {
     dino_socket_t *slot = arg;
     *slot               = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
-    DINO_THREAD_RETURN;
+    return 0;
 }
 
 UTEST(runtime_auto, first_use_from_many_threads_needs_no_init)
@@ -27,7 +27,7 @@ UTEST(runtime_auto, first_use_from_many_threads_needs_no_init)
         ASSERT_EQ(0, dino_thread_create(&threads[i], create_socket, &socks[i]));
     }
     for (int i = 0; i < NUM_THREADS; i++)
-        dino_thread_join(threads[i]);
+        dino_thread_join(threads[i], NULL);
 
     for (int i = 0; i < NUM_THREADS; i++)
     {

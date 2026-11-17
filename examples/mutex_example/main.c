@@ -12,7 +12,7 @@ static long long    g_counter = 0;
 // One slot per thread: a shared error count would itself need the mutex.
 static int g_errors[NUM_THREADS];
 
-DINO_THREAD_FUNC worker(void *arg)
+static int worker(void *arg)
 {
     int *errors = arg;
     for (int i = 0; i < INCREMENTS; i++)
@@ -26,7 +26,7 @@ DINO_THREAD_FUNC worker(void *arg)
         if (dino_mutex_unlock(g_mutex) != 0)
             (*errors)++;
     }
-    DINO_THREAD_RETURN;
+    return 0;
 }
 
 int main(void)
@@ -49,7 +49,7 @@ int main(void)
     }
 
     for (int i = 0; i < NUM_THREADS; i++)
-        dino_thread_join(threads[i]);
+        dino_thread_join(threads[i], NULL);
 
     int errors = 0;
     for (int i = 0; i < NUM_THREADS; i++)
