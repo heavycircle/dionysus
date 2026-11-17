@@ -19,7 +19,7 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export DINO_SDK_PATH=$PWD/sdk DINO_HOME=$work/home
 
-# Any project that links dino_core puts the SDK sources in its database.
+# Any project made with dino_executable() puts the SDK sources in its database.
 "$dino" init "$work/proj" --no-configure >/dev/null
 
 failed=0
@@ -32,7 +32,7 @@ for target in x86_64 win64; do
         echo "tidy: no compile database for $target" >&2
         exit 1
     }
-    for src in sdk/src/core/*.c; do
+    for src in sdk/src/*/*.c; do
         if ! "${tidy[@]}" --quiet --warnings-as-errors="*" -p "$db" "$PWD/$src"; then
             echo "tidy: $src ($target) has findings" >&2
             failed=1

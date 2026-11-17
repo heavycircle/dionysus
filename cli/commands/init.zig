@@ -35,7 +35,7 @@ const cmake_template =
     \\
     \\file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.c)
     \\
-    \\# dino_executable() is add_executable() plus linking the dino SDK (dino_core).
+    \\# dino_executable() is add_executable() plus linking the dino SDK (dino_core, dino_util).
     \\dino_executable({0s} ${{SOURCES}})
     \\target_include_directories({0s} PRIVATE src)
     \\

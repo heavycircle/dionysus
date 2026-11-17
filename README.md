@@ -94,8 +94,8 @@ dino targets                  # what this machine can build and run
 dino help <command>
 ```
 
-An existing CMake project only needs `target_link_libraries(app PRIVATE dino_core)`, or
-`dino_executable(app main.c)` as a shortcut. `dino` makes the SDK available, so the project never
+An existing CMake project only needs `target_link_libraries(app PRIVATE dino_core)` (plus `dino_util`
+for extras such as logging), or `dino_executable(app main.c)`, which links both. `dino` makes the SDK available, so the project never
 vendors it. See [`examples/`](examples) for one project per SDK feature.
 
 ## Contributing

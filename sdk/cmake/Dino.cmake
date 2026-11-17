@@ -1,5 +1,5 @@
 # Injected by `dino build` via CMAKE_PROJECT_INCLUDE, so it runs after every project() call.
-# This is what lets a plain CMakeLists.txt link `dino_core` without vendoring the SDK.
+# This is what lets a plain CMakeLists.txt link `dino_core` and `dino_util` without vendoring the SDK.
 include_guard(GLOBAL)
 
 if(NOT DINO_SDK_PATH)
@@ -12,7 +12,7 @@ endif()
 
 function(dino_executable name)
     add_executable(${name} ${ARGN})
-    target_link_libraries(${name} PRIVATE dino_core)
+    target_link_libraries(${name} PRIVATE dino_util)
 endfunction()
 
 # The first project() is the top-level one, so `ctest` and `dino test` find the
@@ -22,7 +22,7 @@ enable_testing()
 # `dino run` can tell them apart from the program itself.
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
-# A test executable: dino_core plus utest.h (`#include <utest.h>`), and on Linux
+# A test executable: dino_util and dino_core plus utest.h (`#include <utest.h>`), and on Linux
 # targets a leak check that fails the test if anything is still allocated at
 # exit. Registered with CTest, which runs foreign targets under qemu or wine.
 function(dino_test name)
