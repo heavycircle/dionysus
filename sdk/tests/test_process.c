@@ -13,6 +13,7 @@
 
 #include <dino/core/pipe.h>
 #include <dino/core/process.h>
+#include <dino/core/time.h>
 
 // Linux children are /bin/sh: under qemu-user an emulated program can exec
 // host binaries but not another emulated one. Windows children are cmd.exe or
@@ -194,7 +195,7 @@ UTEST(process, kill_ends_a_running_child)
 #ifdef _WIN32
     char *const argv[] = { self_path, "--child-sleep", NULL };
 #else
-    char *const argv[] = SHELL("sleep 60");
+    char *const argv[] = SHELL("exec sleep 60");
 #endif
     dino_process_t p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
@@ -258,6 +259,168 @@ UTEST(process, invalid_arguments_are_rejected)
     EXPECT_EQ(0u, dino_process_id(DINO_INVALID_PROCESS));
 }
 
+/* ---- wait_timeout ---- */
+
+UTEST(process, wait_timeout_times_out_then_reaps)
+{
+#ifdef _WIN32
+    char *const argv[] = { self_path, "--child-sleep", NULL };
+#else
+    char *const argv[] = SHELL("exec sleep 60");
+#endif
+    dino_process_t p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    EXPECT_EQ(DINO_TIMEOUT, dino_process_wait_timeout(p, 0, NULL));
+    uint64_t start = dino_time_monotonic_ns();
+    EXPECT_EQ(DINO_TIMEOUT, dino_process_wait_timeout(p, 50, NULL));
+    EXPECT_GE((dino_time_monotonic_ns() - start) / 1000000, 50u);
+
+    // Still valid after a timeout.
+    EXPECT_EQ(0, dino_process_kill(p));
+    int code = -1;
+    EXPECT_EQ(0, dino_process_wait_timeout(p, 10000, &code));
+    EXPECT_EQ(DINO_EXIT_KILLED, code);
+}
+
+UTEST(process, wait_timeout_returns_the_exit_code)
+{
+    char *const    argv[] = SHELL("exit 5");
+    dino_process_t p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    int code = -1;
+    EXPECT_EQ(0, dino_process_wait_timeout(p, 10000, &code));
+    EXPECT_EQ(5, code);
+    EXPECT_EQ(-1, dino_process_wait_timeout(DINO_INVALID_PROCESS, 0, NULL));
+}
+
+/* ---- run ---- */
+
+// Well past the 64 KB a pipe holds, on stdout and stderr at once: reading one
+// to the end before the other would deadlock.
+#define FLOOD_LINES 2000
+
+UTEST(process, run_reads_both_outputs_without_deadlock)
+{
+#ifdef _WIN32
+    char *const argv[] = { self_path, "--child-flood", NULL };
+#else
+    char *const argv[]
+        = SHELL("i=0; while [ $i -lt 2000 ]; do "
+                "echo 0123456789012345678901234567890123456789012345678901234567890; "
+                "echo abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij >&2; "
+                "i=$((i+1)); done; exit 4");
+#endif
+    dino_run_result_t r;
+    ASSERT_EQ(0, dino_process_run(argv, NULL, &r));
+    EXPECT_EQ(4, r.exit_code);
+    // 61 and 60 characters, a newline, and a \r before it on Windows.
+    size_t eol = 1;
+#ifdef _WIN32
+    eol = 2;
+#endif
+    EXPECT_EQ((size_t)FLOOD_LINES * (61 + eol), r.out_len);
+    EXPECT_EQ((size_t)FLOOD_LINES * (60 + eol), r.err_len);
+    EXPECT_EQ(r.out_len, strlen(r.out));
+    dino_run_result_free(&r);
+    EXPECT_EQ(NULL, r.out);
+}
+
+UTEST(process, run_feeds_input_while_reading)
+{
+#ifdef _WIN32
+    char *const argv[] = { self_path, "--child-cat", NULL };
+#else
+    char *const argv[] = { "/bin/sh", "-c", "cat; echo oops >&2", NULL };
+#endif
+    // Larger than a pipe in both directions.
+    enum
+    {
+        SIZE = 200000
+    };
+    static char input[SIZE];
+    for (int i = 0; i < SIZE; i++)
+        input[i] = (i % 64 == 63) ? '\n' : (char)('a' + i % 26);
+
+    dino_run_opts_t opts = { 0 };
+    opts.input           = input;
+    opts.input_len       = SIZE;
+    dino_run_result_t r;
+    ASSERT_EQ(0, dino_process_run(argv, &opts, &r));
+    EXPECT_EQ(0, r.exit_code);
+    strip_cr(r.out);
+    EXPECT_EQ((size_t)SIZE, strlen(r.out));
+    EXPECT_EQ(0, memcmp(input, r.out, SIZE));
+    strip_cr(r.err);
+    EXPECT_STREQ("oops\n", r.err);
+    dino_run_result_free(&r);
+}
+
+UTEST(process, run_survives_a_child_that_ignores_its_input)
+{
+    // Exits without reading; the writer's EPIPE must not kill this process.
+    char *const argv[] = SHELL("exit 0");
+    enum
+    {
+        SIZE = 1 << 20
+    };
+    char *input = calloc(1, SIZE);
+    ASSERT_TRUE(input != NULL);
+    dino_run_opts_t opts = { 0 };
+    opts.input           = input;
+    opts.input_len       = SIZE;
+    dino_run_result_t r;
+    EXPECT_EQ(0, dino_process_run(argv, &opts, &r));
+    EXPECT_EQ(0, r.exit_code);
+    dino_run_result_free(&r);
+    free(input);
+}
+
+UTEST(process, run_kills_after_the_timeout)
+{
+#ifdef _WIN32
+    char *const argv[] = { self_path, "--child-sleep", NULL };
+#else
+    char *const argv[] = SHELL("echo started; exec sleep 60");
+#endif
+    dino_run_opts_t opts = { 0 };
+    opts.timeout_ms      = 200;
+    dino_run_result_t r;
+    uint64_t          start = dino_time_monotonic_ns();
+    EXPECT_EQ(DINO_TIMEOUT, dino_process_run(argv, &opts, &r));
+    EXPECT_GE((dino_time_monotonic_ns() - start) / 1000000, 200u);
+    EXPECT_EQ(DINO_EXIT_KILLED, r.exit_code);
+#ifndef _WIN32
+    EXPECT_STREQ("started\n", r.out);
+#endif
+    dino_run_result_free(&r);
+}
+
+UTEST(process, run_reports_a_missing_program)
+{
+    char *const       argv[] = { "dino-test-no-such-program", NULL };
+    dino_run_result_t r;
+    int               rc = dino_process_run(argv, NULL, &r);
+    // See missing_program_fails_to_spawn: under valgrind glibc can't tell.
+    if (rc == 0)
+        EXPECT_EQ(127, r.exit_code);
+    else
+        EXPECT_EQ(-1, rc);
+    dino_run_result_free(&r);
+    EXPECT_EQ(-1, dino_process_run(argv, NULL, NULL));
+}
+
+UTEST(process, current_id_is_the_childs_parent)
+{
+    EXPECT_NE(0u, dino_process_current_id());
+#ifndef _WIN32
+    char *const       argv[] = SHELL("echo $PPID");
+    dino_run_result_t r;
+    ASSERT_EQ(0, dino_process_run(argv, NULL, &r));
+    EXPECT_EQ(dino_process_current_id(), strtoull(r.out, NULL, 10));
+    dino_run_result_free(&r);
+#endif
+}
+
 UTEST_STATE();
 
 #ifdef _WIN32
@@ -286,6 +449,15 @@ static int child_main(const char *mode)
             fputs(buf, stdout);
         fputs("oops\n", stderr);
         return 0;
+    }
+    if (strcmp(mode, "--child-flood") == 0)
+    {
+        for (int i = 0; i < 2000; i++)
+        {
+            fputs("0123456789012345678901234567890123456789012345678901234567890\n", stdout);
+            fputs("abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij\n", stderr);
+        }
+        return 4;
     }
     if (strcmp(mode, "--child-sleep") == 0)
     {

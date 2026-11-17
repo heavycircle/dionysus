@@ -4,8 +4,17 @@
 #include <dino/core/process.h>
 
 #include <stdlib.h>
+#include <string.h>
+
+#include <dino/core/thread.h>
+#include <dino/core/time.h>
 
 #include "pipe_handle.h"
+
+static int valid_env_name(const char *name)
+{
+    return name && *name && !strchr(name, '=');
+}
 
 static void modes_of(const dino_spawn_opts_t *opts, dino_stdio_t modes[3])
 {
@@ -47,8 +56,6 @@ static int make_pipe(int i, dino_process_pipes_t *pipes, dino_pipe_t *child_end)
 }
 
 #ifdef _WIN32
-
-#include <string.h>
 
 #include <windows.h>
 
@@ -318,6 +325,96 @@ uint64_t dino_process_id(dino_process_t process)
     return process == DINO_INVALID_PROCESS ? 0 : GetProcessId((HANDLE)process);
 }
 
+// The timeout counts scheduler ticks and can end up to a tick early, so keep
+// waiting until the monotonic deadline has really passed.
+int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_code)
+{
+    if (process == DINO_INVALID_PROCESS)
+        return -1;
+    if (timeout_ms < 0)
+        return dino_process_wait(process, exit_code);
+
+    uint64_t deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
+    for (;;)
+    {
+        uint64_t now  = dino_time_monotonic_ns();
+        DWORD    wait = now >= deadline ? 0 : (DWORD)((deadline - now + 999999) / 1000000);
+        DWORD    rc   = WaitForSingleObject((HANDLE)process, wait);
+        if (rc == WAIT_OBJECT_0)
+            return dino_process_wait(process, exit_code);
+        if (rc != WAIT_TIMEOUT)
+            return -1;
+        if (dino_time_monotonic_ns() >= deadline)
+            return DINO_TIMEOUT;
+    }
+}
+
+uint64_t dino_process_current_id(void)
+{
+    return GetCurrentProcessId();
+}
+
+int dino_env_get(const char *name, char *buf, size_t size)
+{
+    if (!valid_env_name(name) || (!buf && size))
+        return -1;
+    wchar_t *wname = widen(name, -1);
+    if (!wname)
+        return -1;
+
+    int      len   = -1;
+    DWORD    n     = GetEnvironmentVariableW(wname, NULL, 0);
+    wchar_t *value = n ? malloc(n * sizeof(wchar_t)) : NULL;
+    if (value && GetEnvironmentVariableW(wname, value, n) < n)
+    {
+        len = WideCharToMultiByte(CP_UTF8, 0, value, -1, NULL, 0, NULL, NULL) - 1;
+        if (len >= 0 && size)
+        {
+            char *utf8 = malloc((size_t)len + 1);
+            if (utf8)
+            {
+                WideCharToMultiByte(CP_UTF8, 0, value, -1, utf8, len + 1, NULL, NULL);
+                size_t copy = (size_t)len < size ? (size_t)len : size - 1;
+                memcpy(buf, utf8, copy);
+                buf[copy] = '\0';
+                free(utf8);
+            }
+            else
+                len = -1;
+        }
+    }
+    free(value);
+    free(wname);
+    return len;
+}
+
+// _wputenv_s keeps the C runtime's copy (getenv) in step, and
+// SetEnvironmentVariableW sets what dino_env_get and children see. That one
+// goes last: _wputenv_s takes an empty value to mean delete, from both copies,
+// so an empty variable exists for Win32 and children but not for getenv.
+static int env_change(const char *name, const char *value)
+{
+    if (!valid_env_name(name))
+        return -1;
+    wchar_t *wname  = widen(name, -1);
+    wchar_t *wvalue = value ? widen(value, -1) : NULL;
+    int      ok     = wname && (!value || wvalue) && _wputenv_s(wname, wvalue ? wvalue : L"") == 0
+        && SetEnvironmentVariableW(wname, wvalue);
+    free(wname);
+    free(wvalue);
+    return ok ? 0 : -1;
+}
+
+int dino_env_set(const char *name, const char *value)
+{
+    return value ? env_change(name, value) : -1;
+}
+
+int dino_env_unset(const char *name)
+{
+    return env_change(name, NULL);
+}
+
 #else
 
 #include <errno.h>
@@ -328,6 +425,11 @@ uint64_t dino_process_id(dino_process_t process)
 #include <unistd.h>
 
 extern char **environ;
+
+static int decode_status(int status)
+{
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+}
 
 int dino_process_spawn(dino_process_t *process, char *const argv[], const dino_spawn_opts_t *opts,
     dino_process_pipes_t *pipes)
@@ -414,7 +516,7 @@ int dino_process_wait(dino_process_t process, int *exit_code)
         if (errno != EINTR)
             return -1;
     if (exit_code)
-        *exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+        *exit_code = decode_status(status);
     return 0;
 }
 
@@ -430,4 +532,225 @@ uint64_t dino_process_id(dino_process_t process)
     return (uint64_t)process;
 }
 
+// Polls with a short, growing sleep: pidfd_open would need Linux 5.3 and a
+// fallback anyway.
+int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_code)
+{
+    if (process == DINO_INVALID_PROCESS)
+        return -1;
+    if (timeout_ms < 0)
+        return dino_process_wait(process, exit_code);
+
+    uint64_t deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
+    uint32_t delay_ms = 1;
+    for (;;)
+    {
+        int   status;
+        pid_t rc = waitpid((pid_t)process, &status, WNOHANG);
+        if (rc == (pid_t)process)
+        {
+            if (exit_code)
+                *exit_code = decode_status(status);
+            return 0;
+        }
+        if (rc < 0 && errno != EINTR)
+            return -1;
+
+        uint64_t now = dino_time_monotonic_ns();
+        if (now >= deadline)
+            return DINO_TIMEOUT;
+        uint64_t left_ms = (deadline - now + 999999) / 1000000;
+        dino_sleep_ms(left_ms < delay_ms ? (uint32_t)left_ms : delay_ms);
+        if (delay_ms < 10)
+            delay_ms *= 2;
+    }
+}
+
+uint64_t dino_process_current_id(void)
+{
+    return (uint64_t)getpid();
+}
+
+int dino_env_get(const char *name, char *buf, size_t size)
+{
+    if (!valid_env_name(name) || (!buf && size))
+        return -1;
+    const char *value = getenv(name);
+    if (!value)
+        return -1;
+    size_t len = strlen(value);
+    if (size)
+    {
+        size_t copy = len < size ? len : size - 1;
+        memcpy(buf, value, copy);
+        buf[copy] = '\0';
+    }
+    return (int)len;
+}
+
+int dino_env_set(const char *name, const char *value)
+{
+    if (!valid_env_name(name) || !value)
+        return -1;
+    return setenv(name, value, 1) == 0 ? 0 : -1;
+}
+
+int dino_env_unset(const char *name)
+{
+    if (!valid_env_name(name))
+        return -1;
+    return unsetenv(name) == 0 ? 0 : -1;
+}
+
 #endif // _WIN32
+
+/* ---- Run to completion (both platforms) ---- */
+
+// One thread per output pipe and one for the input: Windows can't poll pipes,
+// and reading everything at once is what keeps a child that fills one pipe
+// while the parent waits on another from deadlocking.
+struct collector
+{
+    dino_pipe_t pipe;
+    char       *data;
+    size_t      len, cap;
+    int         failed;
+};
+
+static int collect(void *arg)
+{
+    struct collector *c = arg;
+    char              chunk[4096];
+    int               n;
+    // Keeps draining after running out of memory, so the child isn't blocked.
+    while ((n = dino_pipe_read(c->pipe, chunk, sizeof(chunk))) > 0)
+    {
+        if (c->failed)
+            continue;
+        if (c->len + (size_t)n + 1 > c->cap)
+        {
+            size_t cap  = (c->len + (size_t)n + 1) * 2;
+            char  *data = realloc(c->data, cap);
+            if (!data)
+            {
+                c->failed = 1;
+                continue;
+            }
+            c->data = data;
+            c->cap  = cap;
+        }
+        memcpy(c->data + c->len, chunk, (size_t)n);
+        c->len += (size_t)n;
+        c->data[c->len] = '\0';
+    }
+    return 0;
+}
+
+struct feeder
+{
+    dino_pipe_t pipe;
+    const char *data;
+    size_t      len;
+};
+
+static int feed(void *arg)
+{
+    struct feeder *f = arg;
+#ifndef _WIN32
+    // A child that exits without reading all its input would otherwise kill
+    // the whole process with SIGPIPE. Blocked in this thread only, the write
+    // fails with EPIPE, and the pending signal goes away with the thread.
+    sigset_t pipe_only;
+    sigemptyset(&pipe_only);
+    sigaddset(&pipe_only, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &pipe_only, NULL);
+#endif
+    for (size_t sent = 0; sent < f->len;)
+    {
+        size_t chunk = f->len - sent < 65536 ? f->len - sent : 65536;
+        int    n     = dino_pipe_write(f->pipe, f->data + sent, (int)chunk);
+        if (n <= 0)
+            break;
+        sent += (size_t)n;
+    }
+    dino_pipe_close(f->pipe);
+    return 0;
+}
+
+static char *take(struct collector *c, size_t *len)
+{
+    char *data = c->data ? c->data : calloc(1, 1);
+    *len       = c->data ? c->len : 0;
+    c->data    = NULL;
+    return data;
+}
+
+int dino_process_run(char *const argv[], const dino_run_opts_t *opts, dino_run_result_t *result)
+{
+    if (!result)
+        return -1;
+    memset(result, 0, sizeof(*result));
+    result->exit_code = -1;
+
+    dino_spawn_opts_t spawn = { 0 };
+    spawn.cwd               = opts ? opts->cwd : NULL;
+    spawn.env               = opts ? opts->env : NULL;
+    spawn.stdin_mode        = opts && opts->input ? DINO_STDIO_PIPE : DINO_STDIO_NULL;
+    spawn.stdout_mode       = DINO_STDIO_PIPE;
+    spawn.stderr_mode       = DINO_STDIO_PIPE;
+
+    dino_process_t       process;
+    dino_process_pipes_t pipes;
+    if (dino_process_spawn(&process, argv, &spawn, &pipes) != 0)
+        return -1;
+
+    struct collector out = { pipes.out, NULL, 0, 0, 0 };
+    struct collector err = { pipes.err, NULL, 0, 0, 0 };
+    struct feeder    in  = { pipes.in, opts ? opts->input : NULL, opts ? opts->input_len : 0 };
+    dino_thread_t    threads[3] = { DINO_INVALID_THREAD, DINO_INVALID_THREAD, DINO_INVALID_THREAD };
+    int              started    = dino_thread_create(&threads[0], collect, &out) == 0
+        && dino_thread_create(&threads[1], collect, &err) == 0
+        && (in.pipe == DINO_INVALID_PIPE || dino_thread_create(&threads[2], feed, &in) == 0);
+
+    int status = 0;
+    if (!started)
+    {
+        dino_process_kill(process);
+        status = -1;
+    }
+    int timeout = opts && opts->timeout_ms > 0 ? opts->timeout_ms : -1;
+    int rc      = dino_process_wait_timeout(process, timeout, &result->exit_code);
+    if (rc == DINO_TIMEOUT)
+    {
+        dino_process_kill(process);
+        rc     = dino_process_wait(process, &result->exit_code);
+        status = status ? status : DINO_TIMEOUT;
+    }
+    if (rc != 0)
+        status = -1;
+
+    // The child is gone, so the readers reach end of file (unless a grandchild
+    // still holds the pipes) and the writer's next write fails.
+    for (int i = 0; i < 3; i++)
+        if (threads[i] != DINO_INVALID_THREAD)
+            dino_thread_join(threads[i], NULL);
+    if (in.pipe != DINO_INVALID_PIPE && threads[2] == DINO_INVALID_THREAD)
+        dino_pipe_close(in.pipe);
+    dino_pipe_close(pipes.out);
+    dino_pipe_close(pipes.err);
+
+    result->out = take(&out, &result->out_len);
+    result->err = take(&err, &result->err_len);
+    if (out.failed || err.failed || !result->out || !result->err)
+        status = -1;
+    return status;
+}
+
+void dino_run_result_free(dino_run_result_t *result)
+{
+    if (!result)
+        return;
+    free(result->out);
+    free(result->err);
+    memset(result, 0, sizeof(*result));
+}
