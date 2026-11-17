@@ -20,11 +20,22 @@ set -eu
 # prefix directory itself.
 own_wine_prefix() {
     prefix=$HOME/.wine
-    [ -O "$prefix" ] && return
-    mkdir -p "$prefix"
-    cp /opt/wine-prefix/*.reg /opt/wine-prefix/.update-timestamp "$prefix"/
-    ln -sfn /opt/wine-prefix/drive_c "$prefix"/drive_c
-    ln -sfn /opt/wine-prefix/dosdevices "$prefix"/dosdevices
+    if [ ! -O "$prefix" ]; then
+        mkdir -p "$prefix"
+        cp /opt/wine-prefix/*.reg /opt/wine-prefix/.update-timestamp "$prefix"/
+        ln -sfn /opt/wine-prefix/drive_c "$prefix"/drive_c
+        ln -sfn /opt/wine-prefix/dosdevices "$prefix"/dosdevices
+    fi
+
+    # Debian's wine names wineserver's socket directory in $prefix/wineserver
+    # (mode 0400), creating it on first start. Wine processes started together
+    # on a prefix without one race to create it, and the losers exit with
+    # "error opening file descriptor for wineserver tmpdir file" (#71). Name it
+    # up front; wineserver creates the directory and checks that it's private.
+    if [ ! -s "$prefix/wineserver" ]; then
+        tmpdir=$(mktemp -u "${TMPDIR:-/tmp}/wine-XXXXXX")
+        (umask 377 && printf %s "${tmpdir##*/}" >"$prefix/wineserver")
+    fi
 }
 
 if [ "${1-}" = --own-wine-prefix ]; then
