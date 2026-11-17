@@ -1,3 +1,6 @@
+// accept4 and SOCK_CLOEXEC.
+#define _GNU_SOURCE
+
 #include <dino/core/network.h>
 
 #include <string.h>
@@ -10,6 +13,10 @@
 #include <windows.h>
 
 typedef int dino_socklen_t;
+
+#ifndef WSA_FLAG_NO_HANDLE_INHERIT
+#define WSA_FLAG_NO_HANDLE_INHERIT 0x80
+#endif
 
 #else
 
@@ -124,11 +131,19 @@ dino_socket_t dino_socket_create(dino_domain_t domain, dino_type_t type, dino_pr
     int os_type     = translate_type(type);
     int os_protocol = translate_protocol(protocol);
 
-    dino_socket_t s = (dino_socket_t)socket(os_domain, os_type, os_protocol);
-    if (s == (dino_socket_t)INVALID_SOCKET)
+    // Never inherited by child processes: a child holding a copy keeps a
+    // listening port bound, or a connection open, after the parent closes it.
+#ifdef _WIN32
+    // WSA_FLAG_OVERLAPPED keeps what socket() would give, for IOCP.
+    SOCKET s = WSASocketW(
+        os_domain, os_type, os_protocol, NULL, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
+#else
+    int s = socket(os_domain, os_type | SOCK_CLOEXEC, os_protocol);
+#endif // _WIN32
+    if (s == INVALID_SOCKET)
         return DINO_INVALID_SOCKET;
 
-    return s;
+    return (dino_socket_t)s;
 }
 
 int dino_socket_close(dino_socket_t sock)
@@ -212,12 +227,20 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
 
 #ifdef _WIN32
     SOCKET client = accept((SOCKET)sock, (struct sockaddr *)&addr, &len);
-#else
-    int client = accept((int)sock, (struct sockaddr *)&addr, &len);
-#endif // _WIN32
-
     if (client == INVALID_SOCKET)
         return DINO_INVALID_SOCKET;
+    // Not documented to carry over from the listening socket.
+    if (!SetHandleInformation((HANDLE)client, HANDLE_FLAG_INHERIT, 0))
+    {
+        closesocket(client);
+        return DINO_INVALID_SOCKET;
+    }
+#else
+    int client = accept4((int)sock, (struct sockaddr *)&addr, &len, SOCK_CLOEXEC);
+    if (client == INVALID_SOCKET)
+        return DINO_INVALID_SOCKET;
+#endif // _WIN32
+
     return (dino_socket_t)client;
 }
 

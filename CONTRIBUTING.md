@@ -301,6 +301,8 @@ PRIVATE dino_core)`. That is why a user's `CMakeLists.txt` doesn't need to know 
   header's `@return`.
 - **No winpthreads.** Threads and mutexes use the Win32 API directly (`CreateThread`,
   `CRITICAL_SECTION`); winpthreads works but makes binaries much larger.
+- **Handles aren't inherited.** Every socket, pipe or file the SDK opens is close-on-exec on
+  POSIX and non-inheritable on Windows, so child processes only get what they're explicitly given.
 - **Internal names use `dino__`.** Helpers private to one file are `static`. When an SDK
   internal must still be visible to the linker (for example `dino__runtime_auto`, which a link
   option names), it gets a double underscore. These aren't API: they're never declared in a
