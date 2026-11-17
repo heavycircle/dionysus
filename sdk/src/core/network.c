@@ -65,26 +65,61 @@ static int translate_protocol(dino_protocol_t protocol)
     }
 }
 
+#ifdef _WIN32
+
+// Winsock is started on first use rather than once for good, so that a
+// cleanup followed by more socket calls starts it again.
+static SRWLOCK       wsa_lock = SRWLOCK_INIT;
+static volatile LONG wsa_started;
+
 int dino_net_init(void)
 {
-#ifdef _WIN32
-    WSADATA wsaData;
-    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
-        return 1;
-#endif // _WIN32
+    if (InterlockedCompareExchange(&wsa_started, 0, 0))
+        return 0;
 
+    int rc = 0;
+    AcquireSRWLockExclusive(&wsa_lock);
+    if (!wsa_started)
+    {
+        WSADATA wsaData;
+        if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0)
+            InterlockedExchange(&wsa_started, 1);
+        else
+            rc = 1;
+    }
+    ReleaseSRWLockExclusive(&wsa_lock);
+    return rc;
+}
+
+void dino_net_cleanup(void)
+{
+    AcquireSRWLockExclusive(&wsa_lock);
+    if (wsa_started)
+    {
+        WSACleanup();
+        InterlockedExchange(&wsa_started, 0);
+    }
+    ReleaseSRWLockExclusive(&wsa_lock);
+}
+
+#else
+
+int dino_net_init(void)
+{
     return 0;
 }
 
 void dino_net_cleanup(void)
 {
-#ifdef _WIN32
-    WSACleanup();
-#endif // _WIN32
 }
+
+#endif // _WIN32
 
 dino_socket_t dino_socket_create(dino_domain_t domain, dino_type_t type, dino_protocol_t protocol)
 {
+    if (dino_net_init() != 0)
+        return DINO_INVALID_SOCKET;
+
     int os_domain   = translate_domain(domain);
     int os_type     = translate_type(type);
     int os_protocol = translate_protocol(protocol);

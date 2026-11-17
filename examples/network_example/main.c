@@ -104,9 +104,6 @@ static int run_self_test(void)
 
 int main(int argc, char *argv[])
 {
-    if (dino_net_init() != 0)
-        return 1;
-
     int ok;
     if (argc > 1 && strcmp(argv[1], "server") == 0)
         ok = run_server();
@@ -115,6 +112,5 @@ int main(int argc, char *argv[])
     else
         ok = run_self_test();
 
-    dino_net_cleanup();
     return ok ? 0 : 1;
 }

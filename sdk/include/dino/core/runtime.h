@@ -2,46 +2,40 @@
 #define DINO_CORE_RUNTIME_H
 
 /**
- * Explicitly initialise all Dino subsystems.
+ * The SDK sets itself up; programs don't need to call anything first:
  *
- * Call this in main() if you are not using DINO_ENABLE_AUTO_RUNTIME.
+ *   - Before main(), any of stdin, stdout and stderr that are closed are
+ *     pointed at /dev/null (dino_fs_init()). Linked into every program that
+ *     links dino_core, unless built with -DDINO_NO_AUTO_RUNTIME=ON.
+ *   - Subsystems that can fail start on first use and report failure from that
+ *     call: dino_socket_create() runs dino_net_init().
+ *
+ * The functions below remain for programs that want to check for failure up
+ * front or tear down explicitly.
+ */
+
+/**
+ * Initialise every Dino subsystem now.
+ *
+ * Safe to call any number of times, from any thread.
  *
  * @return 0 on success, non-zero if any subsystem fails to initialise.
  */
 int dino_runtime_init(void);
 
 /**
- * Explicitly tear down all Dino subsystems.
+ * Tear down every Dino subsystem.
  *
- * Call before process exit if you called dino_runtime_init() explicitly.
+ * Optional: the OS releases everything at exit. Later calls that need a
+ * subsystem initialise it again.
  */
 void dino_runtime_cleanup(void);
 
 /**
- * DINO_ENABLE_AUTO_RUNTIME
- *
- * Place this macro at file scope in exactly ONE .c file in your project.
- * It installs constructor/destructor functions that initialise and tear down
- * all Dino subsystems automatically — you do not then need to call
- * dino_runtime_init() or dino_runtime_cleanup() in main().
- *
- * Example:
- *   #include <dino/core/runtime.h>
- *   DINO_ENABLE_AUTO_RUNTIME;
- *
- * If you do not use this macro, call dino_runtime_init() before using any
- * Dino API and dino_runtime_cleanup() before process exit.
+ * Deprecated: setup is automatic. Expands to a harmless declaration so existing
+ * `DINO_ENABLE_AUTO_RUNTIME;` lines keep compiling; to be removed by the 1.0 API
+ * review.
  */
-#define DINO_ENABLE_AUTO_RUNTIME                                                                   \
-    static void _dino_auto_init(void) __attribute__((constructor));                                \
-    static void _dino_auto_fini(void) __attribute__((destructor));                                 \
-    static void _dino_auto_init(void)                                                              \
-    {                                                                                              \
-        dino_runtime_init();                                                                       \
-    }                                                                                              \
-    static void _dino_auto_fini(void)                                                              \
-    {                                                                                              \
-        dino_runtime_cleanup();                                                                    \
-    }
+#define DINO_ENABLE_AUTO_RUNTIME typedef int dino_auto_runtime_is_deprecated_
 
 #endif // DINO_CORE_RUNTIME_H

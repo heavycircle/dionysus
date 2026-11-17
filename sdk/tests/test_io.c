@@ -168,13 +168,4 @@ UTEST(select, times_out_then_sees_data)
     close_pair(&p);
 }
 
-UTEST_STATE();
-
-int main(int argc, const char *const argv[])
-{
-    if (dino_net_init() != 0)
-        return 1;
-    int rc = utest_main(argc, argv);
-    dino_net_cleanup();
-    return rc;
-}
+UTEST_MAIN()

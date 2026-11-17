@@ -301,6 +301,11 @@ PRIVATE dino_core)`. That is why a user's `CMakeLists.txt` doesn't need to know 
   header's `@return`.
 - **No winpthreads.** Threads and mutexes use the Win32 API directly (`CreateThread`,
   `CRITICAL_SECTION`); winpthreads works but makes binaries much larger.
+- **Internal names use `dino__`.** Helpers private to one file are `static`. When an SDK
+  internal must still be visible to the linker (for example `dino__runtime_auto`, which a link
+  option names), it gets a double underscore. These aren't API: they're never declared in a
+  public header or documented as something to call, and they can change or disappear without
+  notice.
 - **Windows libraries link `PRIVATE`** (`ws2_32` today) so they don't leak into users' link lines.
 - **Size matters.** Check release binary sizes before and after a change (`dino build --all`
   prints them). An unexplained increase is a regression.
@@ -317,8 +322,11 @@ of `core` and `DINO_CORE_` below.
    **Every function needs both halves.** A function defined only for POSIX links fine on Linux and
    fails on Windows.
 3. Add the source file to `add_library(dino_core ...)` (or `dino_util`) in `sdk/CMakeLists.txt`.
-4. If it needs process-wide setup (like `WSAStartup`), call it from `dino_runtime_init()` and
-   `dino_runtime_cleanup()` in `src/core/runtime.c`.
+4. If it needs process-wide setup (like `WSAStartup`), make it lazy: an idempotent, thread-safe
+   `dino_<name>_init()` that the module's entry points call first, returning their usual failure
+   value if it fails (see `dino_net_init()` and `dino_socket_create()`), and call it from
+   `dino_runtime_init()`. Only setup that must happen before `main()` and can't fail goes in
+   `src/core/runtime_auto.c`, which is linked into every program on Linux.
 5. Add `sdk/tests/test_<name>.c` covering every function, including the error paths
    (`DINO_INVALID_*` handles, bad arguments). `dino test --all` and CI pick it up automatically;
    make sure it passes on all seven targets and under `--memcheck`.

@@ -17,7 +17,6 @@ struct server
 
 UTEST_F_SETUP(server)
 {
-    ASSERT_EQ(0, dino_net_init());
     utest_fixture->db       = kv_create();
     utest_fixture->listener = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
     utest_fixture->client   = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
@@ -37,7 +36,6 @@ UTEST_F_TEARDOWN(server)
         dino_socket_close(utest_fixture->client);
     dino_socket_close(utest_fixture->listener);
     kv_destroy(utest_fixture->db);
-    dino_net_cleanup();
     EXPECT_TRUE(1);
 }
 

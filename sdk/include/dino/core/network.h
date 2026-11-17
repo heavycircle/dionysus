@@ -26,16 +26,22 @@ typedef enum
 } dino_protocol_t;
 
 /**
- * Initialize environment for making sockets.
+ * Initialize environment for making sockets (WSAStartup on Windows).
  *
- * Must be run before any other network functions are used.
+ * Optional: dino_socket_create() does this on first use and returns
+ * DINO_INVALID_SOCKET if it fails. Call it to check for failure up front. Safe
+ * to call any number of times, from any thread; only the first successful call
+ * does anything.
  *
  * @return 0 on success, non-zero on failure.
  */
 int dino_net_init(void);
 
 /**
- * Teardown environment after socket connections.
+ * Teardown environment after socket connections (WSACleanup on Windows).
+ *
+ * Optional: the OS releases everything at exit. No sockets may be in use. Later
+ * socket calls initialize again.
  */
 void dino_net_cleanup(void);
 

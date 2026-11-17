@@ -79,10 +79,6 @@ static int demo(void)
 
 int main(int argc, char *argv[])
 {
-    if (dino_net_init() != 0)
-        return 1;
-    int rc = argc > 1 && strcmp(argv[1], "serve") == 0 ? serve(argc > 2 ? atoi(argv[2]) : 7070)
-                                                       : demo();
-    dino_net_cleanup();
-    return rc;
+    return argc > 1 && strcmp(argv[1], "serve") == 0 ? serve(argc > 2 ? atoi(argv[2]) : 7070)
+                                                     : demo();
 }
