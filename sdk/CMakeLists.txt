@@ -6,9 +6,9 @@ if(TARGET dino_core)
     return()
 endif()
 
-project(DinoSDK VERSION 0.3.0 LANGUAGES C)
+project(DinoSDK VERSION 0.3.1 LANGUAGES C)
 # Dropped only on the release commit; must match build.zig.zon (CONTRIBUTING.md#versioning).
-set(DINO_VERSION_PRERELEASE "")
+set(DINO_VERSION_PRERELEASE "-dev")
 
 add_library(dino_core STATIC
     src/core/fs.c
