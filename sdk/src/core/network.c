@@ -266,7 +266,9 @@ int dino_socket_send(dino_socket_t sock, const void *buf, int len)
     int sent = send((SOCKET)sock, (const char *)buf, len, 0);
 #else
     // send() never returns more than len, so the result fits in an int.
-    int sent = (int)send((int)sock, (const char *)buf, len, 0);
+    // MSG_NOSIGNAL: a closed peer fails the call with EPIPE, as on Windows,
+    // instead of raising SIGPIPE, which would end the process.
+    int sent = (int)send((int)sock, (const char *)buf, len, MSG_NOSIGNAL);
 #endif
     return (sent == SOCKET_ERROR) ? -1 : sent;
 }
