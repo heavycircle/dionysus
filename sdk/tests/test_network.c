@@ -1,3 +1,10 @@
+// Before utest.h, which declares QueryPerformanceCounter itself on Windows.
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <fcntl.h>
+#endif
+
 #include <string.h>
 #include <utest.h>
 
@@ -129,6 +136,38 @@ UTEST(network, recv_sees_orderly_shutdown)
     char buf[4];
     EXPECT_EQ(0, dino_socket_recv(p.peer, buf, sizeof(buf)));
     close_pair(&p);
+}
+
+static int inheritable(dino_socket_t s)
+{
+#ifdef _WIN32
+    DWORD flags = 0;
+    if (!GetHandleInformation((HANDLE)s, &flags))
+        return -1;
+    return (flags & HANDLE_FLAG_INHERIT) != 0;
+#else
+    int flags = fcntl((int)s, F_GETFD);
+    if (flags < 0)
+        return -1;
+    return (flags & FD_CLOEXEC) == 0;
+#endif
+}
+
+// A child process holding a copy would keep the port bound or the connection
+// open after the parent closes it (#77).
+UTEST(network, sockets_are_not_inherited_by_children)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, DINO_AF_INET, "127.0.0.1", PORT + 5));
+    EXPECT_EQ(0, inheritable(p.server));
+    EXPECT_EQ(0, inheritable(p.client));
+    EXPECT_EQ(0, inheritable(p.peer));
+    close_pair(&p);
+
+    dino_socket_t udp = dino_socket_create(DINO_AF_INET6, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, udp);
+    EXPECT_EQ(0, inheritable(udp));
+    dino_socket_close(udp);
 }
 
 UTEST_MAIN()
