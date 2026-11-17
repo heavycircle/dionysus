@@ -28,6 +28,7 @@ set(DINO_PLATFORM_MODULES
     io
     mutex
     pipe
+    thread
     time
 )
 if(WIN32)
