@@ -2,6 +2,7 @@
 #include <utest.h>
 
 #include <dino/core/network.h>
+#include <dino/core/time.h>
 
 // Each test file has its own port range: ctest runs test executables in parallel.
 #define PORT 18100
@@ -128,6 +129,27 @@ UTEST(network, recv_sees_orderly_shutdown)
     EXPECT_EQ(0, dino_socket_shutdown(p.client, DINO_SHUT_WR));
     char buf[4];
     EXPECT_EQ(0, dino_socket_recv(p.peer, buf, sizeof(buf)));
+    close_pair(&p);
+}
+
+// The peer is gone: sends must fail instead of raising SIGPIPE, which would
+// end this test process on Linux (#82). The first sends can still succeed
+// into the socket buffer until the peer's reset arrives.
+UTEST(network, send_to_a_closed_peer_fails_without_killing_the_process)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, DINO_AF_INET, "127.0.0.1", PORT + 6));
+    dino_socket_close(p.peer);
+    p.peer = DINO_INVALID_SOCKET;
+
+    int rc = 0;
+    for (int i = 0; i < 100 && rc >= 0; i++)
+    {
+        rc = dino_socket_send(p.client, "data", 4);
+        if (rc >= 0)
+            dino_sleep_ms(10);
+    }
+    EXPECT_EQ(-1, rc);
     close_pair(&p);
 }
 
