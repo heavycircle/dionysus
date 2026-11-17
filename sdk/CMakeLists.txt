@@ -27,12 +27,18 @@ if(WIN32)
     target_link_libraries(dino_core PRIVATE ws2_32)
 endif()
 
+# Optional extras built on dino_core (logging, ...), kept out of the core library.
+add_library(dino_util STATIC
+    src/util/logging.c
+)
+target_link_libraries(dino_util PUBLIC dino_core)
+
 # Used by dino_test() (cmake/Dino.cmake). testing/utest.h is sheredom/utest.h at
 # fc4715da3b3e3bfa936cf69850f2cfe969ed85b7, unmodified (public domain).
 add_library(dino_testing INTERFACE)
 # SYSTEM: utest.h's own warnings and clang-tidy findings stay out of test code.
 target_include_directories(dino_testing SYSTEM INTERFACE testing)
-target_link_libraries(dino_testing INTERFACE dino_core)
+target_link_libraries(dino_testing INTERFACE dino_util)
 # --wrap needs the static libc of the Linux targets: zig cc doesn't pass it to
 # lld-link, and the Windows CRT allocates inside a DLL anyway.
 option(DINO_NO_LEAK_CHECK "Don't link the allocation counter into dino_test() executables" OFF)

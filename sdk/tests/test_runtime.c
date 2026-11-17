@@ -2,7 +2,6 @@
 
 #include <dino/core/network.h>
 #include <dino/core/runtime.h>
-#include <dino/util/logging.h>
 
 UTEST(runtime, init_makes_sockets_usable)
 {
@@ -20,16 +19,6 @@ UTEST(runtime, init_and_cleanup_can_repeat)
         ASSERT_EQ(0, dino_runtime_init());
         dino_runtime_cleanup();
     }
-}
-
-// LOG_DEBUG must compile and run with and without arguments, in debug builds
-// (prints) and release builds (compiled out, arguments still type-checked).
-UTEST(logging, debug_macro_with_and_without_arguments)
-{
-    int value = 7;
-    LOG_DEBUG("logging test without arguments\n");
-    LOG_DEBUG("logging test with %d argument\n", value);
-    EXPECT_EQ(7, value);
 }
 
 UTEST_MAIN()

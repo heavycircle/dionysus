@@ -9,3 +9,5 @@ foreach(test ${tests})
     get_filename_component(name ${test} NAME_WE)
     dino_test(${name} ${test})
 endforeach()
+
+set_tests_properties(test_logging_env PROPERTIES ENVIRONMENT DINO_LOG=WaRn)

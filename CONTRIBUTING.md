@@ -109,10 +109,11 @@ build.zig, build.zig.zon   Zig build for dino; build.zig.zon holds the version
 cli/                       dino source (main.zig, commands/, cmake.zig, targets.zig, ...)
 sdk/
   include/dino/core/       public headers: fs, io, kernel, mutex, network, runtime, thread
-  include/dino/util/       logging
+  include/dino/util/       extras built on core: logging
   src/core/                implementations, one file per header, POSIX and Win32 in each
+  src/util/                implementations of the util headers
   cmake/                   toolchain.cmake, flags.cmake, Dino.cmake, version.h.in
-  CMakeLists.txt           the dino_core static library
+  CMakeLists.txt           the dino_core and dino_util static libraries
   testing/                 utest.h (vendored) and the leak counter, for dino_test()
   tests/                   the SDK's own tests, one test_<module>.c per module
 examples/                  one standalone CMake project per SDK feature
@@ -306,11 +307,16 @@ PRIVATE dino_core)`. That is why a user's `CMakeLists.txt` doesn't need to know 
 
 ### Adding a module
 
+Platform portability goes in `core` (`dino_core`). Optional extras that are built on it, such as
+logging, go in `util` (`dino_util`, which links `dino_core`); use `util` and `DINO_UTIL_` in place
+of `core` and `DINO_CORE_` below.
+
 1. Add the header to `sdk/include/dino/core/<name>.h` with a `DINO_CORE_<NAME>_H` include guard and
    doc comments in the style of the existing headers.
-2. Implement it in `sdk/src/core/<name>.c`, split with `#ifdef _WIN32`. **Every function needs both
-   halves.** A function defined only for POSIX links fine on Linux and fails on Windows.
-3. Add the source file to `add_library(dino_core ...)` in `sdk/CMakeLists.txt`.
+2. Implement it in `sdk/src/core/<name>.c`, split with `#ifdef _WIN32` where the platforms differ.
+   **Every function needs both halves.** A function defined only for POSIX links fine on Linux and
+   fails on Windows.
+3. Add the source file to `add_library(dino_core ...)` (or `dino_util`) in `sdk/CMakeLists.txt`.
 4. If it needs process-wide setup (like `WSAStartup`), call it from `dino_runtime_init()` and
    `dino_runtime_cleanup()` in `src/core/runtime.c`.
 5. Add `sdk/tests/test_<name>.c` covering every function, including the error paths
