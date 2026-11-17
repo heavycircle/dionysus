@@ -109,7 +109,7 @@ build.zig, build.zig.zon   Zig build for dino; build.zig.zon holds the version
 cli/                       dino source (main.zig, commands/, cmake.zig, targets.zig, ...)
 sdk/
   include/dino/core/       public headers: fs, io, kernel, mutex (+ condition variables, once), network,
-                           runtime, thread, time
+                           pipe, runtime, thread, time
   include/dino/util/       extras built on core: logging
   src/core/                implementations, one file per header, POSIX and Win32 in each
   src/util/                implementations of the util headers
