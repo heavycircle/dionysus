@@ -11,7 +11,6 @@ project(DinoSDK VERSION 0.5.0 LANGUAGES C)
 set(DINO_VERSION_PRERELEASE "-dev")
 
 add_library(dino_core STATIC
-    src/core/io.c
     src/core/network.c
     src/core/pipe.c
     src/core/process.c
@@ -27,6 +26,7 @@ add_library(dino_core STATIC
 # configure too instead of only the Windows build.
 set(DINO_PLATFORM_MODULES
     fs
+    io
     mutex
 )
 if(WIN32)
