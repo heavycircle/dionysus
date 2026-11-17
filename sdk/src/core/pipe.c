@@ -5,6 +5,8 @@
 
 #include <dino/core/time.h>
 
+#include "pipe_handle.h"
+
 #define PIPE_BYTES 65536
 
 #ifdef _WIN32
@@ -87,10 +89,8 @@ int dino_pipe_close(dino_pipe_t pipe)
 #include <poll.h>
 #include <unistd.h>
 
-// Handles are fd + 1, so fd 0 (possible when stdin was closed) isn't
-// DINO_INVALID_PIPE.
-#define TO_HANDLE(fd) ((dino_pipe_t)(fd) + 1)
-#define TO_FD(pipe)   ((int)((pipe) - 1))
+#define TO_HANDLE(fd) DINO__PIPE_FROM_OS(fd)
+#define TO_FD(pipe)   DINO__PIPE_TO_OS(pipe)
 
 int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
 {
