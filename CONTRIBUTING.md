@@ -68,8 +68,9 @@ refreshes it right after configuring, even when compiling fails. The SDK's own s
 That root copy is rewritten for clang tools (`cli/compdb.zig`): each `zig cc -target <t> ...` entry
 becomes `clang --target=<triple> -nostdlibinc -isystem <zig's musl/MinGW headers> ...`, so clangd
 and clang-tidy need no extra flags and see the same libc the build uses. The database follows the
-first target of the last `dino build`: `dino build win64` shows Windows-only code (`#ifdef _WIN32`,
-`<windows.h>`) to your editor, and `dino build` switches back to the host. Projects configured with
+first target of the last `dino build`: `dino build win64` gives your editor the Windows-only files
+(`sdk/src/core/*_win32.c`, `<windows.h>`), and `dino build` switches back to the host, where the
+`*_posix.c` files have real flags. Projects configured with
 plain `cmake` and the toolchain file get CMake's unrewritten database, which clang tools can't read.
 
 ### Docker
@@ -111,7 +112,8 @@ sdk/
   include/dino/core/       public headers: fs, io, kernel, mutex (+ condition variables, once), network,
                            pipe, process, runtime, thread, time
   include/dino/util/       extras built on core: logging
-  src/core/                implementations, one file per header, POSIX and Win32 in each
+  src/core/                implementations: <module>.c (shared, if any), <module>_posix.c and
+                           <module>_win32.c (one is built per platform)
   src/util/                implementations of the util headers
   cmake/                   toolchain.cmake, flags.cmake, Dino.cmake, version.h.in
   CMakeLists.txt           the dino_core and dino_util static libraries
@@ -321,10 +323,15 @@ of `core` and `DINO_CORE_` below.
 
 1. Add the header to `sdk/include/dino/core/<name>.h` with a `DINO_CORE_<NAME>_H` include guard and
    doc comments in the style of the existing headers.
-2. Implement it in `sdk/src/core/<name>.c`, split with `#ifdef _WIN32` where the platforms differ.
-   **Every function needs both halves.** A function defined only for POSIX links fine on Linux and
-   fails on Windows.
-3. Add the source file to `add_library(dino_core ...)` (or `dino_util`) in `sdk/CMakeLists.txt`.
+2. Implement it. Code that differs by platform goes in `sdk/src/core/<name>_posix.c` and
+   `<name>_win32.c`: a function that differs at all lives wholly in both files, with no
+   `#ifdef _WIN32` in shared code. Code that is the same everywhere goes in `<name>.c`, and helpers
+   the halves share in `<name>_internal.h` (internal symbols get the `dino__` prefix). A module with
+   no platform code is just `<name>.c`. **Every function needs both halves.** A function defined
+   only for POSIX links fine on Linux and fails on Windows.
+3. In `sdk/CMakeLists.txt`, add `<name>.c` (if any) to `add_library(dino_core ...)` (or `dino_util`)
+   and `<name>` to `DINO_PLATFORM_MODULES`, which builds the right half and fails the configure on
+   any platform if either half is missing.
 4. If it needs process-wide setup (like `WSAStartup`), make it lazy: an idempotent, thread-safe
    `dino_<name>_init()` that the module's entry points call first, returning their usual failure
    value if it fails (see `dino_net_init()` and `dino_socket_create()`), and call it from
