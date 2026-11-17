@@ -301,6 +301,11 @@ PRIVATE dino_core)`. That is why a user's `CMakeLists.txt` doesn't need to know 
   header's `@return`.
 - **No winpthreads.** Threads and mutexes use the Win32 API directly (`CreateThread`,
   `CRITICAL_SECTION`); winpthreads works but makes binaries much larger.
+- **Internal names use `dino__`.** Helpers private to one file are `static`. When an SDK
+  internal must still be visible to the linker (for example `dino__runtime_auto`, which a link
+  option names), it gets a double underscore. These aren't API: they're never declared in a
+  public header or documented as something to call, and they can change or disappear without
+  notice.
 - **Windows libraries link `PRIVATE`** (`ws2_32` today) so they don't leak into users' link lines.
 - **Size matters.** Check release binary sizes before and after a change (`dino build --all`
   prints them). An unexplained increase is a regression.

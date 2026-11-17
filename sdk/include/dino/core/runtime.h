@@ -36,6 +36,6 @@ void dino_runtime_cleanup(void);
  * `DINO_ENABLE_AUTO_RUNTIME;` lines keep compiling; to be removed by the 1.0 API
  * review.
  */
-#define DINO_ENABLE_AUTO_RUNTIME extern void dino__runtime_auto(void)
+#define DINO_ENABLE_AUTO_RUNTIME typedef int dino_auto_runtime_is_deprecated_
 
 #endif // DINO_CORE_RUNTIME_H
