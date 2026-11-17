@@ -11,3 +11,6 @@ foreach(test ${tests})
 endforeach()
 
 set_tests_properties(test_logging_env PROPERTIES ENVIRONMENT DINO_LOG=WaRn)
+# musl's setenv grows environ into memory it keeps for the life of the process,
+# which the leak check would count.
+set_tests_properties(test_env PROPERTIES ENVIRONMENT DINO_LEAK_CHECK=0)
