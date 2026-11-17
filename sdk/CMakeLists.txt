@@ -28,6 +28,7 @@ set(DINO_PLATFORM_MODULES
     mutex
     network
     pipe
+    process
     thread
     time
 )
