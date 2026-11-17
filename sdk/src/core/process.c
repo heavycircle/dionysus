@@ -9,7 +9,7 @@
 #include <dino/core/thread.h>
 #include <dino/core/time.h>
 
-#include "pipe_handle.h"
+#include "pipe_internal.h"
 
 static int valid_env_name(const char *name)
 {
@@ -203,7 +203,7 @@ static HANDLE child_handle(int i, dino_stdio_t mode, dino_process_pipes_t *pipes
         dino_pipe_t end;
         if (make_pipe(i, pipes, &end) != 0)
             return NULL;
-        HANDLE h = inheritable(DINO__PIPE_TO_OS(end));
+        HANDLE h = inheritable((HANDLE)dino__pipe_to_os(end));
         dino_pipe_close(end);
         return h;
     }
@@ -461,7 +461,7 @@ int dino_process_spawn(dino_process_t *process, char *const argv[], const dino_s
         int rc = 0;
         if (modes[fd] == DINO_STDIO_PIPE)
             rc = make_pipe(fd, pipes, &child[fd]) != 0
-                || posix_spawn_file_actions_adddup2(&actions, DINO__PIPE_TO_OS(child[fd]), fd);
+                || posix_spawn_file_actions_adddup2(&actions, (int)dino__pipe_to_os(child[fd]), fd);
         else if (modes[fd] == DINO_STDIO_NULL)
             rc = posix_spawn_file_actions_addopen(
                 &actions, fd, "/dev/null", fd == 0 ? O_RDONLY : O_WRONLY, 0);
