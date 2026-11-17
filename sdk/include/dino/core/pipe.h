@@ -42,8 +42,9 @@ int dino_pipe_read(dino_pipe_t pipe, void *buf, int len);
  * Write up to len bytes, blocking while the pipe is full.
  *
  * May write fewer bytes than asked (for example after a signal on POSIX); write
- * the rest with another call. Writing after the read end has closed fails, and
- * on Linux also raises SIGPIPE, which ends the process unless it is handled.
+ * the rest with another call. Writing after every read end has closed returns
+ * -1 and never raises SIGPIPE: the process survives, and its signal mask and
+ * SIGPIPE handling are left as they were.
  *
  * @param  pipe  Writing end.
  * @param  buf   Source.

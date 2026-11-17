@@ -87,6 +87,8 @@ int dino_pipe_close(dino_pipe_t pipe)
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
+#include <signal.h>
 #include <unistd.h>
 
 #define TO_HANDLE(fd) DINO__PIPE_FROM_OS(fd)
@@ -125,10 +127,30 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
     if (pipe == DINO_INVALID_PIPE || len < 0)
         return -1;
 
+    // A write to a pipe with no reader raises SIGPIPE, which would end the
+    // process. Pipes have no MSG_NOSIGNAL, so block it in this thread for the
+    // write and consume the one it caused, leaving the mask and disposition as
+    // they were. A SIGPIPE that was already pending is left for its owner.
+    sigset_t pipe_only, old;
+    sigemptyset(&pipe_only);
+    sigaddset(&pipe_only, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &pipe_only, &old);
+    sigset_t pending;
+    sigpending(&pending);
+    int already_pending = sigismember(&pending, SIGPIPE);
+
     ssize_t n;
     do
         n = write(TO_FD(pipe), buf, (size_t)len);
     while (n < 0 && errno == EINTR);
+
+    if (n < 0 && errno == EPIPE && !already_pending)
+    {
+        const struct timespec now = { 0, 0 };
+        while (sigtimedwait(&pipe_only, NULL, &now) < 0 && errno == EINTR)
+            ;
+    }
+    pthread_sigmask(SIG_SETMASK, &old, NULL);
     return n < 0 ? -1 : (int)n;
 }
 
