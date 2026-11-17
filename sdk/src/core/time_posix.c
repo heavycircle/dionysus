@@ -1,0 +1,35 @@
+#include <errno.h>
+#include <time.h>
+
+#include <dino/core/time.h>
+
+#include "time_internal.h"
+
+uint64_t dino_time_monotonic_ns(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * NS_PER_S + (uint64_t)ts.tv_nsec;
+}
+
+uint64_t dino_time_unix_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / NS_PER_MS;
+}
+
+// An absolute deadline makes resuming after EINTR exact: a relative nanosleep
+// would drift by however long the signal handler ran.
+void dino__sleep_ns(uint64_t ns)
+{
+    if (ns == 0)
+        return;
+    uint64_t deadline = dino_time_monotonic_ns() + ns;
+
+    struct timespec ts;
+    ts.tv_sec  = (time_t)(deadline / NS_PER_S);
+    ts.tv_nsec = (long)(deadline % NS_PER_S);
+    while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) == EINTR)
+        ;
+}
