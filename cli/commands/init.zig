@@ -38,6 +38,8 @@ const cmake_template =
     \\# dino_executable() is add_executable() plus linking the dino SDK (dino_core, dino_util).
     \\dino_executable({0s} ${{SOURCES}})
     \\target_include_directories({0s} PRIVATE src)
+    \\# Libraries listed in DINO_LIBRARY_PATH are linked by target name, e.g.
+    \\# target_link_libraries({0s} PRIVATE org::config)
     \\
     \\# Every tests/test_*.c is a test executable (utest.h); `dino test` runs them.
     \\file(GLOB TESTS CONFIGURE_DEPENDS tests/test_*.c)

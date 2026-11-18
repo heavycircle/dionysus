@@ -20,6 +20,7 @@ targets and runs it that way; the socket examples check every step and exit nonz
 | Poll         | [`io_example`](./io_example/main.c)           | `dino/core/io.h`        | Ping/pong where every receive waits on `dino_poll`; also checks timeouts, writability and a peer hang-up.                             |
 | Event loop   | [`event_example`](./event_example/main.c)     | `dino/core/event.h`     | An echo server thread and 1000 client connections in one process, each side on its own `dino_event_loop`; every connection is open at once, every reply is checked, and a loop timer fails it after 30 s. |
 | Application  | [`kv_app`](./kv_app/)                         | network, utest.h        | A key-value store served over TCP, structured like a real project: logic in a library, a thin `main.c`, and unit plus loopback integration tests in `tests/`. See below. |
+| Libraries    | [`org_library`](./org_library/), [`org_app`](./org_app/) | `DINO_LIBRARY_PATH` | An organization library (`org::config`, a `key = value` reader with its own tests) and a program that links it without vendoring it. See below. |
 | Networking   | [`ipv6_example`](./ipv6_example/main.c)       | `dino/core/network.h`   | Echo over `127.0.0.1` and `::1`; invalid addresses such as `localhost` are rejected.                                                |
 | Logging      | [`logging_example`](./logging_example/main.c) | `dino/util/logging.h`   | `DINO_LOG_*` lines on stderr, the level picked by `DINO_LOG` or `dino_log_set_level`; debug and trace compile out under `NDEBUG`.   |
 | Mutexes      | [`mutex_example`](./mutex_example/main.c)     | `dino/core/mutex.h`     | Eight threads increment a shared counter under `dino_mutex_lock`, then compare it with the expected total.                          |
@@ -67,3 +68,27 @@ kv_app/
 
 `dino init` creates the same structure in miniature: `src/`, `tests/test_main.c`, and the
 `dino_test()` loop in `CMakeLists.txt`.
+
+## Sharing a library across projects
+
+[`org_library`](./org_library/) is laid out the way an organization's shared library should be,
+and [`org_app`](./org_app/) uses it with a single `target_link_libraries(org_app PRIVATE
+org::config)`, without copying or `add_subdirectory()`:
+
+```sh
+export DINO_LIBRARY_PATH=$PWD/examples/org_library
+dino run -C examples/org_app           # org::config is built and linked like dino_util
+dino test --all -C examples/org_library  # the library's tests, on its own
+```
+
+```
+org_library/
+  CMakeLists.txt        org_config + its org::config alias + one dino_test() per tests/test_*.c
+  include/org/config.h  public header, included as <org/config.h>
+  src/config.c
+  tests/test_config.c   run only when org_library is the project being tested
+```
+
+`org_app` doesn't configure unless `org_library` is on `DINO_LIBRARY_PATH`. `tests/examples.sh`
+registers it for every example, which also shows that a library nobody links is never built. See
+[docs/libraries.md](../docs/libraries.md) for the full guide.

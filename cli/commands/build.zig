@@ -5,6 +5,7 @@ const Args = @import("../Args.zig");
 const cmake = @import("../cmake.zig");
 const compdb = @import("../compdb.zig");
 const sdk_cache = @import("../sdk_cache.zig");
+const libraries = @import("../libraries.zig");
 const targets = @import("../targets.zig");
 const Target = targets.Target;
 
@@ -150,7 +151,7 @@ pub fn configureOnly(ctx: *Ctx, opts: Options) Ctx.Error!bool {
     return true;
 }
 
-const Project = struct { source_dir: []const u8, sdk: []const u8 };
+const Project = struct { source_dir: []const u8, sdk: []const u8, libraries: []const []const u8 };
 
 fn setup(ctx: *Ctx, opts: Options) Ctx.Error!Project {
     try requireTools(ctx);
@@ -159,7 +160,7 @@ fn setup(ctx: *Ctx, opts: Options) Ctx.Error!Project {
     }
     const source_dir = Io.Dir.cwd().realPathFileAlloc(ctx.io, opts.project, ctx.arena) catch |e|
         return ctx.fail("resolving project directory '{s}': {t}", .{ opts.project, e });
-    return .{ .source_dir = source_dir, .sdk = try sdk_cache.path(ctx) };
+    return .{ .source_dir = source_dir, .sdk = try sdk_cache.path(ctx), .libraries = try libraries.resolve(ctx) };
 }
 
 fn config(ctx: *Ctx, opts: Options, project: Project, target: Target) cmake.Config {
@@ -167,6 +168,7 @@ fn config(ctx: *Ctx, opts: Options, project: Project, target: Target) cmake.Conf
         .source_dir = project.source_dir,
         .build_dir = buildDir(ctx, opts.project, target),
         .sdk = project.sdk,
+        .libraries = project.libraries,
         .target = target,
         .mode = opts.mode,
         .extra = opts.extra,

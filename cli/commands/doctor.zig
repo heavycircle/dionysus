@@ -3,14 +3,16 @@ const builtin = @import("builtin");
 const Ctx = @import("../Ctx.zig");
 const Args = @import("../Args.zig");
 const sdk_cache = @import("../sdk_cache.zig");
+const libraries = @import("../libraries.zig");
 const targets = @import("../targets.zig");
 
 pub const usage =
     \\Usage: dino doctor
     \\
-    \\Check that the tools dino needs are installed. Exits non-zero if a
-    \\required tool is missing; emulators are optional and only needed by
-    \\`dino run` for foreign targets.
+    \\Check that the tools dino needs are installed and that every library
+    \\in DINO_LIBRARY_PATH can be used. Exits non-zero if a required tool is
+    \\missing or a library entry is broken; emulators are optional and only
+    \\needed by `dino run` for foreign targets.
     \\
 ;
 
@@ -56,6 +58,19 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         problems += 1;
     }
 
+    ctx.print("\nLibraries ({s}):\n", .{libraries.env_var});
+    const libs = libraries.inspect(ctx);
+    if (libs.len == 0) ctx.print("  none\n", .{});
+    for (libs) |lib| {
+        const name = std.fs.path.basename(lib.path orelse lib.entry);
+        if (lib.problem) |p| {
+            report(ctx, false, name, ctx.sprint("'{s}' {s}", .{ lib.entry, p }));
+            problems += 1;
+        } else {
+            report(ctx, true, name, lib.path.?);
+        }
+    }
+
     ctx.print("\nRunners for `dino run` (optional):\n", .{});
     for (targets.known) |t| {
         switch (targets.runnerFor(t)) {
@@ -74,7 +89,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         ctx.print("All required tools found.\n", .{});
         return 0;
     }
-    ctx.print("{d} required tool(s) missing.\n", .{problems});
+    ctx.print("{d} problem(s) found.\n", .{problems});
     return 1;
 }
 

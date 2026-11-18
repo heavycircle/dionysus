@@ -25,6 +25,8 @@ pub const Config = struct {
     sdk: []const u8,
     target: Target,
     mode: Mode,
+    /// Absolute paths of the DINO_LIBRARY_PATH libraries.
+    libraries: []const []const u8 = &.{},
     /// Extra arguments forwarded verbatim to the configure step.
     extra: []const []const u8 = &.{},
 };
@@ -44,6 +46,11 @@ pub fn defines(ctx: *Ctx, cfg: Config) []const []const u8 {
         ctx.sprint("-DCMAKE_BUILD_TYPE={s}", .{cfg.mode.cmakeName()}),
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     }) catch @panic("OOM");
+    // Passed even when empty: a -D left out keeps its old value in CMakeCache.txt.
+    var paths: std.ArrayList([]const u8) = .empty;
+    for (cfg.libraries) |lib| paths.append(ctx.arena, cmakePath(ctx, lib)) catch @panic("OOM");
+    const joined = std.mem.join(ctx.arena, ";", paths.items) catch @panic("OOM");
+    list.append(ctx.arena, ctx.sprint("-DDINO_LIBRARY_PATH={s}", .{joined})) catch @panic("OOM");
     // Lets ctest (and add_custom_command) run foreign binaries through qemu or wine.
     if (targets.emulator(ctx, cfg.target)) |e| {
         list.append(ctx.arena, ctx.sprint("-DCMAKE_CROSSCOMPILING_EMULATOR={s}", .{cmakePath(ctx, e)})) catch @panic("OOM");
@@ -163,6 +170,9 @@ const TargetInfo = struct {
     folder: ?struct { name: []const u8 } = null,
 };
 
+/// Where cmake/Dino.cmake builds DINO_LIBRARY_PATH libraries.
+const library_build_dir = "_dino_libs/";
+
 /// The FOLDER dino_test() puts test targets in (cmake/Dino.cmake).
 const test_folder = "dino_tests";
 
@@ -183,6 +193,8 @@ pub fn executables(ctx: *Ctx, cfg: Config) Ctx.Error![]const Executable {
         const info = try readJson(ctx, TargetInfo, ctx.join(&.{ reply_dir, t.jsonFile }));
         if (!std.mem.eql(u8, info.type, "EXECUTABLE")) continue;
         const artifact = pickArtifact(info.artifacts, cfg.target.exeSuffix()) orelse continue;
+        // Executables of DINO_LIBRARY_PATH libraries (cmake/Dino.cmake) are never built here.
+        if (std.mem.startsWith(u8, artifact, library_build_dir)) continue;
         list.append(ctx.arena, .{
             .name = info.name,
             .path = ctx.join(&.{ cfg.build_dir, artifact }),

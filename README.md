@@ -98,6 +98,23 @@ An existing CMake project only needs `target_link_libraries(app PRIVATE dino_cor
 for extras such as logging), or `dino_executable(app main.c)`, which links both. `dino` makes the SDK available, so the project never
 vendors it. See [`examples/`](examples) for one project per SDK feature.
 
+### Organization libraries
+
+Your own shared libraries can be just as available as the SDK. List their directories in
+`DINO_LIBRARY_PATH` once (per user, machine or Docker image) and every project links them by name,
+built for each target with dino's toolchain:
+
+```sh
+export DINO_LIBRARY_PATH=/opt/acme/acme_log:/opt/acme/acme_proto
+```
+
+```cmake
+target_link_libraries(app PRIVATE acme::proto)
+```
+
+[docs/libraries.md](docs/libraries.md) covers the layout a library needs, testing one with
+`dino test`, wrapping third-party code, and Docker and CI.
+
 ## Contributing
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md). It covers setting up Zig and the cross runners, the
