@@ -144,16 +144,18 @@ UTEST(pipe, large_transfer_between_threads)
     dino_pipe_close(r);
 }
 
+// Internal to the SDK (pipe_internal.h): the HANDLE or file descriptor.
+intptr_t dino__pipe_to_os(dino_pipe_t pipe);
+
 static int inheritable(dino_pipe_t p)
 {
 #ifdef _WIN32
     DWORD flags = 0;
-    if (!GetHandleInformation((HANDLE)p, &flags))
+    if (!GetHandleInformation((HANDLE)dino__pipe_to_os(p), &flags))
         return -1;
     return (flags & HANDLE_FLAG_INHERIT) != 0;
 #else
-    // Handles are fd + 1 (pipe_posix.c).
-    int flags = fcntl((int)p - 1, F_GETFD);
+    int flags = fcntl((int)dino__pipe_to_os(p), F_GETFD);
     if (flags < 0)
         return -1;
     return (flags & FD_CLOEXEC) == 0;

@@ -57,9 +57,6 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len);
  * Wait until a read won't block: data is available or every write end has
  * closed (the read then returns 0).
  *
- * On Windows this checks the pipe every millisecond rather than sleeping until
- * data arrives.
- *
  * @param  pipe        Reading end.
  * @param  timeout_ms  Milliseconds to wait; -1 to wait forever; 0 to check.
  * @return 0 when readable, DINO_TIMEOUT when the time ran out, -1 on error.

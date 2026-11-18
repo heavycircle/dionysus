@@ -117,3 +117,29 @@ intptr_t dino__pipe_to_os(dino_pipe_t pipe)
 {
     return TO_FD(pipe);
 }
+
+int dino__pipe_create_for_child(dino_pipe_t *parent_end, dino_pipe_t *child_end, int parent_reads)
+{
+    dino_pipe_t r, w;
+    if (dino_pipe_create(&r, &w) != 0)
+        return -1;
+    *parent_end = parent_reads ? r : w;
+    *child_end  = parent_reads ? w : r;
+    return 0;
+}
+
+int dino__pipe_is_read_end(dino_pipe_t pipe)
+{
+    if (pipe == DINO_INVALID_PIPE)
+        return -1;
+    int flags = fcntl(TO_FD(pipe), F_GETFL);
+    if (flags < 0)
+        return -1;
+    return (flags & O_ACCMODE) == O_RDONLY;
+}
+
+int dino__pipe_attach(dino_pipe_t pipe, intptr_t port)
+{
+    (void)port;
+    return pipe == DINO_INVALID_PIPE ? -1 : 0;
+}
