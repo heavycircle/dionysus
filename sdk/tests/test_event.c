@@ -3,6 +3,7 @@
 #include <windows.h>
 #endif
 
+#include <stdatomic.h>
 #include <stdint.h>
 #include <utest.h>
 
@@ -507,6 +508,118 @@ UTEST(event, timer_invalid_args)
     EXPECT_EQ(-1, dino_event_timer_del(loop, DINO_INVALID_EVENT_TIMER));
     EXPECT_EQ(-1, dino_event_timer_del(DINO_INVALID_EVENT_LOOP, DINO_INVALID_EVENT_TIMER));
     dino_event_loop_destroy(loop);
+}
+
+struct waiter
+{
+    dino_event_loop_t loop;
+    int               timeout_ms;
+    dino_event_t      out[4];
+    int               n;
+    atomic_int        started;
+};
+
+static int wait_once(void *arg)
+{
+    struct waiter *w = arg;
+    atomic_store(&w->started, 1);
+    w->n = dino_event_wait(w->loop, w->out, 4, w->timeout_ms);
+    return 0;
+}
+
+static int start_waiter(struct waiter *w, dino_thread_t *t)
+{
+    atomic_store(&w->started, 0);
+    if (dino_thread_create(t, wait_once, w) != 0)
+        return -1;
+    while (!atomic_load(&w->started))
+        dino_thread_yield();
+    // Started is set just before the wait; give it time to block.
+    dino_sleep_ms(10);
+    return 0;
+}
+
+// On Windows the deleted socket's poll is still in flight while the other
+// thread waits: its cancelled completion must not touch freed state or be
+// reported.
+UTEST(event, del_and_close_while_another_thread_waits)
+{
+    struct waiter w = { 0 };
+    w.loop          = dino_event_loop_create();
+    w.timeout_ms    = 5000;
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, w.loop);
+    for (int i = 0; i < 50; i++)
+    {
+        dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+        ASSERT_NE(DINO_INVALID_SOCKET, s);
+        ASSERT_EQ(0, dino_event_add_socket(w.loop, s, DINO_EVENT_READ, &w));
+
+        dino_thread_t t;
+        ASSERT_EQ(0, start_waiter(&w, &t));
+        ASSERT_EQ(0, dino_event_del_socket(w.loop, s));
+        ASSERT_EQ(0, dino_socket_close(s));
+        ASSERT_EQ(0, dino_event_wake(w.loop));
+        ASSERT_EQ(0, dino_thread_join(t, NULL));
+
+        ASSERT_EQ(1, w.n);
+        ASSERT_EQ((uint32_t)DINO_EVENT_WAKE, w.out[0].events);
+    }
+    dino_event_loop_destroy(w.loop);
+}
+
+UTEST(event, mod_while_another_thread_waits)
+{
+    struct waiter w = { 0 };
+    w.loop          = dino_event_loop_create();
+    w.timeout_ms    = 5000;
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, w.loop);
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    ASSERT_EQ(0, dino_event_add_socket(w.loop, s, DINO_EVENT_READ, NULL));
+
+    dino_thread_t t;
+    ASSERT_EQ(0, start_waiter(&w, &t));
+    uint64_t start = dino_time_monotonic_ns();
+    ASSERT_EQ(0, dino_event_mod_socket(w.loop, s, DINO_EVENT_WRITE, &w));
+    ASSERT_EQ(0, dino_thread_join(t, NULL));
+    EXPECT_LT(elapsed_ms(start), 4000u);
+    ASSERT_EQ(1, w.n);
+    EXPECT_TRUE(w.out[0].events & DINO_EVENT_WRITE);
+    EXPECT_EQ((void *)&w, w.out[0].userdata);
+
+    dino_event_del_socket(w.loop, s);
+    dino_socket_close(s);
+    dino_event_loop_destroy(w.loop);
+}
+
+UTEST_F(event, oneshot_goes_to_one_of_several_waiters)
+{
+    enum
+    {
+        WAITERS = 4
+    };
+    ASSERT_EQ(0,
+        dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer,
+            DINO_EVENT_READ | DINO_EVENT_ONESHOT, NULL));
+    static struct waiter w[WAITERS];
+    dino_thread_t        t[WAITERS];
+    for (int i = 0; i < WAITERS; i++)
+    {
+        w[i].loop       = utest_fixture->loop;
+        w[i].timeout_ms = 1500;
+        ASSERT_EQ(0, start_waiter(&w[i], &t[i]));
+    }
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+
+    int reads = 0;
+    for (int i = 0; i < WAITERS; i++)
+    {
+        ASSERT_EQ(0, dino_thread_join(t[i], NULL));
+        ASSERT_GE(w[i].n, 0);
+        for (int j = 0; j < w[i].n; j++)
+            reads += (w[i].out[j].events & DINO_EVENT_READ) != 0;
+    }
+    EXPECT_EQ(1, reads);
 }
 
 UTEST_MAIN()
