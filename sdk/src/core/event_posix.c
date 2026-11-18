@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #include <unistd.h>
 
 #include <dino/core/time.h>
@@ -14,6 +15,7 @@
 struct dino_event_loop
 {
     int epfd;
+    int wakefd; // its epoll data.ptr is &wakefd, which no userdata can equal
 };
 
 dino_event_loop_t dino_event_loop_create(void)
@@ -21,9 +23,18 @@ dino_event_loop_t dino_event_loop_create(void)
     struct dino_event_loop *loop = malloc(sizeof(*loop));
     if (!loop)
         return DINO_INVALID_EVENT_LOOP;
-    loop->epfd = epoll_create1(EPOLL_CLOEXEC);
-    if (loop->epfd < 0)
+    loop->epfd            = epoll_create1(EPOLL_CLOEXEC);
+    loop->wakefd          = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    struct epoll_event ev = { 0 };
+    ev.events             = EPOLLIN;
+    ev.data.ptr           = &loop->wakefd;
+    if (loop->epfd < 0 || loop->wakefd < 0
+        || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->wakefd, &ev) != 0)
     {
+        if (loop->epfd >= 0)
+            close(loop->epfd);
+        if (loop->wakefd >= 0)
+            close(loop->wakefd);
         free(loop);
         return DINO_INVALID_EVENT_LOOP;
     }
@@ -36,6 +47,7 @@ void dino_event_loop_destroy(dino_event_loop_t handle)
     if (!loop)
         return;
     close(loop->epfd);
+    close(loop->wakefd);
     free(loop);
 }
 
@@ -120,8 +132,27 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
     }
     for (int i = 0; i < n; i++)
     {
+        if (evs[i].data.ptr == &loop->wakefd)
+        {
+            // One read empties the counter: every wake so far becomes this one.
+            uint64_t count;
+            (void)!read(loop->wakefd, &count, sizeof(count));
+            out[i].events   = DINO_EVENT_WAKE;
+            out[i].userdata = NULL;
+            continue;
+        }
         out[i].events   = from_epoll(evs[i].events);
         out[i].userdata = evs[i].data.ptr;
     }
     return n;
+}
+
+int dino_event_wake(dino_event_loop_t handle)
+{
+    if (handle == DINO_INVALID_EVENT_LOOP)
+        return -1;
+    uint64_t one = 1;
+    ssize_t  rc  = write(((struct dino_event_loop *)handle)->wakefd, &one, sizeof(one));
+    // EAGAIN: the counter is full, so a wake is already pending.
+    return rc == (ssize_t)sizeof(one) || errno == EAGAIN ? 0 : -1;
 }

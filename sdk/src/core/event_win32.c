@@ -40,6 +40,9 @@
 
 #define BATCH 64
 
+// Completion key of the packet dino_event_wake posts; polls complete with key 0.
+#define WAKE_KEY 1
+
 typedef struct
 {
     HANDLE   Handle;
@@ -88,6 +91,7 @@ struct dino_event_loop
     size_t              cap, count;
     size_t              pending;
     struct sock_state  *queue;
+    volatile LONG       wake_posted; // a wake packet is in the port, not yet reported
 };
 
 static size_t slot_of(const struct dino_event_loop *loop, dino_socket_t sock)
@@ -512,11 +516,18 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
         AcquireSRWLockExclusive(&loop->lock);
         for (ULONG i = 0; i < got; i++)
         {
-            struct sock_state *s = (struct sock_state *)e[i].lpOverlapped;
-            if (!s)
+            if (e[i].lpCompletionKey == WAKE_KEY)
+            {
+                // Cleared before reporting, so a wake from now on posts again.
+                InterlockedExchange(&loop->wake_posted, 0);
+                out[n].events   = DINO_EVENT_WAKE;
+                out[n].userdata = NULL;
+                n++;
                 continue;
-            void    *userdata = s->userdata;
-            uint32_t events   = complete(loop, s);
+            }
+            struct sock_state *s        = (struct sock_state *)e[i].lpOverlapped;
+            void              *userdata = s->userdata;
+            uint32_t           events   = complete(loop, s);
             if (events)
             {
                 out[n].events   = events;
@@ -542,4 +553,17 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
             return 0;
         }
     }
+}
+
+int dino_event_wake(dino_event_loop_t handle)
+{
+    struct dino_event_loop *loop = (struct dino_event_loop *)handle;
+    if (!loop)
+        return -1;
+    if (InterlockedExchange(&loop->wake_posted, 1) != 0)
+        return 0;
+    if (PostQueuedCompletionStatus(loop->port, 0, WAKE_KEY, NULL))
+        return 0;
+    InterlockedExchange(&loop->wake_posted, 0);
+    return -1;
 }

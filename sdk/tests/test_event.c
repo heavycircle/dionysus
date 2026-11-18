@@ -8,6 +8,7 @@
 
 #include <dino/core/event.h>
 #include <dino/core/network.h>
+#include <dino/core/thread.h>
 #include <dino/core/time.h>
 
 // Each test file has its own port range: ctest runs test executables in parallel.
@@ -275,6 +276,74 @@ UTEST(event, many_sockets)
     for (int i = 0; i < N; i++)
         dino_socket_close(socks[i]);
     dino_event_loop_destroy(loop);
+}
+
+static int wake_later(void *arg)
+{
+    dino_sleep_ms(50);
+    return dino_event_wake(*(dino_event_loop_t *)arg);
+}
+
+UTEST(event, wake_from_another_thread)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_thread_t t;
+    ASSERT_EQ(0, dino_thread_create(&t, wake_later, &loop));
+
+    dino_event_t out[4];
+    uint64_t     start = dino_time_monotonic_ns();
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 5000));
+    EXPECT_LT((dino_time_monotonic_ns() - start) / 1000000, 4000u);
+    EXPECT_EQ((uint32_t)DINO_EVENT_WAKE, out[0].events);
+    EXPECT_EQ(NULL, out[0].userdata);
+
+    int result = -1;
+    EXPECT_EQ(0, dino_thread_join(t, &result));
+    EXPECT_EQ(0, result);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, wakes_coalesce)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    for (int i = 0; i < 3; i++)
+        ASSERT_EQ(0, dino_event_wake(loop));
+
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 0));
+    EXPECT_EQ((uint32_t)DINO_EVENT_WAKE, out[0].events);
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 50));
+
+    // A wake after the last one was reported is reported again.
+    ASSERT_EQ(0, dino_event_wake(loop));
+    EXPECT_EQ(1, dino_event_wait(loop, out, 4, 0));
+    EXPECT_EQ(-1, dino_event_wake(DINO_INVALID_EVENT_LOOP));
+    dino_event_loop_destroy(loop);
+}
+
+UTEST_F(event, wake_alongside_socket_events)
+{
+    dino_event_t out[4];
+    ASSERT_EQ(0,
+        dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_WRITE, NULL));
+    ASSERT_EQ(0, dino_event_wake(utest_fixture->loop));
+    dino_sleep_ms(50);
+
+    int seen_wake = 0, seen_write = 0;
+    for (int round = 0; round < 3 && !(seen_wake && seen_write); round++)
+    {
+        int n = dino_event_wait(utest_fixture->loop, out, 4, 1000);
+        ASSERT_GE(n, 1);
+        for (int i = 0; i < n; i++)
+        {
+            seen_wake += out[i].events == DINO_EVENT_WAKE;
+            seen_write += (out[i].events & DINO_EVENT_WRITE) != 0;
+        }
+    }
+    EXPECT_EQ(1, seen_wake);
+    EXPECT_GE(seen_write, 1);
 }
 
 UTEST_MAIN()

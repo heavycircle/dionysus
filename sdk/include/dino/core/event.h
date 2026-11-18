@@ -28,6 +28,7 @@ typedef uintptr_t dino_event_loop_t;
 #define DINO_EVENT_WRITE   0x0004 /**< A send won't block, or a connect finished. */
 #define DINO_EVENT_ERROR   0x0008 /**< Always reported. */
 #define DINO_EVENT_HANGUP  0x0010 /**< Peer closed or shut down; always reported. */
+#define DINO_EVENT_WAKE    0x0100 /**< From dino_event_wake; userdata is NULL. */
 #define DINO_EVENT_ONESHOT 0x4000 /**< Interest only: disarm after one report. */
 
 /**
@@ -95,5 +96,15 @@ int dino_event_del_socket(dino_event_loop_t loop, dino_socket_t sock);
  * @return Number of items written to out, 0 when the time ran out, -1 on error.
  */
 int dino_event_wait(dino_event_loop_t loop, dino_event_t *out, int max, int timeout_ms);
+
+/**
+ * Make a wait on this loop return a DINO_EVENT_WAKE item, now or, if no thread
+ * is waiting, at the next wait. Wakes not yet reported are merged into one.
+ * Use it to stop a loop or hand it work from another thread.
+ *
+ * @param  loop  Loop to wake.
+ * @return 0 on success, -1 on error.
+ */
+int dino_event_wake(dino_event_loop_t loop);
 
 #endif // DINO_CORE_EVENT_H
