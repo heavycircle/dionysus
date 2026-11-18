@@ -5,10 +5,13 @@
 
 #include <stdatomic.h>
 #include <stdint.h>
+#include <string.h>
 #include <utest.h>
 
 #include <dino/core/event.h>
 #include <dino/core/network.h>
+#include <dino/core/pipe.h>
+#include <dino/core/process.h>
 #include <dino/core/thread.h>
 #include <dino/core/time.h>
 
@@ -620,6 +623,245 @@ UTEST_F(event, oneshot_goes_to_one_of_several_waiters)
             reads += (w[i].out[j].events & DINO_EVENT_READ) != 0;
     }
     EXPECT_EQ(1, reads);
+}
+
+UTEST(event, pipe_read_ready_and_level)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r, DINO_EVENT_READ, &r));
+
+    dino_event_t out[4];
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 0));
+    ASSERT_EQ(1, dino_pipe_write(w, "x", 1));
+    for (int i = 0; i < 3; i++)
+    {
+        ASSERT_EQ(1, dino_event_wait(loop, out, 4, 1000));
+        EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
+        EXPECT_FALSE(out[0].events & DINO_EVENT_HANGUP);
+        EXPECT_EQ((void *)&r, out[0].userdata);
+    }
+    char c;
+    ASSERT_EQ(1, dino_pipe_read(r, &c, 1));
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 100));
+
+    EXPECT_EQ(0, dino_event_del_pipe(loop, r));
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, pipe_oneshot_rearm)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    uint32_t interest = DINO_EVENT_READ | DINO_EVENT_ONESHOT;
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r, interest, NULL));
+    ASSERT_EQ(1, dino_pipe_write(w, "x", 1));
+
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 1000));
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 100));
+    int ud;
+    ASSERT_EQ(0, dino_event_mod_pipe(loop, r, interest, &ud));
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 1000));
+    EXPECT_EQ((void *)&ud, out[0].userdata);
+
+    dino_event_del_pipe(loop, r);
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, pipe_hangup_when_the_writer_closes)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+    dino_event_t out[4];
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 0));
+
+    ASSERT_EQ(0, dino_pipe_close(w));
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 1000));
+    EXPECT_TRUE(out[0].events & DINO_EVENT_HANGUP);
+    EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
+    char c;
+    EXPECT_EQ(0, dino_pipe_read(r, &c, 1));
+
+    dino_event_del_pipe(loop, r);
+    dino_pipe_close(r);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, pipe_already_closed_when_added)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    ASSERT_EQ(0, dino_pipe_close(w));
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 1000));
+    EXPECT_TRUE(out[0].events & DINO_EVENT_HANGUP);
+
+    dino_event_del_pipe(loop, r);
+    dino_pipe_close(r);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, pipe_write_end_and_write_interest_rejected)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    EXPECT_EQ(-1, dino_event_add_pipe(loop, w, DINO_EVENT_READ, NULL));
+    EXPECT_EQ(-1, dino_event_add_pipe(loop, r, DINO_EVENT_WRITE, NULL));
+    EXPECT_EQ(-1, dino_event_add_pipe(loop, r, DINO_EVENT_READ | DINO_EVENT_WRITE, NULL));
+    EXPECT_EQ(-1, dino_event_add_pipe(loop, DINO_INVALID_PIPE, DINO_EVENT_READ, NULL));
+    EXPECT_EQ(-1, dino_event_mod_pipe(loop, r, DINO_EVENT_READ, NULL));
+    EXPECT_EQ(-1, dino_event_del_pipe(loop, r));
+
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+    EXPECT_EQ(-1, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+    EXPECT_EQ(-1, dino_event_mod_pipe(loop, r, DINO_EVENT_WRITE, NULL));
+
+    dino_event_del_pipe(loop, r);
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, pipe_del_with_a_read_in_flight_then_readd)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+    dino_event_t out[4];
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 0));
+    ASSERT_EQ(0, dino_event_del_pipe(loop, r));
+    ASSERT_EQ(1, dino_pipe_write(w, "x", 1));
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 100));
+
+    // Back into the same loop: it was attached to this loop's port already.
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 1000));
+    EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
+
+    // Deleted with a read in flight, closed, and the loop destroyed without
+    // reaping the cancelled read.
+    dino_pipe_t r2, w2;
+    ASSERT_EQ(0, dino_pipe_create(&r2, &w2));
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r2, DINO_EVENT_READ, NULL));
+    ASSERT_EQ(0, dino_event_del_pipe(loop, r2));
+    dino_pipe_close(r2);
+    dino_pipe_close(w2);
+
+    dino_event_del_pipe(loop, r);
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+    dino_event_loop_destroy(loop);
+}
+
+#ifdef _WIN32
+// Attaching a handle to a completion port is permanent on Windows.
+UTEST(event, pipe_joins_only_one_loop_on_windows)
+{
+    dino_event_loop_t a = dino_event_loop_create(), b = dino_event_loop_create();
+    dino_pipe_t       r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    ASSERT_EQ(0, dino_event_add_pipe(a, r, DINO_EVENT_READ, NULL));
+    ASSERT_EQ(0, dino_event_del_pipe(a, r));
+    EXPECT_EQ(-1, dino_event_add_pipe(b, r, DINO_EVENT_READ, NULL));
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+    dino_event_loop_destroy(a);
+    dino_event_loop_destroy(b);
+}
+#endif
+
+UTEST_F(event, pipe_and_socket_in_one_loop)
+{
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    int on_pipe, on_sock;
+    ASSERT_EQ(0, dino_event_add_pipe(utest_fixture->loop, r, DINO_EVENT_READ, &on_pipe));
+    ASSERT_EQ(0,
+        dino_event_add_socket(
+            utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, &on_sock));
+    ASSERT_EQ(1, dino_pipe_write(w, "x", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "y", 1));
+    dino_sleep_ms(50);
+
+    int          seen_pipe = 0, seen_sock = 0;
+    dino_event_t out[8];
+    for (int round = 0; round < 3 && !(seen_pipe && seen_sock); round++)
+    {
+        int n = dino_event_wait(utest_fixture->loop, out, 8, 1000);
+        ASSERT_GE(n, 1);
+        for (int i = 0; i < n; i++)
+        {
+            seen_pipe += out[i].userdata == &on_pipe;
+            seen_sock += out[i].userdata == &on_sock;
+        }
+    }
+    EXPECT_GE(seen_pipe, 1);
+    EXPECT_GE(seen_sock, 1);
+
+    dino_event_del_pipe(utest_fixture->loop, r);
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+}
+
+#ifdef _WIN32
+#define SHELL_ECHO { "cmd.exe", "/d", "/c", "echo hi", NULL }
+#else
+#define SHELL_ECHO { "/bin/sh", "-c", "echo hi", NULL }
+#endif
+
+UTEST(event, child_stdout_through_the_loop)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    char *const          argv[] = SHELL_ECHO;
+    dino_spawn_opts_t    opts   = { 0 };
+    dino_process_t       proc;
+    dino_process_pipes_t pipes;
+    opts.stdout_mode = DINO_STDIO_PIPE;
+    ASSERT_EQ(0, dino_process_spawn(&proc, argv, &opts, &pipes));
+    ASSERT_EQ(0, dino_event_add_pipe(loop, pipes.out, DINO_EVENT_READ, NULL));
+
+    char         buf[64];
+    int          len = 0, hangup = 0;
+    dino_event_t out[4];
+    while (!hangup)
+    {
+        ASSERT_EQ(1, dino_event_wait(loop, out, 4, 5000));
+        ASSERT_TRUE(out[0].events & DINO_EVENT_READ);
+        int n = dino_pipe_read(pipes.out, buf + len, (int)sizeof(buf) - 1 - len);
+        ASSERT_GE(n, 0);
+        len += n;
+        hangup = n == 0;
+    }
+    buf[len] = '\0';
+    EXPECT_EQ(0, strncmp(buf, "hi", 2));
+
+    dino_event_del_pipe(loop, pipes.out);
+    dino_pipe_close(pipes.out);
+    int code = -1;
+    EXPECT_EQ(0, dino_process_wait(proc, &code));
+    EXPECT_EQ(0, code);
+    dino_event_loop_destroy(loop);
 }
 
 UTEST_MAIN()

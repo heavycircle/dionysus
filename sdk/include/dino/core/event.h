@@ -4,10 +4,11 @@
 #include <stdint.h>
 
 #include <dino/core/network.h>
+#include <dino/core/pipe.h>
 
 /**
- * Event loop: register sockets with the events you care about, then wait for
- * any of them to become ready. Built on epoll on Linux and on an I/O completion
+ * Event loop: register sockets and pipes with the events you care about, then
+ * wait for any of them to become ready. Built on epoll on Linux and on an I/O completion
  * port on Windows, so a wait costs the same with ten sockets or ten thousand,
  * unlike dino_poll and dino_select.
  *
@@ -90,6 +91,43 @@ int dino_event_mod_socket(
  * @return 0 on success, -1 on error (including when sock isn't added).
  */
 int dino_event_del_socket(dino_event_loop_t loop, dino_socket_t sock);
+
+/**
+ * Start watching the read end of a pipe. READ is reported while data is
+ * waiting, and READ with HANGUP once every write end has closed (a read then
+ * returns 0). A pipe can be in a loop once; remove it with dino_event_del_pipe
+ * before closing it.
+ *
+ * Only read ends can be watched, and only for DINO_EVENT_READ: Windows has no
+ * signal for a pipe having room to write, so write ends are refused on every
+ * platform alike.
+ *
+ * On Windows a pipe end is tied to the first loop it joins for as long as it
+ * exists: it can leave and rejoin that loop, but adding it to another loop
+ * fails. Portable code keeps each pipe end in one loop.
+ *
+ * @param  loop      Loop to add to.
+ * @param  pipe      Read end from dino_pipe_create or dino_process_spawn.
+ * @param  events    DINO_EVENT_READ, optionally with DINO_EVENT_ONESHOT.
+ * @param  userdata  Returned with every event for this pipe.
+ * @return 0 on success, -1 on error (including a write end, WRITE interest,
+ *         or a pipe already added).
+ */
+int dino_event_add_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata);
+
+/**
+ * Change a pipe's interest and userdata, as dino_event_mod_socket does.
+ *
+ * @return 0 on success, -1 on error (including when pipe isn't added).
+ */
+int dino_event_mod_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata);
+
+/**
+ * Stop watching a pipe. No event for it is reported after this returns.
+ *
+ * @return 0 on success, -1 on error (including when pipe isn't added).
+ */
+int dino_event_del_pipe(dino_event_loop_t loop, dino_pipe_t pipe);
 
 /**
  * Wait until something in the loop is ready.

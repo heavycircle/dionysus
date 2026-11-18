@@ -15,6 +15,12 @@ static inline int dino__event_wait_args_valid(
     return loop != DINO_INVALID_EVENT_LOOP && out != NULL && max > 0;
 }
 
+static inline int dino__event_pipe_args_valid(dino_event_loop_t loop, uint32_t events)
+{
+    return loop != DINO_INVALID_EVENT_LOOP && (events & DINO_EVENT_READ)
+        && (events & ~(DINO_EVENT_READ | DINO_EVENT_ONESHOT)) == 0;
+}
+
 static inline int dino__event_ctl_args_valid(
     dino_event_loop_t loop, dino_socket_t sock, uint32_t events)
 {

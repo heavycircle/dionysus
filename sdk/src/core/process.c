@@ -9,8 +9,8 @@
 
 /* ---- Run to completion ---- */
 
-// One thread per output pipe and one for the input: Windows can't poll pipes,
-// and reading everything at once is what keeps a child that fills one pipe
+// One thread per output pipe and one for the input: the event loop can't wait
+// on a pipe's write end, and reading everything at once is what keeps a child that fills one pipe
 // while the parent waits on another from deadlocking.
 struct collector
 {

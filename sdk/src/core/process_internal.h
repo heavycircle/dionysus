@@ -5,6 +5,8 @@
 
 #include <dino/core/process.h>
 
+#include "pipe_internal.h"
+
 // Internal to the SDK: helpers process_posix.c and process_win32.c
 // share. Inline, so each half compiles them in as it did when they were static
 // in one file.
@@ -45,13 +47,8 @@ static inline void dino__process_close_parent_ends(dino_process_pipes_t *pipes)
 static inline int dino__process_make_pipe(
     int i, dino_process_pipes_t *pipes, dino_pipe_t *child_end)
 {
-    dino_pipe_t r, w;
-    if (dino_pipe_create(&r, &w) != 0)
-        return -1;
     dino_pipe_t *parent_end = i == 0 ? &pipes->in : i == 1 ? &pipes->out : &pipes->err;
-    *parent_end             = i == 0 ? w : r;
-    *child_end              = i == 0 ? r : w;
-    return 0;
+    return dino__pipe_create_for_child(parent_end, child_end, i != 0);
 }
 
 #endif // DINO_CORE_PROCESS_INTERNAL_H

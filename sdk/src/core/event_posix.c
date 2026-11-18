@@ -10,6 +10,7 @@
 #include <dino/core/time.h>
 
 #include "event_internal.h"
+#include "pipe_internal.h"
 
 #define BATCH 64
 
@@ -104,6 +105,33 @@ int dino_event_del_socket(dino_event_loop_t loop, dino_socket_t sock)
         : -1;
 }
 
+// A pipe is just another descriptor to epoll; all that differs is what may be
+// asked for.
+static int pipe_ctl(
+    dino_event_loop_t loop, int op, dino_pipe_t pipe, uint32_t events, void *userdata)
+{
+    if (!dino__event_pipe_args_valid(loop, events) || dino__pipe_is_read_end(pipe) != 1)
+        return -1;
+    return ctl(loop, op, (dino_socket_t)dino__pipe_to_os(pipe), events, userdata);
+}
+
+int dino_event_add_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata)
+{
+    return pipe_ctl(loop, EPOLL_CTL_ADD, pipe, events, userdata);
+}
+
+int dino_event_mod_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata)
+{
+    return pipe_ctl(loop, EPOLL_CTL_MOD, pipe, events, userdata);
+}
+
+int dino_event_del_pipe(dino_event_loop_t loop, dino_pipe_t pipe)
+{
+    if (pipe == DINO_INVALID_PIPE)
+        return -1;
+    return dino_event_del_socket(loop, (dino_socket_t)dino__pipe_to_os(pipe));
+}
+
 static uint32_t from_epoll(uint32_t ev)
 {
     uint32_t events = 0;
@@ -113,7 +141,11 @@ static uint32_t from_epoll(uint32_t ev)
         events |= DINO_EVENT_WRITE;
     if (ev & EPOLLERR)
         events |= DINO_EVENT_ERROR;
-    if (ev & (EPOLLHUP | EPOLLRDHUP))
+    // A pipe whose writers are gone reports EPOLLHUP alone, but a read won't
+    // block there (it returns 0): that's READ, as on Windows.
+    if (ev & EPOLLHUP)
+        events |= DINO_EVENT_READ | DINO_EVENT_HANGUP;
+    if (ev & EPOLLRDHUP)
         events |= DINO_EVENT_HANGUP;
     return events;
 }
