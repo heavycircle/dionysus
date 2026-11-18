@@ -4,6 +4,9 @@ The `dino_*` portability layer: one C API over the places where Linux (musl) and
 (MinGW-w64) differ. See [CONTRIBUTING.md](../CONTRIBUTING.md#working-on-the-sdk) for the design
 rules and how to add a module.
 
+Code that links the SDK gets a warning when it calls one of the platform APIs below that has a
+`dino_*` replacement; see [docs/portability-warnings.md](../docs/portability-warnings.md).
+
 ## API Changes
 
 The following table contains the required API to ensure cross-compatibility between Windows and Linux.

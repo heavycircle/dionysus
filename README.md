@@ -98,6 +98,18 @@ An existing CMake project only needs `target_link_libraries(app PRIVATE dino_cor
 for extras such as logging), or `dino_executable(app main.c)`, which links both. `dino` makes the SDK available, so the project never
 vendors it. See [`examples/`](examples) for one project per SDK feature.
 
+### Portability warnings
+
+Code that links the SDK is warned, in `dino build` and in your editor, when it calls a platform API
+that has a portable `dino_*` replacement:
+
+```
+src/main.c:7:9: warning: 'pipe' is deprecated: pipe() is POSIX-only; use dino_pipe_create() from <dino/core/pipe.h> [-Wdeprecated-declarations]
+```
+
+It needs no particular clangd or clang-tidy version. [docs/portability-warnings.md](docs/portability-warnings.md)
+lists what's flagged and how to opt out for a project, a file or a single call.
+
 ### Organization libraries
 
 Your own shared libraries can be just as available as the SDK. List their directories in

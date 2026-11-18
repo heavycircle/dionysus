@@ -116,14 +116,18 @@ sdk/
                            <module>_win32.c (one is built per platform)
   src/util/                implementations of the util headers
   cmake/                   toolchain.cmake, flags.cmake, Dino.cmake, version.h.in
+  portability/             wrappers for system headers that warn about calls with a dino_*
+                           replacement (common/, posix/, win32/)
   CMakeLists.txt           the dino_core and dino_util static libraries
   testing/                 utest.h (vendored) and the leak counter, for dino_test()
   tests/                   the SDK's own tests, one test_<module>.c per module
-docs/                      user documentation (libraries.md: DINO_LIBRARY_PATH libraries)
+docs/                      user documentation: libraries.md (DINO_LIBRARY_PATH libraries),
+                           portability-warnings.md
 examples/                  one standalone CMake project per SDK feature, plus org_library and
                            org_app (a DINO_LIBRARY_PATH library and a project that uses it)
 tests/examples.sh          builds and runs every example on every target
 tests/sdk.sh               runs sdk/tests with `dino test`
+tests/warnings.sh          checks the portability warnings against tests/fixtures/raw_calls
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
 scripts/lintcommit.sh      checks commit messages
@@ -240,6 +244,12 @@ a known failure that starts passing fails the run, so remove its entry in the PR
 `tests/examples.sh /repo/examples arm64 win64` limits the run to some targets. `CFLAGS` from the
 environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings fail the build.
 
+`tests/warnings.sh [targets...]` checks the [portability warnings](docs/portability-warnings.md):
+it builds `tests/fixtures/raw_calls` under clang's `-verify`, so every flagged call must warn
+exactly as its `expected-warning` comment says, in four language modes, and then builds it again
+with `DINO_NO_PLATFORM_WARNINGS` set, where nothing may warn. `--memcheck` repeats the check
+against glibc's headers.
+
 ### CI
 
 `.github/workflows/ci.yml` runs on every PR and on pushes to `main` and `release-*`:
@@ -248,7 +258,7 @@ environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings 
 | --- | --- |
 | `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
 | `unit` | `zig build test` |
-| `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, then the SDK tests with `tests/sdk.sh`; the x86_64 job also runs them under valgrind (`--memcheck`) |
+| `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, and `tests/warnings.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
 
 Run the same checks locally before asking for review:
 
@@ -261,6 +271,7 @@ scripts/lintcommit.sh origin/main..HEAD
 docker build -t dionysus . && docker run --rm -e CFLAGS="-Wall -Wextra -Werror" \
     -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples
 docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/sdk.sh --all
+docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/warnings.sh
 ```
 
 The linters are pinned through [uv](https://docs.astral.sh/uv/) so everyone formats with the same
@@ -348,7 +359,13 @@ of `core` and `DINO_CORE_` below.
 5. Add `sdk/tests/test_<name>.c` covering every function, including the error paths
    (`DINO_INVALID_*` handles, bad arguments). `dino test --all` and CI pick it up automatically;
    make sure it passes on all seven targets and under `--memcheck`.
-6. Add `examples/<name>_example/` (a `CMakeLists.txt` with `dino_executable` and a `main.c` that
+6. If the module replaces platform calls (a `pipe()`, a `CreateThread()`), make them warn. Add a
+   redeclaration to the wrapper for the header that declares each one, in `sdk/portability/common`
+   (headers on both platforms), `posix` or `win32`, creating the wrapper if there isn't one yet (copy
+   an existing wrapper's shape). Then add the call with its `expected-warning` comment to
+   `tests/fixtures/raw_calls`, and run `tests/warnings.sh`. Only flag calls the module really
+   replaces; see [docs/portability-warnings.md](docs/portability-warnings.md#how-it-works).
+7. Add `examples/<name>_example/` (a `CMakeLists.txt` with `dino_executable` and a `main.c` that
    exits nonzero on failure, so the test matrix notices) and a row in `examples/README.md`. The
    test matrix picks it up automatically.
 
