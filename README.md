@@ -40,8 +40,8 @@ Dionysus is two things:
 ## Status
 
 Pre-1.0 and under active development. The toolchain, the `dino` tool and the core SDK modules work
-on all seven targets. Timing, process spawning and an epoll/IOCP event loop are on the
-[v1.0 roadmap](https://github.com/heavycircle/dionysus/issues/25).
+on all seven targets, including timing, processes, pipes and an epoll/IOCP event loop. What's left
+for 1.0 is on the [v1.0 roadmap](https://github.com/heavycircle/dionysus/issues/25).
 
 ## Getting dino
 
