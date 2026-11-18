@@ -1052,7 +1052,7 @@ static int child_main(const char *mode)
 {
     if (strcmp(mode, "--child-sleep") == 0)
     {
-        Sleep(60000);
+        dino_sleep_ms(60000);
         return 0;
     }
     return 2;

@@ -1,0 +1,30 @@
+// clang-format off: one redeclaration per call, laid out to be read.
+#pragma GCC system_header
+#include_next <sys/socket.h>
+
+#include "dino_portability.h"
+
+// Windows sockets are SOCKET handles, need WSAStartup and close with closesocket.
+#if defined(DINO__WARNINGS) && !defined(DINO__SYS_SOCKET_H)
+#define DINO__SYS_SOCKET_H
+
+__typeof__(socket) socket __attribute__((deprecated(
+    "socket() returns a SOCKET and needs WSAStartup on Windows; use dino_socket_create() from <dino/core/network.h>")));
+__typeof__(bind) bind __attribute__((deprecated(
+    "bind() takes a SOCKET on Windows; use dino_socket_bind() from <dino/core/network.h>")));
+__typeof__(listen) listen __attribute__((deprecated(
+    "listen() takes a SOCKET on Windows; use dino_socket_listen() from <dino/core/network.h>")));
+__typeof__(accept) accept __attribute__((deprecated(
+    "accept() returns a SOCKET on Windows; use dino_socket_accept() from <dino/core/network.h>")));
+__typeof__(connect) connect __attribute__((deprecated(
+    "connect() reports errors through WSAGetLastError on Windows; use dino_socket_connect() from <dino/core/network.h>")));
+__typeof__(send) send __attribute__((deprecated(
+    "send() raises SIGPIPE on Linux and takes a SOCKET on Windows; use dino_socket_send() from <dino/core/network.h>")));
+__typeof__(recv) recv __attribute__((deprecated(
+    "recv() takes a SOCKET on Windows; use dino_socket_recv() from <dino/core/network.h>")));
+__typeof__(setsockopt) setsockopt __attribute__((deprecated(
+    "setsockopt() takes different option types on Windows; use dino_socket_setopt() from <dino/core/network.h>")));
+__typeof__(shutdown) shutdown __attribute__((deprecated(
+    "shutdown() uses different constants on Windows; use dino_socket_shutdown() from <dino/core/network.h>")));
+
+#endif
