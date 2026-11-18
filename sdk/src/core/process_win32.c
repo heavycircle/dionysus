@@ -365,3 +365,8 @@ int dino_env_unset(const char *name)
 {
     return env_change(name, NULL);
 }
+
+intptr_t dino__process_to_os(dino_process_t process)
+{
+    return (intptr_t)process;
+}
