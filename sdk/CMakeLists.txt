@@ -54,6 +54,19 @@ if(WIN32)
     target_link_libraries(dino_core PRIVATE ws2_32)
 endif()
 
+# Wrappers for the system headers that declare calls with a dino_* replacement
+# (sdk/portability/common/dino_portability.h). INTERFACE only: everything that
+# links the SDK gets the warnings, the SDK's own sources never do. The POSIX-only
+# headers stay off Windows include paths so __has_include(<poll.h>) still tells
+# the truth there, and the reverse for the Windows ones.
+target_include_directories(dino_core BEFORE INTERFACE
+    "${CMAKE_CURRENT_SOURCE_DIR}/portability/common"
+    "${CMAKE_CURRENT_SOURCE_DIR}/portability/${DINO_PLATFORM}")
+option(DINO_NO_PLATFORM_WARNINGS "Don't warn about platform calls that have a dino_* replacement" OFF)
+if(DINO_NO_PLATFORM_WARNINGS)
+    target_compile_definitions(dino_core INTERFACE DINO_ALLOW_PLATFORM_CALLS)
+endif()
+
 # Links runtime_auto.c's constructor into every program, which wouldn't otherwise
 # pull that object from the archive. Its only job (closed stdio) is Linux-only.
 option(DINO_NO_AUTO_RUNTIME "Don't run the SDK's setup before main() (see dino/core/runtime.h)" OFF)

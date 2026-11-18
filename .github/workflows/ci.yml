@@ -87,6 +87,19 @@ jobs:
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
             dionysus:ci /repo/tests/sdk.sh "${{ matrix.target }}"
 
+      # sdk/portability: every flagged call warns exactly as expected, in four
+      # language modes, and the opt-outs silence them.
+      - name: Portability warnings
+        run: |
+          docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
+            dionysus:ci /repo/tests/warnings.sh "${{ matrix.target }}"
+
+      - name: Portability warnings against glibc
+        if: matrix.target == 'x86_64'
+        run: |
+          docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
+            dionysus:ci /repo/tests/warnings.sh --memcheck
+
       - name: SDK tests under valgrind
         if: matrix.target == 'x86_64'
         run: |
