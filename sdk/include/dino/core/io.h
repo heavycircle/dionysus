@@ -36,6 +36,9 @@ typedef uintptr_t dino_fd_set_t;
 /**
  * Wait for readiness events on a set of sockets.
  *
+ * Every call passes and scans the whole set, so the cost grows with the number of
+ * sockets; for many sockets, use the event loop in dino/core/event.h.
+ *
  * Request DINO_POLLIN and/or DINO_POLLOUT in events. revents always uses DINO_*
  * values, and DINO_POLLERR and DINO_POLLHUP are reported whether requested or
  * not. Every revents is reset, so it is 0 on timeout.

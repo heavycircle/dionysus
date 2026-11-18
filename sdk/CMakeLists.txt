@@ -11,6 +11,7 @@ project(DinoSDK VERSION 0.5.0 LANGUAGES C)
 set(DINO_VERSION_PRERELEASE "-dev")
 
 add_library(dino_core STATIC
+    src/core/event.c
     src/core/process.c
     src/core/runtime.c
     src/core/runtime_auto.c
@@ -22,6 +23,7 @@ add_library(dino_core STATIC
 # here on every platform, so a module missing its Windows half fails a Linux
 # configure too instead of only the Windows build.
 set(DINO_PLATFORM_MODULES
+    event
     fs
     io
     mutex
