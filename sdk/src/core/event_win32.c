@@ -11,6 +11,7 @@
 
 #include "event_internal.h"
 #include "pipe_internal.h"
+#include "process_internal.h"
 
 // Readiness on Windows comes from the AFD driver underneath Winsock, as in
 // wepoll and libuv: IOCTL_AFD_POLL on a handle to \Device\Afd completes on an
@@ -71,12 +72,15 @@ typedef NTSTATUS(NTAPI *nt_cancel_io_file_ex_fn)(HANDLE, PIO_STATUS_BLOCK, PIO_S
 enum kind
 {
     KIND_SOCKET,
-    KIND_PIPE
+    KIND_PIPE,
+    KIND_PROCESS
 };
 
-// A watched socket or pipe. A socket is polled through AFD; a pipe, attached to
-// the port itself, through a zero-byte read that completes when data arrives
-// (or fails once every write end is closed).
+// A watched socket, pipe or process. A socket is polled through AFD; a pipe,
+// attached to the port itself, through a zero-byte read that completes when
+// data arrives (or fails once every write end is closed). A process handle
+// can't be attached to a port, so a thread-pool wait posts its item there when
+// the process ends.
 struct item
 {
     // First: a completion's OVERLAPPED pointer is the address of io. A pipe's
@@ -91,17 +95,20 @@ struct item
         } afd;
         OVERLAPPED ov;
     } io;
-    enum kind    kind;
-    uintptr_t    key;    // the dino_socket_t or dino_pipe_t
-    HANDLE       handle; // the base socket, or the pipe's HANDLE
-    uint32_t     events;
-    void        *userdata;
-    ULONG        polled;  // AFD mask of the poll in flight
-    int          pending; // a poll or read is in flight
-    int          deleted; // freed when its last completion arrives
-    int          queued;  // on the rearm queue
-    char         none;    // the zero-byte read's buffer
-    struct item *next_queued;
+    enum kind     kind;
+    uintptr_t     key;    // the dino_socket_t or dino_pipe_t
+    HANDLE        handle; // the base socket, or the pipe's HANDLE
+    uint32_t      events;
+    void         *userdata;
+    ULONG         polled;  // AFD mask of the poll in flight
+    int           pending; // a poll or read is in flight
+    int           deleted; // freed when its last completion arrives
+    int           queued;  // on the rearm queue
+    char          none;    // the zero-byte read's buffer
+    struct item  *next_queued;
+    HANDLE        wait;  // a process's RegisterWaitForSingleObject
+    HANDLE        port;  // where that wait posts
+    volatile LONG fired; // the wait's callback ran, so its packet is in the port
 };
 
 struct dino_event_loop
@@ -237,10 +244,32 @@ static int submit_pipe(struct dino_event_loop *loop, struct item *s)
     return 0;
 }
 
+static VOID CALLBACK process_ended(PVOID context, BOOLEAN timed_out)
+{
+    (void)timed_out;
+    struct item *s = context;
+    InterlockedExchange(&s->fired, 1);
+    PostQueuedCompletionStatus(s->port, 0, 0, &s->io.ov);
+}
+
+// Once only: the exit is reported once, and the item is never rearmed.
+static int submit_process(struct dino_event_loop *loop, struct item *s)
+{
+    s->port = loop->port;
+    if (!RegisterWaitForSingleObject(
+            &s->wait, s->handle, process_ended, s, INFINITE, WT_EXECUTEONLYONCE))
+        return -1;
+    s->pending = 1;
+    loop->pending++;
+    return 0;
+}
+
 static int submit(struct dino_event_loop *loop, struct item *s)
 {
     if (s->kind == KIND_PIPE)
         return submit_pipe(loop, s);
+    if (s->kind == KIND_PROCESS)
+        return submit_process(loop, s);
     ULONG mask                       = to_afd(s->events);
     s->io.afd.info.Timeout.QuadPart  = INT64_MAX;
     s->io.afd.info.NumberOfHandles   = 1;
@@ -385,6 +414,8 @@ static uint32_t complete(struct dino_event_loop *loop, struct item *s)
         free(s);
         return 0;
     }
+    if (s->kind == KIND_PROCESS)
+        return DINO_EVENT_EXIT;
     // A cancelled poll's info still holds stale bits; mod_socket cancelled it to
     // poll for something else.
     NTSTATUS status = s->io.afd.iosb.Status;
@@ -415,6 +446,31 @@ static uint32_t complete(struct dino_event_loop *loop, struct item *s)
     return events;
 }
 
+// Lets go of an item already out of the table. Whatever is still in flight
+// for it completes into the port, where complete() frees it.
+static void release(struct dino_event_loop *loop, struct item *s)
+{
+    if (s->kind == KIND_PROCESS)
+    {
+        // Waits for a callback that is running; the callback never takes the
+        // lock, so holding it here can't deadlock.
+        UnregisterWaitEx(s->wait, INVALID_HANDLE_VALUE);
+        if (s->pending && !s->fired)
+        {
+            s->pending = 0;
+            loop->pending--;
+        }
+    }
+    else if (s->pending)
+    {
+        cancel(loop, s);
+    }
+    if (s->pending)
+        s->deleted = 1;
+    else
+        free(s);
+}
+
 void dino_event_loop_destroy(dino_event_loop_t handle)
 {
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
@@ -423,18 +479,8 @@ void dino_event_loop_destroy(dino_event_loop_t handle)
     AcquireSRWLockExclusive(&loop->lock);
     for (size_t i = 0; i < loop->cap; i++)
     {
-        struct item *s = loop->slots[i];
-        if (!s)
-            continue;
-        if (s->pending)
-        {
-            s->deleted = 1;
-            cancel(loop, s);
-        }
-        else
-        {
-            free(s);
-        }
+        if (loop->slots[i])
+            release(loop, loop->slots[i]);
     }
     // The kernel still writes into a cancelled poll's state until its
     // completion is posted, so wait for every one before freeing.
@@ -514,15 +560,7 @@ static int del_item(struct dino_event_loop *loop, enum kind kind, uintptr_t key)
     {
         remove_slot(loop, s);
         unqueue(loop, s);
-        if (s->pending)
-        {
-            s->deleted = 1;
-            cancel(loop, s);
-        }
-        else
-        {
-            free(s);
-        }
+        release(loop, s);
     }
     ReleaseSRWLockExclusive(&loop->lock);
     return s ? 0 : -1;
@@ -682,4 +720,19 @@ int dino_event_wake(dino_event_loop_t handle)
 void dino__event_interrupt(dino_event_loop_t handle)
 {
     (void)post_wake((struct dino_event_loop *)handle);
+}
+
+int dino_event_add_process(dino_event_loop_t loop, dino_process_t process, void *userdata)
+{
+    if (loop == DINO_INVALID_EVENT_LOOP || process == DINO_INVALID_PROCESS)
+        return -1;
+    return add_item((struct dino_event_loop *)loop, KIND_PROCESS, process,
+        (HANDLE)dino__process_to_os(process), 0, userdata);
+}
+
+int dino_event_del_process(dino_event_loop_t loop, dino_process_t process)
+{
+    if (loop == DINO_INVALID_EVENT_LOOP || process == DINO_INVALID_PROCESS)
+        return -1;
+    return del_item((struct dino_event_loop *)loop, KIND_PROCESS, process);
 }

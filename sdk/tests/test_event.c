@@ -864,4 +864,207 @@ UTEST(event, child_stdout_through_the_loop)
     dino_event_loop_destroy(loop);
 }
 
-UTEST_MAIN()
+/* ---- processes ---- */
+
+// Linux children are /bin/sh (qemu-user can't exec another emulated program);
+// the long-running Windows child is this program in --child-sleep mode.
+#ifdef _WIN32
+static char self_path[1024];
+#define SHELL(cmd) { "cmd.exe", "/d", "/c", cmd, NULL }
+#else
+#define SHELL(cmd) { "/bin/sh", "-c", cmd, NULL }
+#endif
+
+static int spawn_sleeper(dino_process_t *p)
+{
+#ifdef _WIN32
+    char *const argv[] = { self_path, "--child-sleep", NULL };
+#else
+    char *const argv[] = SHELL("exec sleep 60");
+#endif
+    return dino_process_spawn(p, argv, NULL, NULL);
+}
+
+UTEST(event, process_exit_reported_once)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    char *const    argv[] = SHELL("exit 3");
+    dino_process_t p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    int ud;
+    ASSERT_EQ(0, dino_event_add_process(loop, p, &ud));
+
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 10000));
+    EXPECT_EQ((uint32_t)DINO_EVENT_EXIT, out[0].events);
+    EXPECT_EQ((void *)&ud, out[0].userdata);
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 200));
+
+    ASSERT_EQ(0, dino_event_del_process(loop, p));
+    int code = -1;
+    EXPECT_EQ(0, dino_process_wait_timeout(p, 0, &code));
+    EXPECT_EQ(3, code);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, process_kill_reported)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_process_t p;
+    ASSERT_EQ(0, spawn_sleeper(&p));
+    ASSERT_EQ(0, dino_event_add_process(loop, p, NULL));
+
+    dino_event_t out[4];
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 100));
+    ASSERT_EQ(0, dino_process_kill(p));
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 10000));
+    EXPECT_EQ((uint32_t)DINO_EVENT_EXIT, out[0].events);
+
+    ASSERT_EQ(0, dino_event_del_process(loop, p));
+    int code = -1;
+    EXPECT_EQ(0, dino_process_wait(p, &code));
+    EXPECT_EQ(DINO_EXIT_KILLED, code);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, process_deleted_before_it_exits)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_process_t p;
+    ASSERT_EQ(0, spawn_sleeper(&p));
+    ASSERT_EQ(0, dino_event_add_process(loop, p, NULL));
+    ASSERT_EQ(0, dino_event_del_process(loop, p));
+    ASSERT_EQ(0, dino_process_kill(p));
+
+    dino_event_t out[4];
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 300));
+    EXPECT_EQ(0, dino_process_wait(p, NULL));
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, process_already_exited_when_added)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    char *const    argv[] = SHELL("exit 0");
+    dino_process_t p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    // Exited (a zombie on Linux) but not yet waited for: still a valid handle.
+#ifdef _WIN32
+    WaitForSingleObject((HANDLE)p, 5000);
+#else
+    dino_sleep_ms(500);
+#endif
+    ASSERT_EQ(0, dino_event_add_process(loop, p, NULL));
+
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 5000));
+    EXPECT_EQ((uint32_t)DINO_EVENT_EXIT, out[0].events);
+    ASSERT_EQ(0, dino_event_del_process(loop, p));
+    EXPECT_EQ(0, dino_process_wait(p, NULL));
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, process_invalid_args)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_process_t p;
+    ASSERT_EQ(0, spawn_sleeper(&p));
+    EXPECT_EQ(-1, dino_event_add_process(loop, DINO_INVALID_PROCESS, NULL));
+    EXPECT_EQ(-1, dino_event_add_process(DINO_INVALID_EVENT_LOOP, p, NULL));
+    EXPECT_EQ(-1, dino_event_del_process(loop, p));
+    ASSERT_EQ(0, dino_event_add_process(loop, p, NULL));
+    EXPECT_EQ(-1, dino_event_add_process(loop, p, NULL));
+    ASSERT_EQ(0, dino_event_del_process(loop, p));
+    EXPECT_EQ(-1, dino_event_del_process(loop, p));
+
+    dino_process_kill(p);
+    dino_process_wait(p, NULL);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, many_processes_in_one_loop)
+{
+    enum
+    {
+        N = 20
+    };
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    static dino_process_t procs[N];
+    static int            seen[N];
+    char *const           argv[] = SHELL("exit 0");
+    for (int i = 0; i < N; i++)
+    {
+        ASSERT_EQ(0, dino_process_spawn(&procs[i], argv, NULL, NULL));
+        ASSERT_EQ(0, dino_event_add_process(loop, procs[i], &seen[i]));
+    }
+
+    int          exits = 0;
+    dino_event_t out[8];
+    uint64_t     start = dino_time_monotonic_ns();
+    while (exits < N && dino_time_monotonic_ns() - start < 20000000000ull)
+    {
+        int n = dino_event_wait(loop, out, 8, 1000);
+        ASSERT_GE(n, 0);
+        for (int i = 0; i < n; i++)
+        {
+            ASSERT_EQ((uint32_t)DINO_EVENT_EXIT, out[i].events);
+            int idx = (int)((int *)out[i].userdata - seen);
+            ASSERT_TRUE(idx >= 0 && idx < N);
+            EXPECT_EQ(0, seen[idx]++);
+            exits++;
+        }
+    }
+    EXPECT_EQ(N, exits);
+    for (int i = 0; i < N; i++)
+    {
+        EXPECT_EQ(0, dino_event_del_process(loop, procs[i]));
+        EXPECT_EQ(0, dino_process_wait(procs[i], NULL));
+    }
+    dino_event_loop_destroy(loop);
+}
+
+// Destroyed with a process still registered and running: on Windows its wait
+// registration must be cancelled, not left to fire into a freed loop.
+UTEST(event, destroy_with_a_process_still_registered)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_process_t p;
+    ASSERT_EQ(0, spawn_sleeper(&p));
+    ASSERT_EQ(0, dino_event_add_process(loop, p, NULL));
+    dino_event_loop_destroy(loop);
+
+    ASSERT_EQ(0, dino_process_kill(p));
+    dino_sleep_ms(100);
+    EXPECT_EQ(0, dino_process_wait(p, NULL));
+}
+
+UTEST_STATE();
+
+#ifdef _WIN32
+static int child_main(const char *mode)
+{
+    if (strcmp(mode, "--child-sleep") == 0)
+    {
+        Sleep(60000);
+        return 0;
+    }
+    return 2;
+}
+#endif
+
+int main(int argc, const char *const argv[])
+{
+#ifdef _WIN32
+    if (argc > 1 && strncmp(argv[1], "--child-", 8) == 0)
+        return child_main(argv[1]);
+    GetModuleFileNameA(NULL, self_path, sizeof(self_path));
+#endif
+    return utest_main(argc, argv);
+}

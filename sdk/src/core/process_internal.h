@@ -1,6 +1,7 @@
 #ifndef DINO_CORE_PROCESS_INTERNAL_H
 #define DINO_CORE_PROCESS_INTERNAL_H
 
+#include <stdint.h>
 #include <string.h>
 
 #include <dino/core/process.h>
@@ -10,6 +11,13 @@
 // Internal to the SDK: helpers process_posix.c and process_win32.c
 // share. Inline, so each half compiles them in as it did when they were static
 // in one file.
+
+// The OS's own handle for a process: a pid on POSIX, a HANDLE on Windows.
+intptr_t dino__process_to_os(dino_process_t process);
+
+// POSIX only (process_posix.c): a descriptor that becomes readable when the
+// child exits, or -1 where pidfds aren't available (before Linux 5.3).
+int dino__pidfd_open(dino_process_t process);
 
 static inline int dino__process_valid_env_name(const char *name)
 {

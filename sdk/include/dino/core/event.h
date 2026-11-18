@@ -5,12 +5,13 @@
 
 #include <dino/core/network.h>
 #include <dino/core/pipe.h>
+#include <dino/core/process.h>
 
 /**
- * Event loop: register sockets and pipes with the events you care about, then
- * wait for any of them to become ready. Built on epoll on Linux and on an I/O completion
- * port on Windows, so a wait costs the same with ten sockets or ten thousand,
- * unlike dino_poll and dino_select.
+ * Event loop: register sockets, pipes and processes with the events you care
+ * about, then wait for any of them to become ready. Built on epoll on Linux and on an I/O
+ * completion port on Windows, so a wait costs the same with ten sockets or ten thousand, unlike
+ * dino_poll and dino_select.
  *
  * Readiness is level-triggered: a socket that is still readable is reported
  * again by the next wait. DINO_EVENT_ONESHOT reports it once and then disarms
@@ -36,6 +37,7 @@ typedef uintptr_t dino_event_timer_t;
 #define DINO_EVENT_HANGUP  0x0010 /**< Peer closed or shut down; always reported. */
 #define DINO_EVENT_WAKE    0x0100 /**< From dino_event_wake; userdata is NULL. */
 #define DINO_EVENT_TIMER   0x0200 /**< A timer fired; userdata is the timer's. */
+#define DINO_EVENT_EXIT    0x0400 /**< A process ended; userdata is the process's. */
 #define DINO_EVENT_ONESHOT 0x4000 /**< Interest only: disarm after one report. */
 
 /**
@@ -55,8 +57,8 @@ typedef struct
 dino_event_loop_t dino_event_loop_create(void);
 
 /**
- * Destroy a loop. Registered sockets are dropped from it but not closed, and
- * its timers are deleted. No other thread may be using the loop.
+ * Destroy a loop. Registered sockets, pipes and processes are dropped from it
+ * but not closed or waited for, and its timers are deleted. No other thread may be using the loop.
  *
  * @param  loop  Loop to destroy.
  */
@@ -128,6 +130,28 @@ int dino_event_mod_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t event
  * @return 0 on success, -1 on error (including when pipe isn't added).
  */
 int dino_event_del_pipe(dino_event_loop_t loop, dino_pipe_t pipe);
+
+/**
+ * Report a DINO_EVENT_EXIT item, once, when a process ends; at the next wait if
+ * it already has. The process stays in the loop until dino_event_del_process,
+ * which must come before dino_process_wait (that frees the process). After the
+ * event, dino_process_wait returns at once.
+ *
+ * On Linux this needs pidfds (Linux 5.3); without them it fails.
+ *
+ * @param  loop      Loop to add to.
+ * @param  process   Process from dino_process_spawn, not yet waited for.
+ * @param  userdata  Returned with the process's event.
+ * @return 0 on success, -1 on error (including a process already added).
+ */
+int dino_event_add_process(dino_event_loop_t loop, dino_process_t process, void *userdata);
+
+/**
+ * Stop watching a process. Its exit is not reported after this returns.
+ *
+ * @return 0 on success, -1 on error (including when process isn't added).
+ */
+int dino_event_del_process(dino_event_loop_t loop, dino_process_t process);
 
 /**
  * Wait until something in the loop is ready.

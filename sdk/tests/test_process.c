@@ -293,6 +293,23 @@ UTEST(process, wait_timeout_returns_the_exit_code)
     EXPECT_EQ(-1, dino_process_wait_timeout(DINO_INVALID_PROCESS, 0, NULL));
 }
 
+UTEST(process, wait_timeout_returns_when_the_child_exits)
+{
+#ifdef _WIN32
+    char *const argv[] = SHELL("ping -n 1 127.0.0.1 >NUL & exit 6");
+#else
+    char *const argv[] = SHELL("sleep 0.2; exit 6");
+#endif
+    dino_process_t p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    uint64_t start = dino_time_monotonic_ns();
+    int      code  = -1;
+    EXPECT_EQ(0, dino_process_wait_timeout(p, 20000, &code));
+    EXPECT_EQ(6, code);
+    // Long before the timeout: the wait ends with the child, not the clock.
+    EXPECT_LT((dino_time_monotonic_ns() - start) / 1000000, 10000u);
+}
+
 /* ---- run ---- */
 
 // Well past the 64 KB a pipe holds, on stdout and stderr at once: reading one

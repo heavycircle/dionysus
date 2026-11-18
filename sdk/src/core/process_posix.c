@@ -5,10 +5,12 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/syscall.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -127,6 +129,41 @@ uint64_t dino_process_id(dino_process_t process)
 
 // Polls with a short, growing sleep: pidfd_open would need Linux 5.3 and a
 // fallback anyway.
+int dino__pidfd_open(dino_process_t process)
+{
+#ifdef SYS_pidfd_open
+    // The kernel always sets close-on-exec on a pidfd.
+    return (int)syscall(SYS_pidfd_open, (pid_t)process, 0);
+#else
+    (void)process;
+    errno = ENOSYS;
+    return -1;
+#endif
+}
+
+intptr_t dino__process_to_os(dino_process_t process)
+{
+    return (intptr_t)process;
+}
+
+// 1 once the child has exited, 0 on timeout, -1 if pidfds aren't available.
+static int wait_pidfd(dino_process_t process, int timeout_ms)
+{
+    int fd = dino__pidfd_open(process);
+    if (fd < 0)
+        return -1;
+    struct pollfd pfd      = { fd, POLLIN, 0 };
+    uint64_t      deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
+    int           rc;
+    while ((rc = poll(&pfd, 1, timeout_ms)) < 0 && errno == EINTR)
+    {
+        uint64_t now = dino_time_monotonic_ns();
+        timeout_ms   = now >= deadline ? 0 : (int)((deadline - now + 999999) / 1000000);
+    }
+    close(fd);
+    return rc < 0 ? -1 : rc > 0;
+}
+
 int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_code)
 {
     if (process == DINO_INVALID_PROCESS)
@@ -134,6 +171,13 @@ int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_
     if (timeout_ms < 0)
         return dino_process_wait(process, exit_code);
 
+    int exited = wait_pidfd(process, timeout_ms);
+    if (exited == 1)
+        return dino_process_wait(process, exit_code);
+    if (exited == 0)
+        return DINO_TIMEOUT;
+
+    // No pidfds: poll waitpid, backing off to 10 ms.
     uint64_t deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
     uint32_t delay_ms = 1;
     for (;;)
