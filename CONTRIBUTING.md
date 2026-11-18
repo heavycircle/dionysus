@@ -107,7 +107,7 @@ after changing `cli/` or `sdk/`.
 
 ```
 build.zig, build.zig.zon   Zig build for dino; build.zig.zon holds the version
-cli/                       dino source (main.zig, commands/, cmake.zig, targets.zig, ...)
+cli/                       dino source (main.zig, commands/, cmake.zig, libraries.zig, ...)
 sdk/
   include/dino/core/       public headers: fs, io, kernel, mutex (+ condition variables, once), network,
                            pipe, process, runtime, thread, time
@@ -119,7 +119,9 @@ sdk/
   CMakeLists.txt           the dino_core and dino_util static libraries
   testing/                 utest.h (vendored) and the leak counter, for dino_test()
   tests/                   the SDK's own tests, one test_<module>.c per module
-examples/                  one standalone CMake project per SDK feature
+docs/                      user documentation (libraries.md: DINO_LIBRARY_PATH libraries)
+examples/                  one standalone CMake project per SDK feature, plus org_library and
+                           org_app (a DINO_LIBRARY_PATH library and a project that uses it)
 tests/examples.sh          builds and runs every example on every target
 tests/sdk.sh               runs sdk/tests with `dino test`
 scripts/release.sh         cuts a release (see Releases)
@@ -182,6 +184,10 @@ cmake -S examples/mutex_example -B build/arm64 -G Ninja \
     -DCMAKE_BUILD_TYPE=Release
 cmake --build build/arm64
 ```
+
+`dino` also passes `-DDINO_LIBRARY_PATH=<list>` (empty when the variable isn't set) and, for foreign
+targets, `-DCMAKE_CROSSCOMPILING_EMULATOR`. `examples/org_app` only configures with
+`DINO_LIBRARY_PATH` pointing at `examples/org_library`, as `tests/examples.sh` sets it.
 
 ### SDK tests
 
@@ -275,9 +281,11 @@ version as CI. `uvx --from clang-format==19.1.7 clang-format -i <files>` fixes f
   `Debug` uses `-O0 -g`. A project configured without a build type gets `Release`.
 
 `Dino.cmake` is injected after every `project()` call through `CMAKE_PROJECT_INCLUDE`. It adds
-the SDK as a subdirectory (unless the project already did) and defines
+the SDK as a subdirectory (unless the project already did), sets `DINO_SDK_VERSION`, and defines
 `dino_executable(name sources...)`, which is `add_executable` plus `target_link_libraries(name
-PRIVATE dino_core)`. That is why a user's `CMakeLists.txt` doesn't need to know where the SDK is.
+PRIVATE dino_util)`, and `dino_test()`. That is why a user's `CMakeLists.txt` doesn't need to know
+where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same way, under
+`_dino_libs/` and `EXCLUDE_FROM_ALL`; see [docs/libraries.md](docs/libraries.md#how-it-works).
 
 | dino name | Zig triple | Output | Runs on an x86_64 Linux host via |
 | --- | --- | --- | --- |
