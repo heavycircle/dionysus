@@ -346,4 +346,167 @@ UTEST_F(event, wake_alongside_socket_events)
     EXPECT_GE(seen_write, 1);
 }
 
+static uint64_t elapsed_ms(uint64_t start)
+{
+    return (dino_time_monotonic_ns() - start) / 1000000;
+}
+
+UTEST(event, timer_fires_once)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    int                x     = 0;
+    uint64_t           start = dino_time_monotonic_ns();
+    dino_event_timer_t timer = dino_event_timer_add(loop, 50, 0, &x);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
+
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 5000));
+    EXPECT_GE(elapsed_ms(start), 50u);
+    EXPECT_EQ((uint32_t)DINO_EVENT_TIMER, out[0].events);
+    EXPECT_EQ((void *)&x, out[0].userdata);
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 100));
+
+    EXPECT_EQ(0, dino_event_timer_del(loop, timer));
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, timer_repeats)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_event_timer_t timer = dino_event_timer_add(loop, 20, 20, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
+
+    dino_event_t out[4];
+    int          fired = 0;
+    uint64_t     start = dino_time_monotonic_ns();
+    while (fired < 5 && elapsed_ms(start) < 5000)
+    {
+        int n = dino_event_wait(loop, out, 4, 1000);
+        ASSERT_GE(n, 1);
+        for (int i = 0; i < n; i++)
+            fired += out[i].events == DINO_EVENT_TIMER;
+    }
+    EXPECT_EQ(5, fired);
+    EXPECT_GE(elapsed_ms(start), 100u);
+    EXPECT_EQ(0, dino_event_timer_del(loop, timer));
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, timers_fire_in_deadline_order)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    int                ids[3] = { 90, 30, 60 };
+    dino_event_timer_t timers[3];
+    for (int i = 0; i < 3; i++)
+    {
+        timers[i] = dino_event_timer_add(loop, (uint32_t)ids[i], 0, &ids[i]);
+        ASSERT_NE(DINO_INVALID_EVENT_TIMER, timers[i]);
+    }
+
+    int          order[3], got = 0;
+    dino_event_t out[4];
+    while (got < 3)
+    {
+        int n = dino_event_wait(loop, out, 4, 5000);
+        ASSERT_GE(n, 1);
+        for (int i = 0; i < n && got < 3; i++)
+            order[got++] = *(int *)out[i].userdata;
+    }
+    EXPECT_EQ(30, order[0]);
+    EXPECT_EQ(60, order[1]);
+    EXPECT_EQ(90, order[2]);
+    for (int i = 0; i < 3; i++)
+        EXPECT_EQ(0, dino_event_timer_del(loop, timers[i]));
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, timer_deleted_before_it_fires)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_event_timer_t keep  = dino_event_timer_add(loop, 10000, 0, NULL);
+    dino_event_timer_t timer = dino_event_timer_add(loop, 50, 0, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
+    EXPECT_EQ(0, dino_event_timer_del(loop, timer));
+
+    dino_event_t out[4];
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 150));
+    // keep is never deleted: destroy frees it.
+    (void)keep;
+    dino_event_loop_destroy(loop);
+}
+
+struct blocked_wait
+{
+    dino_event_loop_t loop;
+    dino_event_t      out[4];
+    int               n;
+};
+
+static int wait_long(void *arg)
+{
+    struct blocked_wait *w = arg;
+    w->n                   = dino_event_wait(w->loop, w->out, 4, 10000);
+    return 0;
+}
+
+UTEST(event, timer_added_while_waiting_shortens_the_wait)
+{
+    struct blocked_wait w = { 0 };
+    w.loop                = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, w.loop);
+    dino_thread_t t;
+    ASSERT_EQ(0, dino_thread_create(&t, wait_long, &w));
+    dino_sleep_ms(50);
+
+    uint64_t           start = dino_time_monotonic_ns();
+    dino_event_timer_t timer = dino_event_timer_add(w.loop, 10, 0, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
+    EXPECT_EQ(0, dino_thread_join(t, NULL));
+    EXPECT_LT(elapsed_ms(start), 5000u);
+    EXPECT_EQ(1, w.n);
+    EXPECT_EQ((uint32_t)DINO_EVENT_TIMER, w.out[0].events);
+
+    EXPECT_EQ(0, dino_event_timer_del(w.loop, timer));
+    dino_event_loop_destroy(w.loop);
+}
+
+UTEST_F(event, timer_and_socket_in_one_wait)
+{
+    dino_event_timer_t timer = dino_event_timer_add(utest_fixture->loop, 0, 0, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
+    ASSERT_EQ(0,
+        dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_WRITE, NULL));
+    dino_sleep_ms(50);
+
+    int          seen_timer = 0, seen_write = 0;
+    dino_event_t out[8];
+    for (int round = 0; round < 3 && !(seen_timer && seen_write); round++)
+    {
+        int n = dino_event_wait(utest_fixture->loop, out, 8, 1000);
+        ASSERT_GE(n, 1);
+        for (int i = 0; i < n; i++)
+        {
+            seen_timer += out[i].events == DINO_EVENT_TIMER;
+            seen_write += (out[i].events & DINO_EVENT_WRITE) != 0;
+        }
+    }
+    EXPECT_EQ(1, seen_timer);
+    EXPECT_GE(seen_write, 1);
+    EXPECT_EQ(0, dino_event_timer_del(utest_fixture->loop, timer));
+}
+
+UTEST(event, timer_invalid_args)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    EXPECT_EQ(DINO_INVALID_EVENT_TIMER, dino_event_timer_add(DINO_INVALID_EVENT_LOOP, 1, 0, NULL));
+    EXPECT_EQ(-1, dino_event_timer_del(loop, DINO_INVALID_EVENT_TIMER));
+    EXPECT_EQ(-1, dino_event_timer_del(DINO_INVALID_EVENT_LOOP, DINO_INVALID_EVENT_TIMER));
+    dino_event_loop_destroy(loop);
+}
+
 UTEST_MAIN()

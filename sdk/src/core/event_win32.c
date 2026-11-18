@@ -81,6 +81,7 @@ struct sock_state
 
 struct dino_event_loop
 {
+    struct dino__event_timers    timers; // first: see event_internal.h
     SRWLOCK                      lock;
     HANDLE                       port;
     HANDLE                       afd;
@@ -92,6 +93,7 @@ struct dino_event_loop
     size_t              pending;
     struct sock_state  *queue;
     volatile LONG       wake_posted; // a wake packet is in the port, not yet reported
+    volatile LONG       user_wake;   // dino_event_wake was called since the last report
 };
 
 static size_t slot_of(const struct dino_event_loop *loop, dino_socket_t sock)
@@ -305,8 +307,13 @@ dino_event_loop_t dino_event_loop_create(void)
     loop->port = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0);
     if (loop->port)
         loop->afd = open_afd(loop->port, create);
-    if (!loop->ioctl || !loop->cancel || !loop->slots || !loop->afd)
+    int timers = loop->port ? dino__event_timers_init(&loop->timers) : -1;
+    if (!loop->ioctl || !loop->cancel || !loop->slots || !loop->afd || timers != 0)
     {
+        if (timers == 0)
+            dino__event_timers_destroy(&loop->timers);
+        if (loop->afd)
+            CloseHandle(loop->afd);
         if (loop->port)
             CloseHandle(loop->port);
         free((void *)loop->slots);
@@ -387,6 +394,7 @@ void dino_event_loop_destroy(dino_event_loop_t handle)
     ReleaseSRWLockExclusive(&loop->lock);
     CloseHandle(loop->afd);
     CloseHandle(loop->port);
+    dino__event_timers_destroy(&loop->timers);
     free((void *)loop->slots);
     free(loop);
 }
@@ -496,7 +504,7 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
         return -1;
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
     uint64_t                deadline
-        = timeout_ms > 0 ? dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000 : 0;
+        = dino_time_monotonic_ns() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0) * 1000000;
 
     AcquireSRWLockExclusive(&loop->lock);
     int n = flush_queue(loop, out, max);
@@ -506,23 +514,31 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
 
     for (;;)
     {
+        int              left = dino__event_remaining_ms(timeout_ms, deadline);
+        int              wait = dino__event_timers_timeout(&loop->timers, left);
         OVERLAPPED_ENTRY e[BATCH];
         ULONG            got = 0;
-        DWORD            ms  = timeout_ms < 0 ? INFINITE : (DWORD)timeout_ms;
-        if (!GetQueuedCompletionStatusEx(
-                loop->port, e, (ULONG)(max < BATCH ? max : BATCH), &got, ms, FALSE))
-            return GetLastError() == WAIT_TIMEOUT ? 0 : -1;
+        if (!GetQueuedCompletionStatusEx(loop->port, e, (ULONG)(max < BATCH ? max : BATCH), &got,
+                wait < 0 ? INFINITE : (DWORD)wait, FALSE))
+        {
+            if (GetLastError() != WAIT_TIMEOUT)
+                return -1;
+            got = 0;
+        }
 
         AcquireSRWLockExclusive(&loop->lock);
         for (ULONG i = 0; i < got; i++)
         {
             if (e[i].lpCompletionKey == WAKE_KEY)
             {
-                // Cleared before reporting, so a wake from now on posts again.
+                // Cleared before user_wake is read, so a wake from now on posts again.
                 InterlockedExchange(&loop->wake_posted, 0);
-                out[n].events   = DINO_EVENT_WAKE;
-                out[n].userdata = NULL;
-                n++;
+                if (InterlockedExchange(&loop->user_wake, 0))
+                {
+                    out[n].events   = DINO_EVENT_WAKE;
+                    out[n].userdata = NULL;
+                    n++;
+                }
                 continue;
             }
             struct sock_state *s        = (struct sock_state *)e[i].lpOverlapped;
@@ -536,23 +552,22 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
             }
         }
         ReleaseSRWLockExclusive(&loop->lock);
-        if (n > 0)
+        n += dino__event_timers_collect(&loop->timers, out + n, max - n);
+        // Only cancellations, stale completions or a timer interrupt came in:
+        // keep waiting for whatever time is left.
+        if (n > 0 || left == 0)
             return n;
-
-        // Only cancellations and stale completions came in: keep waiting for
-        // whatever time is left.
-        if (timeout_ms > 0)
-        {
-            uint64_t now = dino_time_monotonic_ns();
-            if (now >= deadline)
-                return 0;
-            timeout_ms = (int)((deadline - now + 999999) / 1000000);
-        }
-        else if (timeout_ms == 0)
-        {
-            return 0;
-        }
     }
+}
+
+static int post_wake(struct dino_event_loop *loop)
+{
+    if (InterlockedExchange(&loop->wake_posted, 1) != 0)
+        return 0;
+    if (PostQueuedCompletionStatus(loop->port, 0, WAKE_KEY, NULL))
+        return 0;
+    InterlockedExchange(&loop->wake_posted, 0);
+    return -1;
 }
 
 int dino_event_wake(dino_event_loop_t handle)
@@ -560,10 +575,11 @@ int dino_event_wake(dino_event_loop_t handle)
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
     if (!loop)
         return -1;
-    if (InterlockedExchange(&loop->wake_posted, 1) != 0)
-        return 0;
-    if (PostQueuedCompletionStatus(loop->port, 0, WAKE_KEY, NULL))
-        return 0;
-    InterlockedExchange(&loop->wake_posted, 0);
-    return -1;
+    InterlockedExchange(&loop->user_wake, 1);
+    return post_wake(loop);
+}
+
+void dino__event_interrupt(dino_event_loop_t handle)
+{
+    (void)post_wake((struct dino_event_loop *)handle);
 }

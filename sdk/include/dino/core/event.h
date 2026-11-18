@@ -23,12 +23,18 @@ typedef uintptr_t dino_event_loop_t;
 
 #define DINO_INVALID_EVENT_LOOP ((dino_event_loop_t)0)
 
+/** A timer in a loop, from dino_event_timer_add. */
+typedef uintptr_t dino_event_timer_t;
+
+#define DINO_INVALID_EVENT_TIMER ((dino_event_timer_t)0)
+
 /* ---- Event flags ---- */
 #define DINO_EVENT_READ    0x0001 /**< Data to read, a connection to accept, or end of stream. */
 #define DINO_EVENT_WRITE   0x0004 /**< A send won't block, or a connect finished. */
 #define DINO_EVENT_ERROR   0x0008 /**< Always reported. */
 #define DINO_EVENT_HANGUP  0x0010 /**< Peer closed or shut down; always reported. */
 #define DINO_EVENT_WAKE    0x0100 /**< From dino_event_wake; userdata is NULL. */
+#define DINO_EVENT_TIMER   0x0200 /**< A timer fired; userdata is the timer's. */
 #define DINO_EVENT_ONESHOT 0x4000 /**< Interest only: disarm after one report. */
 
 /**
@@ -48,8 +54,8 @@ typedef struct
 dino_event_loop_t dino_event_loop_create(void);
 
 /**
- * Destroy a loop. Registered sockets are dropped from it but not closed. No
- * other thread may be using the loop.
+ * Destroy a loop. Registered sockets are dropped from it but not closed, and
+ * its timers are deleted. No other thread may be using the loop.
  *
  * @param  loop  Loop to destroy.
  */
@@ -106,5 +112,32 @@ int dino_event_wait(dino_event_loop_t loop, dino_event_t *out, int max, int time
  * @return 0 on success, -1 on error.
  */
 int dino_event_wake(dino_event_loop_t loop);
+
+/**
+ * Add a timer: a wait reports a DINO_EVENT_TIMER item after delay_ms, then
+ * every interval_ms. Timers never fire early. A repeating timer that falls
+ * behind (nobody waited for a while) fires once and skips the periods it
+ * missed, rather than firing for each.
+ *
+ * Every timer, one-shot included, stays allocated until dino_event_timer_del
+ * or dino_event_loop_destroy.
+ *
+ * @param  loop         Loop to add to.
+ * @param  delay_ms     Milliseconds until the first firing; 0 fires at the next wait.
+ * @param  interval_ms  Milliseconds between later firings; 0 fires once.
+ * @param  userdata     Returned with the timer's events.
+ * @return Timer handle, or DINO_INVALID_EVENT_TIMER on failure.
+ */
+dino_event_timer_t dino_event_timer_add(
+    dino_event_loop_t loop, uint32_t delay_ms, uint32_t interval_ms, void *userdata);
+
+/**
+ * Delete a timer, fired or not. It is not reported after this returns.
+ *
+ * @param  loop   Loop it was added to.
+ * @param  timer  Timer from dino_event_timer_add.
+ * @return 0 on success, -1 on error.
+ */
+int dino_event_timer_del(dino_event_loop_t loop, dino_event_timer_t timer);
 
 #endif // DINO_CORE_EVENT_H

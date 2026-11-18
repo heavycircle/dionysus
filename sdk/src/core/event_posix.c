@@ -1,6 +1,7 @@
 #include <dino/core/event.h>
 
 #include <errno.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
@@ -14,8 +15,10 @@
 
 struct dino_event_loop
 {
-    int epfd;
-    int wakefd; // its epoll data.ptr is &wakefd, which no userdata can equal
+    struct dino__event_timers timers; // first: see event_internal.h
+    int                       epfd;
+    int                       wakefd; // its epoll data.ptr is &wakefd, which no userdata can equal
+    atomic_int                user_wake; // the wakefd was signalled by dino_event_wake, not a timer
 };
 
 dino_event_loop_t dino_event_loop_create(void)
@@ -23,6 +26,12 @@ dino_event_loop_t dino_event_loop_create(void)
     struct dino_event_loop *loop = malloc(sizeof(*loop));
     if (!loop)
         return DINO_INVALID_EVENT_LOOP;
+    if (dino__event_timers_init(&loop->timers) != 0)
+    {
+        free(loop);
+        return DINO_INVALID_EVENT_LOOP;
+    }
+    atomic_init(&loop->user_wake, 0);
     loop->epfd            = epoll_create1(EPOLL_CLOEXEC);
     loop->wakefd          = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     struct epoll_event ev = { 0 };
@@ -35,6 +44,7 @@ dino_event_loop_t dino_event_loop_create(void)
             close(loop->epfd);
         if (loop->wakefd >= 0)
             close(loop->wakefd);
+        dino__event_timers_destroy(&loop->timers);
         free(loop);
         return DINO_INVALID_EVENT_LOOP;
     }
@@ -48,6 +58,7 @@ void dino_event_loop_destroy(dino_event_loop_t handle)
         return;
     close(loop->epfd);
     close(loop->wakefd);
+    dino__event_timers_destroy(&loop->timers);
     free(loop);
 }
 
@@ -116,43 +127,60 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
     struct epoll_event evs[BATCH];
     int                cap = max < BATCH ? max : BATCH;
     uint64_t           deadline
-        = timeout_ms > 0 ? dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000 : 0;
-    int n;
-    while ((n = epoll_wait(loop->epfd, evs, cap, timeout_ms)) < 0)
+        = dino_time_monotonic_ns() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0) * 1000000;
+    for (;;)
     {
-        if (errno != EINTR)
+        int left = dino__event_remaining_ms(timeout_ms, deadline);
+        int got = epoll_wait(loop->epfd, evs, cap, dino__event_timers_timeout(&loop->timers, left));
+        if (got < 0 && errno != EINTR)
             return -1;
-        if (timeout_ms > 0)
+
+        int n = 0;
+        for (int i = 0; i < got; i++)
         {
-            uint64_t now = dino_time_monotonic_ns();
-            if (now >= deadline)
-                return 0;
-            timeout_ms = (int)((deadline - now + 999999) / 1000000);
+            if (evs[i].data.ptr == &loop->wakefd)
+            {
+                // One read empties the counter: every wake so far becomes this one.
+                uint64_t count;
+                (void)!read(loop->wakefd, &count, sizeof(count));
+                if (atomic_exchange(&loop->user_wake, 0))
+                {
+                    out[n].events   = DINO_EVENT_WAKE;
+                    out[n].userdata = NULL;
+                    n++;
+                }
+                continue;
+            }
+            out[n].events   = from_epoll(evs[i].events);
+            out[n].userdata = evs[i].data.ptr;
+            n++;
         }
+        n += dino__event_timers_collect(&loop->timers, out + n, max - n);
+        // Nothing to report after a timer interrupt, EINTR or a wake meant for
+        // someone else: wait again for what is left of the timeout.
+        if (n > 0 || left == 0)
+            return n;
     }
-    for (int i = 0; i < n; i++)
-    {
-        if (evs[i].data.ptr == &loop->wakefd)
-        {
-            // One read empties the counter: every wake so far becomes this one.
-            uint64_t count;
-            (void)!read(loop->wakefd, &count, sizeof(count));
-            out[i].events   = DINO_EVENT_WAKE;
-            out[i].userdata = NULL;
-            continue;
-        }
-        out[i].events   = from_epoll(evs[i].events);
-        out[i].userdata = evs[i].data.ptr;
-    }
-    return n;
+}
+
+static int signal_wakefd(struct dino_event_loop *loop)
+{
+    uint64_t one = 1;
+    ssize_t  rc  = write(loop->wakefd, &one, sizeof(one));
+    // EAGAIN: the counter is full, so a wake is already pending.
+    return rc == (ssize_t)sizeof(one) || errno == EAGAIN ? 0 : -1;
 }
 
 int dino_event_wake(dino_event_loop_t handle)
 {
     if (handle == DINO_INVALID_EVENT_LOOP)
         return -1;
-    uint64_t one = 1;
-    ssize_t  rc  = write(((struct dino_event_loop *)handle)->wakefd, &one, sizeof(one));
-    // EAGAIN: the counter is full, so a wake is already pending.
-    return rc == (ssize_t)sizeof(one) || errno == EAGAIN ? 0 : -1;
+    struct dino_event_loop *loop = (struct dino_event_loop *)handle;
+    atomic_store(&loop->user_wake, 1);
+    return signal_wakefd(loop);
+}
+
+void dino__event_interrupt(dino_event_loop_t handle)
+{
+    (void)signal_wakefd((struct dino_event_loop *)handle);
 }
