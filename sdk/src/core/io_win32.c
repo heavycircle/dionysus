@@ -117,7 +117,7 @@ int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, di
     if (timeout_ms >= 0)
     {
         tv.tv_sec  = timeout_ms / 1000;
-        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        tv.tv_usec = (long)(timeout_ms % 1000) * 1000;
         tvp        = &tv;
     }
 
