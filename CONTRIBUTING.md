@@ -128,6 +128,7 @@ examples/                  one standalone CMake project per SDK feature, plus or
 tests/examples.sh          builds and runs every example on every target
 tests/sdk.sh               runs sdk/tests with `dino test`
 tests/warnings.sh          checks the portability warnings against tests/fixtures/raw_calls
+tests/docs.sh              checks docs links and builds and runs the C programs in docs/
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
 scripts/lintcommit.sh      checks commit messages
@@ -244,6 +245,11 @@ a known failure that starts passing fails the run, so remove its entry in the PR
 `tests/examples.sh /repo/examples arm64 win64` limits the run to some targets. `CFLAGS` from the
 environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings fail the build.
 
+`tests/docs.sh [targets...]` keeps the documentation honest: every relative link and `#anchor` in
+the Markdown must resolve, and every ```` ```c ```` block in `docs/` that contains `int main(` is
+built for each target and run, and must exit 0. Write examples in the docs as complete programs that
+take no arguments, so they're tested; fragments without `main` aren't.
+
 `tests/warnings.sh [targets...]` checks the [portability warnings](docs/guide/portability-warnings.md):
 it builds `tests/fixtures/raw_calls` under clang's `-verify`, so every flagged call must warn
 exactly as its `expected-warning` comment says, in four language modes, and then builds it again
@@ -258,7 +264,7 @@ against glibc's headers.
 | --- | --- |
 | `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
 | `unit` | `zig build test` |
-| `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, and `tests/warnings.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
+| `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh` and `tests/docs.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
 
 Run the same checks locally before asking for review:
 
@@ -272,6 +278,7 @@ docker build -t dionysus . && docker run --rm -e CFLAGS="-Wall -Wextra -Werror" 
     -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples
 docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/sdk.sh --all
 docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/warnings.sh
+docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/docs.sh
 ```
 
 The linters are pinned through [uv](https://docs.astral.sh/uv/) so everyone formats with the same

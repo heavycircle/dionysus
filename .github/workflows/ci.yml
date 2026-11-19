@@ -94,6 +94,12 @@ jobs:
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
             dionysus:ci /repo/tests/warnings.sh "${{ matrix.target }}"
 
+      # docs/: every link resolves, and every complete C program builds and runs.
+      - name: Documentation
+        run: |
+          docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
+            dionysus:ci /repo/tests/docs.sh "${{ matrix.target }}"
+
       - name: Portability warnings against glibc
         if: matrix.target == 'x86_64'
         run: |
