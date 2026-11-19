@@ -43,10 +43,10 @@ int main(void)
 }
 ```
 
-| Function | Does |
-| --- | --- |
-| `int dino_runtime_init(void)` | Initialize every subsystem now. `0` on success, `-1` if any fails. Safe to call any number of times, from any thread. |
-| `void dino_runtime_cleanup(void)` | Tear every subsystem down. Optional. A later call that needs a subsystem initializes it again. |
+| Function                          | Does                                                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `int dino_runtime_init(void)`     | Initialize every subsystem now. `0` on success, `-1` if any fails. Safe to call any number of times, from any thread. |
+| `void dino_runtime_cleanup(void)` | Tear every subsystem down. Optional. A later call that needs a subsystem initializes it again.                        |
 
 Each module's own init function (`dino_net_init()`, `dino_fs_init()`) does the same for that one
 module.

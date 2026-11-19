@@ -87,13 +87,13 @@ int code;
 dino_process_wait(child, &code);
 ```
 
-| Function | Does | Returns |
-| --- | --- | --- |
-| `dino_process_spawn(&p, argv, opts, &pipes)` | Start `argv[0]` with arguments. `opts` and `pipes` may be `NULL`. | `0`, `-1` if it couldn't be started |
-| `dino_process_wait(p, &code)` | Wait for it to end, store how it ended, release it. | `0`, `-1` |
-| `dino_process_wait_timeout(p, timeout_ms, &code)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid. | `0`, `DINO_TIMEOUT`, `-1` |
-| `dino_process_kill(p)` | End it now (`SIGKILL` / `TerminateProcess`). Still wait for it afterwards. | `0`, `-1` |
-| `dino_process_id(p)` | Its OS process ID, for logs. | the ID |
+| Function                                          | Does                                                                                                   | Returns                             |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| `dino_process_spawn(&p, argv, opts, &pipes)`      | Start `argv[0]` with arguments. `opts` and `pipes` may be `NULL`.                                      | `0`, `-1` if it couldn't be started |
+| `dino_process_wait(p, &code)`                     | Wait for it to end, store how it ended, release it.                                                    | `0`, `-1`                           |
+| `dino_process_wait_timeout(p, timeout_ms, &code)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid. | `0`, `DINO_TIMEOUT`, `-1`           |
+| `dino_process_kill(p)`                            | End it now (`SIGKILL` / `TerminateProcess`). Still wait for it afterwards.                             | `0`, `-1`                           |
+| `dino_process_id(p)`                              | Its OS process ID, for logs.                                                                           | the ID                              |
 
 - **`argv[0]`:** a path, or a bare name looked up on `PATH`. Windows also adds `.exe` and looks in a
   few system directories first.
@@ -111,12 +111,12 @@ dino_process_wait(child, &code);
 
 ## This process and the environment
 
-| Function | Does | Returns |
-| --- | --- | --- |
-| `dino_process_current_id()` | This process's ID. | the ID |
+| Function                        | Does                                                                                                                                                           | Returns                   |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| `dino_process_current_id()`     | This process's ID.                                                                                                                                             | the ID                    |
 | `dino_env_get(name, buf, size)` | Read a variable, truncated to fit `buf` like `snprintf`. A return of `size` or more means it was cut; `buf` may be `NULL` with `size` 0 to ask for the length. | its length, `-1` if unset |
-| `dino_env_set(name, value)` | Set a variable. Children spawned afterwards with a `NULL` env see it. | `0`, `-1` |
-| `dino_env_unset(name)` | Remove a variable (removing one that isn't set succeeds). | `0`, `-1` |
+| `dino_env_set(name, value)`     | Set a variable. Children spawned afterwards with a `NULL` env see it.                                                                                          | `0`, `-1`                 |
+| `dino_env_unset(name)`          | Remove a variable (removing one that isn't set succeeds).                                                                                                      | `0`, `-1`                 |
 
 All strings are UTF-8, including on Windows, where the SDK converts them for the wide-character
 APIs. Changing the environment isn't safe while other threads read or change it.

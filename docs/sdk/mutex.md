@@ -70,13 +70,13 @@ int main(void)
 
 ## Mutexes
 
-| Function | Does | Returns |
-| --- | --- | --- |
-| `dino_mutex_create()` | A new mutex. | the handle, or `DINO_INVALID_MUTEX` |
-| `dino_mutex_destroy(m)` | Free it. It must not be locked. | |
-| `dino_mutex_lock(m)` | Lock, waiting if another thread holds it. | `0`, `-1` on error |
-| `dino_mutex_trylock(m)` | Lock only if that's possible right now. | `0` if locked, `-1` if it's held elsewhere |
-| `dino_mutex_unlock(m)` | Unlock. | `0`, `-1` on error |
+| Function                | Does                                      | Returns                                    |
+| ----------------------- | ----------------------------------------- | ------------------------------------------ |
+| `dino_mutex_create()`   | A new mutex.                              | the handle, or `DINO_INVALID_MUTEX`        |
+| `dino_mutex_destroy(m)` | Free it. It must not be locked.           |                                            |
+| `dino_mutex_lock(m)`    | Lock, waiting if another thread holds it. | `0`, `-1` on error                         |
+| `dino_mutex_trylock(m)` | Lock only if that's possible right now.   | `0` if locked, `-1` if it's held elsewhere |
+| `dino_mutex_unlock(m)`  | Unlock.                                   | `0`, `-1` on error                         |
 
 Mutexes are **recursive**: the thread that holds one can lock it again, and must unlock it as many
 times. That's the behaviour of Windows critical sections, and the SDK gives it on Linux too, so code
@@ -84,13 +84,13 @@ doesn't deadlock on one platform only.
 
 ## Condition variables
 
-| Function | Does | Returns |
-| --- | --- | --- |
-| `dino_cond_create()` / `dino_cond_destroy(c)` | Create, or free (no thread may be waiting). | the handle, or `DINO_INVALID_COND` |
-| `dino_cond_wait(c, m)` | Unlock `m`, wait for a signal, lock `m` again. | `0`, `-1` |
-| `dino_cond_timedwait(c, m, timeout_ms)` | The same, giving up after `timeout_ms` (`-1`: never). | `0` when woken, `DINO_TIMEOUT`, `-1` |
-| `dino_cond_signal(c)` | Wake one waiting thread. | `0`, `-1` |
-| `dino_cond_broadcast(c)` | Wake all of them. | `0`, `-1` |
+| Function                                      | Does                                                  | Returns                              |
+| --------------------------------------------- | ----------------------------------------------------- | ------------------------------------ |
+| `dino_cond_create()` / `dino_cond_destroy(c)` | Create, or free (no thread may be waiting).           | the handle, or `DINO_INVALID_COND`   |
+| `dino_cond_wait(c, m)`                        | Unlock `m`, wait for a signal, lock `m` again.        | `0`, `-1`                            |
+| `dino_cond_timedwait(c, m, timeout_ms)`       | The same, giving up after `timeout_ms` (`-1`: never). | `0` when woken, `DINO_TIMEOUT`, `-1` |
+| `dino_cond_signal(c)`                         | Wake one waiting thread.                              | `0`, `-1`                            |
+| `dino_cond_broadcast(c)`                      | Wake all of them.                                     | `0`, `-1`                            |
 
 - **Re-check in a loop:** wake-ups can be spurious, so always wait in a loop that re-checks the
   condition, as the example does.

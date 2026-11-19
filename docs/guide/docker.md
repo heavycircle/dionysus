@@ -28,12 +28,12 @@ The alias always works on the current directory, so `-C <dir>` must name a path 
 
 ## Tags
 
-| Tag | What it is |
-| --- | --- |
-| `:stable`, `:latest` | the newest release |
-| `:X.Y.Z` | one release, unchanging. Use this in CI, so builds don't change under you. |
-| `:X.Y` | the newest patch release of a minor version |
-| `:nightly` | the latest `main` |
+| Tag                  | What it is                                                                 |
+| -------------------- | -------------------------------------------------------------------------- |
+| `:stable`, `:latest` | the newest release                                                         |
+| `:X.Y.Z`             | one release, unchanging. Use this in CI, so builds don't change under you. |
+| `:X.Y`               | the newest patch release of a minor version                                |
+| `:nightly`           | the latest `main`                                                          |
 
 ## File ownership
 

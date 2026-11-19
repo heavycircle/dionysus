@@ -93,16 +93,16 @@ and run them there.
 
 ## Options
 
-| Option | Commands | Effect |
-| --- | --- | --- |
-| `-C <dir>` | all | use `<dir>` as the project directory |
-| `--debug`, `--release` | build, run, test | choose the build mode (release is the default) |
-| `-j <n>`, `--jobs <n>` | build, run, test | parallel jobs (default: number of CPUs) |
-| `-v`, `--verbose` | build, run, test | show the CMake commands and the full compiler output |
-| `--all` | build, test | every named target |
-| `-- <args>` | build | passed to CMake's configure step, e.g. `-- -DENABLE_LOGGING=ON` |
-| `-- <args>` | run | passed to the program |
-| `-- <args>` | test | passed to `ctest` |
+| Option                 | Commands         | Effect                                                          |
+| ---------------------- | ---------------- | --------------------------------------------------------------- |
+| `-C <dir>`             | all              | use `<dir>` as the project directory                            |
+| `--debug`, `--release` | build, run, test | choose the build mode (release is the default)                  |
+| `-j <n>`, `--jobs <n>` | build, run, test | parallel jobs (default: number of CPUs)                         |
+| `-v`, `--verbose`      | build, run, test | show the CMake commands and the full compiler output            |
+| `--all`                | build, test      | every named target                                              |
+| `-- <args>`            | build            | passed to CMake's configure step, e.g. `-- -DENABLE_LOGGING=ON` |
+| `-- <args>`            | run              | passed to the program                                           |
+| `-- <args>`            | test             | passed to `ctest`                                               |
 
 ## When things are rebuilt
 

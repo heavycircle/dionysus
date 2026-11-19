@@ -39,8 +39,8 @@ int main(void)
 }
 ```
 
-| Function | Returns |
-| --- | --- |
+| Function                                               | Returns                                                                                                                                                                    |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `int dino_file_size(const char *path, uint64_t *size)` | `0` with the size in `*size`; `-1` (and `*size` 0) if the file doesn't exist, isn't a regular file (a directory, for example), can't be examined, or for a `NULL` argument |
 
 ## Stdio for programs the kernel starts
@@ -53,8 +53,8 @@ become descriptors 0, 1 and 2, and a later `printf` writes into one of them.
 It's already run before `main()` in every program that links `dino_core` (see [runtime](runtime.md)),
 so you only call it yourself if you build with `DINO_NO_AUTO_RUNTIME`.
 
-| Function | Does | Returns |
-| --- | --- | --- |
+| Function         | Does                                                                    | Returns                                     |
+| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------- |
 | `dino_fs_init()` | Point closed stdio descriptors at `/dev/null`. Does nothing on Windows. | `0`, `-1` if `/dev/null` couldn't be opened |
 
 See also: [`examples/fs_example`](../../examples/fs_example/main.c).

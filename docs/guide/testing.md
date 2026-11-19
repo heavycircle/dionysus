@@ -54,9 +54,11 @@ UTEST_MAIN()
 ```
 
 - `EXPECT_*` records a failure and continues the case. `ASSERT_*` stops it.
+
 - The checks are `EQ`, `NE`, `LT`, `LE`, `GT`, `GE`, `TRUE`, `FALSE`, `NEAR` (floats within a
   tolerance), `STREQ`, `STRNE`, `STRNEQ`/`STRNNE` (the first *n* characters) and `MEMEQ`, each as
   `EXPECT_` and `ASSERT_`, and each with a `_MSG` form that adds a message.
+
 - Fixtures share setup and teardown across cases:
 
   ```

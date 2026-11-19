@@ -56,18 +56,18 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms);
 
 Each `dino_pollfd_t` has `sock`, the `events` you want, and `revents`, filled in with what's ready.
 
-| Flag | In `events` | In `revents` |
-| --- | --- | --- |
-| `DINO_POLLIN` | wait for data, a connection to accept, or end of stream | readable |
-| `DINO_POLLOUT` | wait until a send won't block, or a `connect` finished | writable |
-| `DINO_POLLERR` | not needed | reported whenever it happens |
-| `DINO_POLLHUP` | not needed | the peer hung up; reported whenever it happens |
+| Flag           | In `events`                                             | In `revents`                                   |
+| -------------- | ------------------------------------------------------- | ---------------------------------------------- |
+| `DINO_POLLIN`  | wait for data, a connection to accept, or end of stream | readable                                       |
+| `DINO_POLLOUT` | wait until a send won't block, or a `connect` finished  | writable                                       |
+| `DINO_POLLERR` | not needed                                              | reported whenever it happens                   |
+| `DINO_POLLHUP` | not needed                                              | the peer hung up; reported whenever it happens |
 
 It returns the number of sockets with something in `revents`, `0` on timeout (every `revents` is
 then `0`), or `-1` on error.
 
 A peer that closes the connection shows up as `DINO_POLLIN` on Linux (and the next `recv` returns
-0) but as `DINO_POLLHUP` on Windows. Treat either as "read now"; `recv` returning 0 is the portable
+0\) but as `DINO_POLLHUP` on Windows. Treat either as "read now"; `recv` returning 0 is the portable
 signal that the stream ended.
 
 ## `dino_select`
@@ -80,13 +80,13 @@ if (n > 0 && dino_fd_set_has(set, sock)) { ... }
 dino_fd_set_destroy(set);
 ```
 
-| Function | Does |
-| --- | --- |
-| `dino_fd_set_create()` | a new, empty set, or `DINO_INVALID_FD_SET` |
-| `dino_fd_set_destroy(set)` | free it |
-| `dino_fd_set_zero(set)`, `dino_fd_set_add(set, s)`, `dino_fd_set_del(set, s)` | `FD_ZERO`, `FD_SET`, `FD_CLR` |
-| `dino_fd_set_has(set, s)` | `FD_ISSET`: non-zero if `s` is in the set |
-| `dino_select(max_fd, rfds, wfds, efds, timeout_ms)` | wait; returns the number ready, `0` on timeout, `-1` on error |
+| Function                                                                      | Does                                                          |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `dino_fd_set_create()`                                                        | a new, empty set, or `DINO_INVALID_FD_SET`                    |
+| `dino_fd_set_destroy(set)`                                                    | free it                                                       |
+| `dino_fd_set_zero(set)`, `dino_fd_set_add(set, s)`, `dino_fd_set_del(set, s)` | `FD_ZERO`, `FD_SET`, `FD_CLR`                                 |
+| `dino_fd_set_has(set, s)`                                                     | `FD_ISSET`: non-zero if `s` is in the set                     |
+| `dino_select(max_fd, rfds, wfds, efds, timeout_ms)`                           | wait; returns the number ready, `0` on timeout, `-1` on error |
 
 - **`max_fd`** is the highest socket plus one, as for `select()`. Windows ignores it, but pass it for
   Linux.

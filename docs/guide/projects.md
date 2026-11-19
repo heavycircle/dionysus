@@ -4,13 +4,13 @@ A dino project is an ordinary CMake project. `dino` adds the SDK and a few funct
 project it builds, through CMake's `CMAKE_PROJECT_INCLUDE` hook, so a `CMakeLists.txt` never needs
 to know where the SDK is:
 
-| Provided | What it is |
-| --- | --- |
-| `dino_executable(name sources...)` | `add_executable()` plus linking `dino_util` (and with it `dino_core`) |
-| `dino_test(name sources...)` | a test executable with utest.h and the leak check, registered with CTest (see [Testing](testing.md)) |
-| `dino_core` | the portability layer: sockets, threads, processes, pipes, the event loop, ... |
-| `dino_util` | extras built on it, such as logging |
-| `DINO_SDK_VERSION` | the SDK's version, for example `0.6.0` |
+| Provided                           | What it is                                                                                           |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `dino_executable(name sources...)` | `add_executable()` plus linking `dino_util` (and with it `dino_core`)                                |
+| `dino_test(name sources...)`       | a test executable with utest.h and the leak check, registered with CTest (see [Testing](testing.md)) |
+| `dino_core`                        | the portability layer: sockets, threads, processes, pipes, the event loop, ...                       |
+| `dino_util`                        | extras built on it, such as logging                                                                  |
+| `DINO_SDK_VERSION`                 | the SDK's version, for example `0.6.0`                                                               |
 
 Everything else is plain CMake, so any CMake guide applies. This page covers what most projects
 need.
@@ -91,9 +91,12 @@ Everything links statically, so libraries need to be static (`STATIC`), or heade
 - **Your own code or vendored third-party code** in the repository: `add_library()` or
   `add_subdirectory()`, as above. Silence warnings in code you don't own with
   `target_compile_options(vendored PRIVATE -w)`.
+
 - **Libraries shared across many projects:** register them once in `DINO_LIBRARY_PATH`, and every
   project links them by name. See [Organization libraries](libraries.md).
+
 - **System libraries** come from the target's C library, not the host's:
+
   - On Linux, musl's libc already contains the math and thread functions, so `-lm` and `-pthread`
     aren't needed (and are harmless).
   - On Windows, MinGW-w64 provides the usual import libraries; `dino_core` already links `ws2_32`.
@@ -134,11 +137,11 @@ set(DINO_NO_PLATFORM_WARNINGS ON)
 project(app C)
 ```
 
-| Option | Effect |
-| --- | --- |
-| `DINO_NO_AUTO_RUNTIME` | don't run the SDK's setup before `main()` (see [runtime](../sdk/runtime.md)) |
-| `DINO_NO_LEAK_CHECK` | don't link the leak check into `dino_test()` executables |
-| `DINO_NO_PLATFORM_WARNINGS` | don't warn about platform calls that have a `dino_*` replacement |
+| Option                      | Effect                                                                       |
+| --------------------------- | ---------------------------------------------------------------------------- |
+| `DINO_NO_AUTO_RUNTIME`      | don't run the SDK's setup before `main()` (see [runtime](../sdk/runtime.md)) |
+| `DINO_NO_LEAK_CHECK`        | don't link the leak check into `dino_test()` executables                     |
+| `DINO_NO_PLATFORM_WARNINGS` | don't warn about platform calls that have a `dino_*` replacement             |
 
 ## Using the SDK from an existing project
 

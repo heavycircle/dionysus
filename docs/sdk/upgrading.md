@@ -14,16 +14,16 @@ consistent across the SDK, so 1.0 starts clean.
 Every name in `process.h` now starts with `dino_process_`, and every type in `network.h` with
 `dino_socket_`. Rename them in your code; their contents are unchanged.
 
-| 0.5 | 0.6 |
-| --- | --- |
-| `dino_spawn_opts_t` | `dino_process_spawn_opts_t` |
-| `dino_run_opts_t` | `dino_process_run_opts_t` |
-| `dino_run_result_t` | `dino_process_result_t` |
+| 0.5                      | 0.6                          |
+| ------------------------ | ---------------------------- |
+| `dino_spawn_opts_t`      | `dino_process_spawn_opts_t`  |
+| `dino_run_opts_t`        | `dino_process_run_opts_t`    |
+| `dino_run_result_t`      | `dino_process_result_t`      |
 | `dino_run_result_free()` | `dino_process_result_free()` |
-| `dino_domain_t` | `dino_socket_domain_t` |
-| `dino_type_t` | `dino_socket_type_t` |
-| `dino_protocol_t` | `dino_socket_protocol_t` |
-| `dino_shutdown_how_t` | `dino_socket_shutdown_t` |
+| `dino_domain_t`          | `dino_socket_domain_t`       |
+| `dino_type_t`            | `dino_socket_type_t`         |
+| `dino_protocol_t`        | `dino_socket_protocol_t`     |
+| `dino_shutdown_how_t`    | `dino_socket_shutdown_t`     |
 
 The constants (`DINO_AF_INET`, `DINO_SOCK_STREAM`, `DINO_IPPROTO_TCP`, `DINO_SHUT_RDWR`, ...) keep
 their names. A `sed` that does it all:
@@ -61,12 +61,12 @@ The arguments are now in the same order as `dino_fd_set_add` and `dino_fd_set_de
 
 ### Removed
 
-| Removed | Instead |
-| --- | --- |
-| `DINO_ENABLE_AUTO_RUNTIME;` | delete the line: setup has been automatic since 0.3 |
+| Removed                                                       | Instead                                                                           |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `DINO_ENABLE_AUTO_RUNTIME;`                                   | delete the line: setup has been automatic since 0.3                               |
 | `LOG_TRACE`, `LOG_DEBUG`, `LOG_INFO`, `LOG_WARN`, `LOG_ERROR` | `DINO_LOG_TRACE` ... `DINO_LOG_ERROR`. The short names clashed with `<syslog.h>`. |
-| `dino_fs_cleanup()` | delete the call: it did nothing |
-| `#include <dino/core/kernel.h>` | delete the line: the header was empty |
+| `dino_fs_cleanup()`                                           | delete the call: it did nothing                                                   |
+| `#include <dino/core/kernel.h>`                               | delete the line: the header was empty                                             |
 
 ### Timeouts are `int`
 
