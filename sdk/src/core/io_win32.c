@@ -86,11 +86,19 @@ void dino_fd_set_zero(dino_fd_set_t set)
     FD_ZERO((fd_set *)set);
 }
 
-void dino_fd_set_add(dino_fd_set_t set, dino_socket_t sock)
+// A Windows set is a list of up to FD_SETSIZE (64) sockets; FD_SET drops any
+// more without saying so.
+int dino_fd_set_add(dino_fd_set_t set, dino_socket_t sock)
 {
-    if (set == DINO_INVALID_FD_SET)
-        return;
-    FD_SET((SOCKET)sock, (fd_set *)set);
+    fd_set *s = (fd_set *)set;
+    if (set == DINO_INVALID_FD_SET || sock == DINO_INVALID_SOCKET)
+        return -1;
+    if (FD_ISSET((SOCKET)sock, s))
+        return 0;
+    if (s->fd_count >= FD_SETSIZE)
+        return -1;
+    FD_SET((SOCKET)sock, s);
+    return 0;
 }
 
 void dino_fd_set_del(dino_fd_set_t set, dino_socket_t sock)

@@ -94,6 +94,7 @@ dino_fd_set_destroy(set);
 - **Refilling:** `dino_select` overwrites the sets with the ready sockets, so refill them before
   every call.
 - **Capacity:** a set holds descriptors below 1024 on Linux and at most 64 sockets on Windows.
+  `dino_fd_set_add` returns `-1` for a socket that doesn't fit, `0` otherwise.
 
 Prefer `dino_poll`: it has no size limits and doesn't need the sets rebuilt.
 

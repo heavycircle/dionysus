@@ -84,6 +84,9 @@ platform error code or `1` on failure. They return `-1` now, like everything els
 ### New
 
 - **C++:** every header can be included from C++ (the declarations have C linkage).
+- **`dino_fd_set_add` returns `int`:** `-1` for a socket that doesn't fit the set (1024 and up on
+  Linux, the 65th on Windows), which it used to write out of bounds or drop. Existing calls compile
+  unchanged.
 - **UTF-8 paths:** `dino_file_size` takes UTF-8 paths on Windows, like the rest of the API.
 - **Portability warnings:** calls to platform functions that have a `dino_*` replacement now warn.
   See [portability warnings](../guide/portability-warnings.md).

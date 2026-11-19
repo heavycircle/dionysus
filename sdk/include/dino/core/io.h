@@ -81,10 +81,16 @@ void dino_fd_set_zero(dino_fd_set_t set);
 /**
  * Add a socket to the set (equivalent to FD_SET).
  *
+ * A set holds sockets below 1024 on Linux (descriptor numbers, so a process
+ * with many files open can get one that doesn't fit) and at most 64 sockets on
+ * Windows. dino_poll has neither limit.
+ *
  * @param  set   Target set.
  * @param  sock  Socket to add.
+ * @return 0 on success (including a socket already in the set), -1 if it
+ *         doesn't fit, or for DINO_INVALID_SOCKET or an invalid set.
  */
-void dino_fd_set_add(dino_fd_set_t set, dino_socket_t sock);
+int dino_fd_set_add(dino_fd_set_t set, dino_socket_t sock);
 
 /**
  * Remove a socket from the set (equivalent to FD_CLR).
