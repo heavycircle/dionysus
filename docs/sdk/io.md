@@ -66,6 +66,10 @@ Each `dino_pollfd_t` has `sock`, the `events` you want, and `revents`, filled in
 It returns the number of sockets with something in `revents`, `0` on timeout (every `revents` is
 then `0`), or `-1` on error.
 
+With nothing to watch (`nfds` is `0`) it waits out the timeout and returns `0`, like a sleep. Windows'
+`WSAPoll` would fail at once; the SDK waits there too, so a server whose last client left doesn't
+spin.
+
 A peer that closes the connection shows up as `DINO_POLLIN` on Linux (and the next `recv` returns
 0\) but as `DINO_POLLHUP` on Windows. Treat either as "read now"; `recv` returning 0 is the portable
 signal that the stream ended.
@@ -91,6 +95,8 @@ dino_fd_set_destroy(set);
 - **`max_fd`** is the highest socket plus one, as for `select()`. Windows ignores it, but pass it for
   Linux.
 - **Unused sets:** pass `DINO_INVALID_FD_SET` for any set you don't need.
+- **Nothing to watch:** with no socket in any set it waits out the timeout and returns `0`, on
+  Windows too.
 - **Refilling:** `dino_select` overwrites the sets with the ready sockets, so refill them before
   every call.
 - **Capacity:** a set holds descriptors below 1024 on Linux and at most 64 sockets on Windows.
