@@ -129,6 +129,7 @@ tests/examples.sh          builds and runs every example on every target
 tests/sdk.sh               runs sdk/tests with `dino test`
 tests/warnings.sh          checks the portability warnings against tests/fixtures/raw_calls
 tests/docs.sh              checks docs links and builds and runs the C programs in docs/
+tests/headers.sh           checks every public header compiles alone as C and C++ and stays namespaced
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
 scripts/lintcommit.sh      checks commit messages
@@ -263,7 +264,7 @@ against glibc's headers.
 
 | Job | What it checks |
 | --- | --- |
-| `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
+| `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
 | `unit` | `zig build test` |
 | `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh` and `tests/docs.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
 
@@ -273,6 +274,7 @@ Run the same checks locally before asking for review:
 zig fmt --check build.zig cli && zig build test
 git ls-files '*.c' '*.h' | xargs uvx --from clang-format==19.1.7 clang-format --dry-run --Werror
 git ls-files '*.sh' | xargs uvx --from shellcheck-py==0.10.0.1 shellcheck
+tests/headers.sh
 scripts/tidy.sh uvx --from clang-tidy==19.1.0 clang-tidy
 scripts/lintcommit.sh origin/main..HEAD
 docker build -t dionysus . && docker run --rm -e CFLAGS="-Wall -Wextra -Werror" \
