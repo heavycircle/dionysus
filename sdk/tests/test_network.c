@@ -149,7 +149,8 @@ UTEST(network, negative_lengths_are_rejected)
     {
         char buf[4];
         char guard[4];
-    } g = { "....", "...." };
+    } g;
+    memset(&g, '.', sizeof(g));
     EXPECT_EQ(-1, dino_socket_recv(p.peer, g.buf, -1));
     EXPECT_EQ(0, memcmp(g.guard, "....", 4));
     EXPECT_EQ(-1, dino_socket_send(p.client, "x", -1));
