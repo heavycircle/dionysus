@@ -2,6 +2,7 @@
 
 #include <dino/core/io.h>
 #include <dino/core/network.h>
+#include <dino/core/time.h>
 
 #define PORT       18200
 #define TIMEOUT_MS 5000
@@ -117,6 +118,60 @@ UTEST(poll, several_sockets_report_individually)
     EXPECT_TRUE(pfds[0].revents & DINO_POLLIN);
     EXPECT_EQ(0, pfds[1].revents);
     close_pair(&p);
+}
+
+static unsigned elapsed_ms(uint64_t start)
+{
+    return (unsigned)((dino_time_monotonic_ns() - start) / 1000000);
+}
+
+// Nothing to watch is a sleep, as on Linux. WSAPoll and Winsock's select
+// failed at once instead, so a server whose client list emptied spun.
+UTEST(poll, nothing_to_watch_waits_out_the_timeout)
+{
+    uint64_t start = dino_time_monotonic_ns();
+    EXPECT_EQ(0, dino_poll(NULL, 0, 150));
+    EXPECT_GE(elapsed_ms(start), 140u);
+    EXPECT_EQ(0, dino_poll(NULL, 0, 0));
+}
+
+// An invalid entry is an unused slot: Linux's poll skips fd -1, but WSAPoll
+// reported it as an error and counted it.
+UTEST(poll, invalid_entries_are_skipped)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, PORT + 7));
+    ASSERT_EQ(4, dino_socket_send(p.client, "ping", 4));
+    dino_pollfd_t pfds[3] = {
+        { DINO_INVALID_SOCKET, DINO_POLLIN, 0 },
+        { p.peer, DINO_POLLIN, 0 },
+        { DINO_INVALID_SOCKET, DINO_POLLIN | DINO_POLLOUT, 0 },
+    };
+    EXPECT_EQ(1, dino_poll(pfds, 3, TIMEOUT_MS));
+    EXPECT_EQ(0, pfds[0].revents);
+    EXPECT_TRUE(pfds[1].revents & DINO_POLLIN);
+    EXPECT_EQ(0, pfds[2].revents);
+
+    // Only unused slots: nothing to watch.
+    uint64_t start = dino_time_monotonic_ns();
+    EXPECT_EQ(0, dino_poll(pfds, 1, 150));
+    EXPECT_GE(elapsed_ms(start), 140u);
+    EXPECT_EQ(0, pfds[0].revents);
+    close_pair(&p);
+}
+
+UTEST(select, nothing_to_watch_waits_out_the_timeout)
+{
+    uint64_t start = dino_time_monotonic_ns();
+    EXPECT_EQ(
+        0, dino_select(0, DINO_INVALID_FD_SET, DINO_INVALID_FD_SET, DINO_INVALID_FD_SET, 150));
+    EXPECT_GE(elapsed_ms(start), 140u);
+
+    dino_fd_set_t empty = dino_fd_set_create();
+    start               = dino_time_monotonic_ns();
+    EXPECT_EQ(0, dino_select(0, empty, DINO_INVALID_FD_SET, empty, 150));
+    EXPECT_GE(elapsed_ms(start), 140u);
+    dino_fd_set_destroy(empty);
 }
 
 UTEST(fd_set, add_test_remove)

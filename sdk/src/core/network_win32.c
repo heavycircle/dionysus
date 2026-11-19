@@ -104,6 +104,12 @@ dino_socket_t dino_socket_create(
         os_domain, os_type, os_protocol, NULL, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
     if (s == INVALID_SOCKET)
         return DINO_INVALID_SOCKET;
+    // The OS default differs (dual-stack on Linux, v6-only on Windows).
+    if (os_domain == AF_INET6 && dino_socket_set_v6only((dino_socket_t)s, 1) != 0)
+    {
+        closesocket(s);
+        return DINO_INVALID_SOCKET;
+    }
 
     return (dino_socket_t)s;
 }
@@ -121,7 +127,7 @@ int dino_socket_close(dino_socket_t sock)
 
 // The address string picks the family, so one call works for both IPv4 and
 // IPv6 sockets. A string that is neither fails instead of silently binding or
-// connecting to 0.0.0.0.
+// connecting to 0.0.0.0, and so does a port that doesn't fit in 16 bits.
 static int dino_sockaddr(
     struct sockaddr_storage *addr, dino_socklen_t *len, const char *ip, int port)
 {
@@ -129,7 +135,7 @@ static int dino_sockaddr(
     struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)addr;
 
     memset(addr, 0, sizeof(*addr));
-    if (ip == NULL)
+    if (ip == NULL || port < 0 || port > 65535)
         return -1;
 
     if (inet_pton(AF_INET, ip, &v4->sin_addr) == 1)
@@ -177,8 +183,11 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
     SOCKET client = accept((SOCKET)sock, (struct sockaddr *)&addr, &len);
     if (client == INVALID_SOCKET)
         return DINO_INVALID_SOCKET;
-    // Not documented to carry over from the listening socket.
-    if (!SetHandleInformation((HANDLE)client, HANDLE_FLAG_INHERIT, 0))
+    // Not documented to carry over from the listening socket. Non-blocking
+    // mode does carry over on Windows; Linux's accept4 never does, so clear it.
+    u_long blocking = 0;
+    if (!SetHandleInformation((HANDLE)client, HANDLE_FLAG_INHERIT, 0)
+        || ioctlsocket(client, FIONBIO, &blocking) != 0)
     {
         closesocket(client);
         return DINO_INVALID_SOCKET;
@@ -221,10 +230,30 @@ int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *v
     return (rc == SOCKET_ERROR) ? -1 : 0;
 }
 
+// Windows already lets a server rebind its port while old connections linger,
+// which is all SO_REUSEADDR is for on POSIX. Its own SO_REUSEADDR does more:
+// a second socket may bind a port another socket is listening on and take its
+// connections. So it is never set (as libuv does).
 int dino_socket_set_reuseaddr(dino_socket_t sock, int enable)
 {
+    (void)enable;
+    if (sock == DINO_INVALID_SOCKET)
+        return -1;
+    int type, len = sizeof(type);
+    return getsockopt((SOCKET)sock, SOL_SOCKET, SO_TYPE, (char *)&type, &len) == 0 ? 0 : -1;
+}
+
+int dino_socket_set_v6only(dino_socket_t sock, int enable)
+{
+    // Some Winsock providers accept the option on an IPv4 socket; Linux
+    // refuses it, so check the family here.
+    WSAPROTOCOL_INFOW info;
+    int               len = sizeof(info);
+    if (getsockopt((SOCKET)sock, SOL_SOCKET, SO_PROTOCOL_INFOW, (char *)&info, &len) != 0
+        || info.iAddressFamily != AF_INET6)
+        return -1;
     int flag = enable ? 1 : 0;
-    return dino_socket_setopt(sock, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+    return dino_socket_setopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag));
 }
 
 int dino_socket_set_nonblocking(dino_socket_t sock, int enable)

@@ -48,6 +48,11 @@ typedef uintptr_t dino_fd_set_t;
  * values, and DINO_POLLERR and DINO_POLLHUP are reported whether requested or
  * not. Every revents is reset, so it is 0 on timeout.
  *
+ * An entry whose sock is DINO_INVALID_SOCKET is an unused slot: it is skipped
+ * and its revents is 0. With nothing to watch (nfds 0, or only unused slots)
+ * it waits out the timeout and returns 0, on Windows too, where WSAPoll would
+ * fail.
+ *
  * @param  fds        Array of dino_pollfd_t descriptors.
  * @param  nfds       Number of entries in fds.
  * @param  timeout_ms Milliseconds to wait; -1 to block; 0 for immediate return.
@@ -117,7 +122,9 @@ int dino_fd_set_has(dino_fd_set_t set, dino_socket_t sock);
  * On Windows, max_fd is ignored (WinSock select ignores nfds).
  * On Linux, max_fd should be the highest socket fd value plus 1.
  *
- * Pass DINO_INVALID_FD_SET for any set you do not wish to monitor.
+ * Pass DINO_INVALID_FD_SET for any set you do not wish to monitor. With no
+ * socket in any set it waits out the timeout and returns 0, on Windows too,
+ * where select would fail.
  *
  * @param  max_fd     Highest fd + 1 (Linux only).
  * @param  rfds       Read-ready set, or DINO_INVALID_FD_SET.

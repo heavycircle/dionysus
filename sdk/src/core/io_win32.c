@@ -34,28 +34,43 @@ static short from_os_revents(SHORT os)
     return revents;
 }
 
+// WSAPoll and select fail with WSAEINVAL when there is nothing to watch; POSIX
+// waits out the timeout, so do that.
+static int idle(int timeout_ms)
+{
+    Sleep(timeout_ms < 0 ? INFINITE : (DWORD)timeout_ms);
+    return 0;
+}
+
 int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
 {
+    if (nfds < 0)
+        return -1;
     WSAPOLLFD  stack_buf[64];
     WSAPOLLFD *wfds = nfds <= 64 ? stack_buf : malloc((size_t)nfds * sizeof(WSAPOLLFD));
     if (!wfds)
         return -1;
 
-    for (int i = 0; i < nfds; i++)
-    {
-        wfds[i].fd      = (SOCKET)fds[i].sock;
-        wfds[i].events  = to_os_events(fds[i].events);
-        wfds[i].revents = 0;
-    }
-
-    int rc = WSAPoll(wfds, (ULONG)nfds, timeout_ms);
-
+    // Unused slots (DINO_INVALID_SOCKET) are left out, as poll skips fd -1:
+    // WSAPoll would report them as errors.
+    ULONG n = 0;
     for (int i = 0; i < nfds; i++)
     {
         fds[i].revents = 0;
-        if (rc > 0)
-            fds[i].revents = from_os_revents(wfds[i].revents);
+        if (fds[i].sock == DINO_INVALID_SOCKET)
+            continue;
+        wfds[n].fd      = (SOCKET)fds[i].sock;
+        wfds[n].events  = to_os_events(fds[i].events);
+        wfds[n].revents = 0;
+        n++;
     }
+
+    int rc = n == 0 ? idle(timeout_ms) : WSAPoll(wfds, n, timeout_ms);
+
+    if (rc > 0)
+        for (int i = 0, j = 0; i < nfds; i++)
+            if (fds[i].sock != DINO_INVALID_SOCKET)
+                fds[i].revents = from_os_revents(wfds[j++].revents);
 
     if (wfds != stack_buf)
         free(wfds);
@@ -119,6 +134,13 @@ int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, di
     int timeout_ms)
 {
     (void)max_fd;
+    dino_fd_set_t sets[3] = { rfds, wfds, efds };
+    u_int         count   = 0;
+    for (int i = 0; i < 3; i++)
+        if (sets[i] != DINO_INVALID_FD_SET)
+            count += ((fd_set *)sets[i])->fd_count;
+    if (count == 0)
+        return idle(timeout_ms);
 
     struct timeval  tv;
     struct timeval *tvp = NULL;

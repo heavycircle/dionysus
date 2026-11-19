@@ -78,6 +78,12 @@ dino_socket_t dino_socket_create(
     int s = socket(os_domain, os_type | SOCK_CLOEXEC, os_protocol);
     if (s == INVALID_SOCKET)
         return DINO_INVALID_SOCKET;
+    // The OS default differs (dual-stack on Linux, v6-only on Windows).
+    if (os_domain == AF_INET6 && dino_socket_set_v6only((dino_socket_t)s, 1) != 0)
+    {
+        close(s);
+        return DINO_INVALID_SOCKET;
+    }
 
     return (dino_socket_t)s;
 }
@@ -95,7 +101,7 @@ int dino_socket_close(dino_socket_t sock)
 
 // The address string picks the family, so one call works for both IPv4 and
 // IPv6 sockets. A string that is neither fails instead of silently binding or
-// connecting to 0.0.0.0.
+// connecting to 0.0.0.0, and so does a port that doesn't fit in 16 bits.
 static int dino_sockaddr(
     struct sockaddr_storage *addr, dino_socklen_t *len, const char *ip, int port)
 {
@@ -103,7 +109,7 @@ static int dino_sockaddr(
     struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)addr;
 
     memset(addr, 0, sizeof(*addr));
-    if (ip == NULL)
+    if (ip == NULL || port < 0 || port > 65535)
         return -1;
 
     if (inet_pton(AF_INET, ip, &v4->sin_addr) == 1)
@@ -196,6 +202,12 @@ int dino_socket_set_reuseaddr(dino_socket_t sock, int enable)
 {
     int flag = enable ? 1 : 0;
     return dino_socket_setopt(sock, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+}
+
+int dino_socket_set_v6only(dino_socket_t sock, int enable)
+{
+    int flag = enable ? 1 : 0;
+    return dino_socket_setopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag));
 }
 
 int dino_socket_set_nonblocking(dino_socket_t sock, int enable)

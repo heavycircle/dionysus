@@ -42,6 +42,32 @@ done:
     return ok;
 }
 
+// One IPv6 listener on "::" for both families. IPv6 sockets start v6-only on
+// every platform; set_v6only(0) makes this one take the IPv4 client too.
+static int dual_stack(void)
+{
+    dino_socket_t server = dino_socket_create(DINO_AF_INET6, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t client = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t peer   = DINO_INVALID_SOCKET;
+    char          buf[8] = { 0 };
+
+    dino_socket_set_reuseaddr(server, 1);
+    int ok = dino_socket_set_v6only(server, 0) == 0 && dino_socket_bind(server, "::", PORT + 1) == 0
+        && dino_socket_listen(server, 1) == 0
+        && dino_socket_connect(client, "127.0.0.1", PORT + 1) == 0;
+    if (ok)
+        peer = dino_socket_accept(server);
+    ok = ok && peer != DINO_INVALID_SOCKET && dino_socket_send(client, "ping", 4) == 4
+        && dino_socket_recv(peer, buf, 4) == 4 && strcmp(buf, "ping") == 0;
+
+    printf("IPv4 client, dual-stack listener on :: %s\n", ok ? "ok" : "FAILED");
+    if (peer != DINO_INVALID_SOCKET)
+        dino_socket_close(peer);
+    dino_socket_close(client);
+    dino_socket_close(server);
+    return ok;
+}
+
 // Strings that aren't address literals must fail rather than become 0.0.0.0.
 // Binding port 0 succeeds for any valid address, so only rejecting the string
 // can make it fail.
@@ -61,6 +87,7 @@ int main(void)
 {
     int ok = echo(DINO_AF_INET, "127.0.0.1");
     ok &= echo(DINO_AF_INET6, "::1");
+    ok &= dual_stack();
     ok &= rejects("localhost");
     ok &= rejects("256.0.0.1");
     ok &= rejects("::zz");

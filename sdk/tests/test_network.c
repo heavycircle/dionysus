@@ -9,6 +9,7 @@
 #include <utest.h>
 
 #include <dino/core/network.h>
+#include <dino/core/thread.h>
 #include <dino/core/time.h>
 
 // Each test file has its own port range: ctest runs test executables in parallel.
@@ -94,6 +95,50 @@ UTEST(network, echo_ipv6)
     echo(utest_result, DINO_AF_INET6, "::1", PORT + 1);
 }
 
+// Linux defaults to dual-stack, Windows to v6-only: the SDK picks v6-only.
+UTEST(network, ipv6_sockets_are_v6_only_by_default)
+{
+    dino_socket_t v6 = dino_socket_create(DINO_AF_INET6, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t v4 = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t c  = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_set_reuseaddr(v6, 1);
+    ASSERT_EQ(0, dino_socket_bind(v6, "::", PORT + 9));
+    ASSERT_EQ(0, dino_socket_listen(v6, 1));
+    // The IPv4 side of the port is still free, and nothing listens on it yet.
+    EXPECT_NE(0, dino_socket_connect(c, "127.0.0.1", PORT + 9));
+    EXPECT_EQ(0, dino_socket_bind(v4, "0.0.0.0", PORT + 9));
+    dino_socket_close(c);
+    dino_socket_close(v4);
+    dino_socket_close(v6);
+}
+
+UTEST(network, set_v6only_0_accepts_ipv4_peers)
+{
+    dino_socket_t v6 = dino_socket_create(DINO_AF_INET6, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t c  = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_set_reuseaddr(v6, 1);
+    ASSERT_EQ(0, dino_socket_set_v6only(v6, 0));
+    ASSERT_EQ(0, dino_socket_bind(v6, "::", PORT + 10));
+    ASSERT_EQ(0, dino_socket_listen(v6, 1));
+    ASSERT_EQ(0, dino_socket_connect(c, "127.0.0.1", PORT + 10));
+    dino_socket_t peer = dino_socket_accept(v6);
+    EXPECT_NE(DINO_INVALID_SOCKET, peer);
+    EXPECT_EQ(2, dino_socket_send(c, "hi", 2));
+    char buf[2];
+    EXPECT_EQ(2, dino_socket_recv(peer, buf, 2));
+    dino_socket_close(peer);
+    dino_socket_close(c);
+    dino_socket_close(v6);
+}
+
+UTEST(network, set_v6only_needs_an_ipv6_socket)
+{
+    dino_socket_t v4 = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    EXPECT_EQ(-1, dino_socket_set_v6only(v4, 1));
+    EXPECT_EQ(-1, dino_socket_set_v6only(DINO_INVALID_SOCKET, 1));
+    dino_socket_close(v4);
+}
+
 UTEST(network, invalid_addresses_are_rejected)
 {
     const char *bad[] = { "localhost", "256.0.0.1", "::zz", "", NULL };
@@ -106,6 +151,35 @@ UTEST(network, invalid_addresses_are_rejected)
         EXPECT_NE(0, dino_socket_connect(s, bad[i], PORT + 2));
         dino_socket_close(s);
     }
+}
+
+// They were cut to 16 bits: 65536 + n bound port n, and -1 bound 65535.
+UTEST(network, ports_outside_16_bits_are_rejected)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    EXPECT_EQ(-1, dino_socket_bind(s, "127.0.0.1", 65536 + PORT + 11));
+    EXPECT_EQ(-1, dino_socket_bind(s, "127.0.0.1", -1));
+    EXPECT_EQ(-1, dino_socket_connect(s, "127.0.0.1", 70000));
+    EXPECT_EQ(0, dino_socket_bind(s, "127.0.0.1", 0)); // any free port
+    dino_socket_close(s);
+}
+
+// Rebinding after a restart is the point; taking a port someone is listening
+// on is not, though Windows' SO_REUSEADDR would allow it (wine doesn't).
+UTEST(network, reuseaddr_never_shares_a_listening_port)
+{
+    dino_socket_t a = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t b = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    EXPECT_EQ(0, dino_socket_set_reuseaddr(a, 1));
+    EXPECT_EQ(0, dino_socket_set_reuseaddr(b, 1));
+    ASSERT_EQ(0, dino_socket_bind(a, "127.0.0.1", PORT + 12));
+    ASSERT_EQ(0, dino_socket_listen(a, 1));
+    EXPECT_EQ(-1, dino_socket_bind(b, "127.0.0.1", PORT + 12));
+    EXPECT_EQ(0, dino_socket_set_reuseaddr(a, 0));
+    EXPECT_EQ(-1, dino_socket_set_reuseaddr(DINO_INVALID_SOCKET, 1));
+    dino_socket_close(b);
+    dino_socket_close(a);
 }
 
 UTEST(network, accept_on_unlistened_socket_fails)
@@ -127,6 +201,36 @@ UTEST(network, nonblocking_accept_returns_immediately)
     // Nobody is connecting: a blocking accept would hang here.
     EXPECT_EQ(DINO_INVALID_SOCKET, dino_socket_accept(s));
     dino_socket_close(s);
+}
+
+static int send_later(void *arg)
+{
+    dino_sleep_ms(200);
+    return dino_socket_send(*(dino_socket_t *)arg, "x", 1) == 1 ? 0 : -1;
+}
+
+// Windows' accept copies the listener's non-blocking mode; Linux's doesn't.
+UTEST(network, accepted_sockets_are_blocking)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, DINO_AF_INET, "127.0.0.1", PORT + 8));
+    dino_socket_close(p.peer);
+    dino_socket_close(p.client);
+    ASSERT_EQ(0, dino_socket_set_nonblocking(p.server, 1));
+    p.client = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    ASSERT_EQ(0, dino_socket_connect(p.client, "127.0.0.1", PORT + 8));
+    p.peer = dino_socket_accept(p.server);
+    ASSERT_NE(DINO_INVALID_SOCKET, p.peer);
+
+    // Non-blocking, the recv would fail at once instead of waiting for the byte.
+    dino_thread_t sender;
+    ASSERT_EQ(0, dino_thread_create(&sender, send_later, &p.client));
+    char buf[1];
+    EXPECT_EQ(1, dino_socket_recv(p.peer, buf, 1));
+    int result = -1;
+    dino_thread_join(sender, &result);
+    EXPECT_EQ(0, result);
+    close_pair(&p);
 }
 
 UTEST(network, recv_sees_orderly_shutdown)

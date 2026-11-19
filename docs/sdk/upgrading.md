@@ -81,6 +81,19 @@ platform error code or `1` on failure. They return `-1` now, like everything els
 `!= 0` is unaffected. Code that compared the result against a `pthread` error code must check for
 `-1` instead.
 
+### IPv6 sockets are v6-only on Linux too
+
+An IPv6 socket bound to `"::"` accepted IPv4 connections on Linux but not on Windows. It is v6-only
+on both now. A Linux server that relied on one socket for both families either binds a second,
+IPv4 socket to `"0.0.0.0"` on the same port, or calls `dino_socket_set_v6only(sock, 0)` before
+`dino_socket_bind`.
+
+### Accepted sockets are blocking on Windows too
+
+`dino_socket_accept` on a non-blocking listener returned a non-blocking socket on Windows and a
+blocking one on Linux. Both return a blocking socket now. Code that relied on the Windows behaviour
+calls `dino_socket_set_nonblocking(conn, 1)` after accepting, which works on every version.
+
 ### New
 
 - **C++:** every header can be included from C++ (the declarations have C linkage).
