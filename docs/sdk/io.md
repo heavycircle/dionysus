@@ -66,9 +66,12 @@ Each `dino_pollfd_t` has `sock`, the `events` you want, and `revents`, filled in
 It returns the number of sockets with something in `revents`, `0` on timeout (every `revents` is
 then `0`), or `-1` on error.
 
-With nothing to watch (`nfds` is `0`) it waits out the timeout and returns `0`, like a sleep. Windows'
-`WSAPoll` would fail at once; the SDK waits there too, so a server whose last client left doesn't
-spin.
+An entry whose `sock` is `DINO_INVALID_SOCKET` is an unused slot: it is skipped and its `revents`
+stays `0`, so a fixed-size array can hold gaps where clients left.
+
+With nothing to watch (`nfds` is `0`, or only unused slots) it waits out the timeout and returns
+`0`, like a sleep. Windows' `WSAPoll` would fail at once; the SDK waits there too, so a server whose
+last client left doesn't spin.
 
 A peer that closes the connection shows up as `DINO_POLLIN` on Linux (and the next `recv` returns
 0\) but as `DINO_POLLHUP` on Windows. Treat either as "read now"; `recv` returning 0 is the portable

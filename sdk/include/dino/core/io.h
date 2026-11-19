@@ -48,8 +48,10 @@ typedef uintptr_t dino_fd_set_t;
  * values, and DINO_POLLERR and DINO_POLLHUP are reported whether requested or
  * not. Every revents is reset, so it is 0 on timeout.
  *
- * With nothing to watch (nfds 0) it waits out the timeout and returns 0, on
- * Windows too, where WSAPoll would fail.
+ * An entry whose sock is DINO_INVALID_SOCKET is an unused slot: it is skipped
+ * and its revents is 0. With nothing to watch (nfds 0, or only unused slots)
+ * it waits out the timeout and returns 0, on Windows too, where WSAPoll would
+ * fail.
  *
  * @param  fds        Array of dino_pollfd_t descriptors.
  * @param  nfds       Number of entries in fds.
