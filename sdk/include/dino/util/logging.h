@@ -3,6 +3,11 @@
 
 #include <stdio.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef enum
 {
     DINO_LOG_LEVEL_TRACE,
@@ -88,5 +93,9 @@ void dino_log_write(dino_log_level_t level, const char *file, int line, const ch
 #define LOG_INFO  DINO_LOG_INFO
 #define LOG_WARN  DINO_LOG_WARN
 #define LOG_ERROR DINO_LOG_ERROR
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_UTIL_LOGGING_H

@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /**
  * Get the size of a file.
  *
@@ -30,5 +35,9 @@ int dino_fs_init(void);
  * Teardown file system environment. Leaves stdio open.
  */
 void dino_fs_cleanup(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

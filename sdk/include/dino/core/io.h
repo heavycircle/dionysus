@@ -5,6 +5,11 @@
 
 #include <dino/core/network.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /* ---- Poll event flags (dino's own values; dino_poll translates them per platform) ---- */
 #define DINO_POLLIN  0x0001
 #define DINO_POLLOUT 0x0004
@@ -117,5 +122,9 @@ int dino_fd_isset(dino_socket_t sock, dino_fd_set_t set);
  */
 int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, dino_fd_set_t efds,
     int timeout_ms);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_IO_H

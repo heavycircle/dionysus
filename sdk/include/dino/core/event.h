@@ -7,6 +7,11 @@
 #include <dino/core/pipe.h>
 #include <dino/core/process.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /**
  * Event loop: register sockets, pipes and processes with the events you care
  * about, then wait for any of them to become ready. Built on epoll on Linux and on an I/O
@@ -201,5 +206,9 @@ dino_event_timer_t dino_event_timer_add(
  * @return 0 on success, -1 on error.
  */
 int dino_event_timer_del(dino_event_loop_t loop, dino_event_timer_t timer);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_EVENT_H

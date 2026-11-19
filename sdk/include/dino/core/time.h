@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /**
  * Sleep for at least the given number of milliseconds.
  *
@@ -39,5 +44,9 @@ uint64_t dino_time_monotonic_ns(void);
  * @return Milliseconds since 1970-01-01 00:00:00 UTC.
  */
 uint64_t dino_time_unix_ms(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_TIME_H

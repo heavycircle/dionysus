@@ -7,6 +7,8 @@ AllowShortFunctionsOnASingleLine: None
 BreakBeforeBraces: Allman
 ColumnLimit: 100
 PointerAlignment: Right
+# The extern "C" guards in the SDK headers wrap whole files: no extra indent.
+IndentExternBlock: NoIndent
 # Includes: the file's own header, then system headers, then other dino headers.
 IncludeBlocks: Regroup
 SortIncludes: CaseSensitive

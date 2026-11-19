@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef uintptr_t dino_mutex_t;
 
 #define DINO_INVALID_MUTEX ((dino_mutex_t)0)
@@ -135,5 +140,9 @@ typedef uintptr_t dino_once_t;
  * @return 0 on success, -1 for a NULL argument or on error.
  */
 int dino_once(dino_once_t *once, void (*fn)(void));
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_MUTEX_H

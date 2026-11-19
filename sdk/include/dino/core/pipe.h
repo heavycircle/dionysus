@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef uintptr_t dino_pipe_t;
 
 #define DINO_INVALID_PIPE ((dino_pipe_t)0)
@@ -73,5 +78,9 @@ int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms);
  * @return 0 on success, -1 on error or for DINO_INVALID_PIPE.
  */
 int dino_pipe_close(dino_pipe_t pipe);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_PIPE_H

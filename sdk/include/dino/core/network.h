@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef uintptr_t dino_socket_t;
 
 #define DINO_INVALID_SOCKET ((dino_socket_t)(~0))
@@ -173,5 +178,9 @@ int dino_socket_set_nonblocking(dino_socket_t sock, int enable);
  * @return 0 on success, -1 on error.
  */
 int dino_socket_shutdown(dino_socket_t sock, dino_shutdown_how_t how);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_NETWORK_H

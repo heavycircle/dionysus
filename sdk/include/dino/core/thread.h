@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef uintptr_t dino_thread_t;
 
 #define DINO_INVALID_THREAD ((dino_thread_t)0)
@@ -59,5 +64,9 @@ uint64_t dino_thread_current_id(void);
  * Give up the rest of the calling thread's time slice.
  */
 void dino_thread_yield(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_THREAD_H

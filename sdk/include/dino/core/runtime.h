@@ -1,6 +1,11 @@
 #ifndef DINO_CORE_RUNTIME_H
 #define DINO_CORE_RUNTIME_H
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /**
  * The SDK sets itself up; programs don't need to call anything first:
  *
@@ -37,5 +42,9 @@ void dino_runtime_cleanup(void);
  * review.
  */
 #define DINO_ENABLE_AUTO_RUNTIME typedef int dino_auto_runtime_is_deprecated_
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_RUNTIME_H

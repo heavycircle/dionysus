@@ -6,6 +6,11 @@
 
 #include <dino/core/pipe.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef uintptr_t dino_process_t;
 
 #define DINO_INVALID_PROCESS ((dino_process_t)0)
@@ -208,5 +213,9 @@ int dino_env_set(const char *name, const char *value);
  * @return 0 on success, -1 on failure or invalid arguments.
  */
 int dino_env_unset(const char *name);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_PROCESS_H
