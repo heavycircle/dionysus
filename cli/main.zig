@@ -52,10 +52,13 @@ pub fn main(init: std.process.Init) !u8 {
     const arena = init.arena.allocator();
     const args = try init.minimal.args.toSlice(arena);
 
+    // Streaming, not positional: redirected to a file, stdout, stderr and the
+    // CMake children all write to it, and positional writes from offset 0 would
+    // overwrite each other.
     var stdout_buffer: [4096]u8 = undefined;
-    var stdout_writer: std.Io.File.Writer = .init(.stdout(), init.io, &stdout_buffer);
+    var stdout_writer: std.Io.File.Writer = .initStreaming(.stdout(), init.io, &stdout_buffer);
     var stderr_buffer: [1024]u8 = undefined;
-    var stderr_writer: std.Io.File.Writer = .init(.stderr(), init.io, &stderr_buffer);
+    var stderr_writer: std.Io.File.Writer = .initStreaming(.stderr(), init.io, &stderr_buffer);
 
     var ctx: Ctx = .{
         .io = init.io,
