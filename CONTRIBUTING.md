@@ -246,9 +246,10 @@ a known failure that starts passing fails the run, so remove its entry in the PR
 environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings fail the build.
 
 `tests/docs.sh [targets...]` keeps the documentation honest: every relative link and `#anchor` in
-the Markdown must resolve, and every ```` ```c ```` block in `docs/` that contains `int main(` is
-built for each target and run, and must exit 0. Write examples in the docs as complete programs that
-take no arguments, so they're tested; fragments without `main` aren't.
+the Markdown must resolve, and every ```` ```c ```` block in `docs/` that contains `int main(` (or
+`UTEST_MAIN()`, built with `dino_test()`) is built for each target and run, and must exit 0. Write
+examples in the docs as complete programs that take no arguments, so they're tested; fragments
+without `main` aren't. A block that isn't C to compile belongs in a fence without the `c` tag.
 
 `tests/warnings.sh [targets...]` checks the [portability warnings](docs/guide/portability-warnings.md):
 it builds `tests/fixtures/raw_calls` under clang's `-verify`, so every flagged call must warn

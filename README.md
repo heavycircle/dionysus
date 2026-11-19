@@ -9,13 +9,13 @@ dino build --all
 ```
 
 ```
-build/arm/hello (5.2 KiB)
-build/arm64/hello (5.5 KiB)
-build/i386/hello (4.1 KiB)
-build/ppc/hello (6.4 KiB)
-build/win32/hello.exe (67.0 KiB)
+build/arm/hello (6.0 KiB)
+build/arm64/hello (6.3 KiB)
+build/i386/hello (4.9 KiB)
+build/ppc/hello (7.7 KiB)
+build/win32/hello.exe (66.5 KiB)
 build/win64/hello.exe (57.0 KiB)
-build/x86_64/hello (4.7 KiB)
+build/x86_64/hello (5.8 KiB)
 ```
 
 Linux builds are static ELF executables linked against musl; Windows builds are PE executables
@@ -129,8 +129,9 @@ target_link_libraries(app PRIVATE acme::proto)
 
 ## Documentation
 
-[docs/](docs/README.md) has the user guide: installing, building and testing projects, Docker,
-editor setup, organization libraries and the portability warnings.
+[docs/](docs/README.md) has the user guide (installing, building and testing projects, Docker,
+editors, organization libraries, troubleshooting) and a page for every SDK module. New here? Start
+with [Installing](docs/guide/install.md) and [your first project](docs/guide/first-project.md).
 
 ## Contributing
 
