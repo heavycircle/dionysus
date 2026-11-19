@@ -177,8 +177,11 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
     SOCKET client = accept((SOCKET)sock, (struct sockaddr *)&addr, &len);
     if (client == INVALID_SOCKET)
         return DINO_INVALID_SOCKET;
-    // Not documented to carry over from the listening socket.
-    if (!SetHandleInformation((HANDLE)client, HANDLE_FLAG_INHERIT, 0))
+    // Not documented to carry over from the listening socket. Non-blocking
+    // mode does carry over on Windows; Linux's accept4 never does, so clear it.
+    u_long blocking = 0;
+    if (!SetHandleInformation((HANDLE)client, HANDLE_FLAG_INHERIT, 0)
+        || ioctlsocket(client, FIONBIO, &blocking) != 0)
     {
         closesocket(client);
         return DINO_INVALID_SOCKET;

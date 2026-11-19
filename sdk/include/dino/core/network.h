@@ -92,6 +92,10 @@ int dino_socket_listen(dino_socket_t sock, int backlog);
 /**
  * Wrapper for accept(2) supporting Windows and POSIX APIs.
  *
+ * The new socket is blocking even when the listener is non-blocking (Windows
+ * would copy the listener's mode; this doesn't, so both platforms agree). Call
+ * dino_socket_set_nonblocking on it for an event loop.
+ *
  * @param  sock     Socket to accept connection.
  * @return Client socket, or DINO_INVALID_SOCKET on failure.
  */

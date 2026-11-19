@@ -91,6 +91,9 @@ int main(void)
 - **Non-blocking sockets** return `-1` from `recv`, `send`, `accept` and `connect` when they would
   have waited. The API doesn't distinguish that from a real error, so use non-blocking sockets with
   [poll](io.md) or the [event loop](event.md), which tell you when a call won't wait.
+- **Accepted sockets are blocking**, even from a non-blocking listener. Call
+  `dino_socket_set_nonblocking` on each one you want non-blocking. Windows' `accept` would copy the
+  listener's mode; the SDK clears it so both platforms agree.
 - **Closing.** Close every socket exactly once. A socket registered with an event loop must be
   removed from it (`dino_event_del_socket`) before it's closed.
 - **Wait for many sockets** with the [event loop](event.md), not one thread per connection.

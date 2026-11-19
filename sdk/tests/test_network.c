@@ -9,6 +9,7 @@
 #include <utest.h>
 
 #include <dino/core/network.h>
+#include <dino/core/thread.h>
 #include <dino/core/time.h>
 
 // Each test file has its own port range: ctest runs test executables in parallel.
@@ -127,6 +128,36 @@ UTEST(network, nonblocking_accept_returns_immediately)
     // Nobody is connecting: a blocking accept would hang here.
     EXPECT_EQ(DINO_INVALID_SOCKET, dino_socket_accept(s));
     dino_socket_close(s);
+}
+
+static int send_later(void *arg)
+{
+    dino_sleep_ms(200);
+    return dino_socket_send(*(dino_socket_t *)arg, "x", 1) == 1 ? 0 : -1;
+}
+
+// Windows' accept copies the listener's non-blocking mode; Linux's doesn't.
+UTEST(network, accepted_sockets_are_blocking)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, DINO_AF_INET, "127.0.0.1", PORT + 8));
+    dino_socket_close(p.peer);
+    dino_socket_close(p.client);
+    ASSERT_EQ(0, dino_socket_set_nonblocking(p.server, 1));
+    p.client = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    ASSERT_EQ(0, dino_socket_connect(p.client, "127.0.0.1", PORT + 8));
+    p.peer = dino_socket_accept(p.server);
+    ASSERT_NE(DINO_INVALID_SOCKET, p.peer);
+
+    // Non-blocking, the recv would fail at once instead of waiting for the byte.
+    dino_thread_t sender;
+    ASSERT_EQ(0, dino_thread_create(&sender, send_later, &p.client));
+    char buf[1];
+    EXPECT_EQ(1, dino_socket_recv(p.peer, buf, 1));
+    int result = -1;
+    dino_thread_join(sender, &result);
+    EXPECT_EQ(0, result);
+    close_pair(&p);
 }
 
 UTEST(network, recv_sees_orderly_shutdown)
