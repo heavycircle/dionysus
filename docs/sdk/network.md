@@ -87,7 +87,8 @@ int main(void)
   `dino_socket_set_v6only(sock, 0)` before binding one IPv6 socket to `"::"`, which then also
   accepts IPv4 peers (shown as `::ffff:a.b.c.d`). Linux and Windows default differently; the SDK
   sets it either way.
-- **Ports** are plain integers in host byte order.
+- **Ports** are plain integers in host byte order, `0` to `65535`; anything else fails with `-1`.
+  Bind to port `0` for any free port.
 
 ## Pitfalls
 

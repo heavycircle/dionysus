@@ -153,6 +153,18 @@ UTEST(network, invalid_addresses_are_rejected)
     }
 }
 
+// They were cut to 16 bits: 65536 + n bound port n, and -1 bound 65535.
+UTEST(network, ports_outside_16_bits_are_rejected)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    EXPECT_EQ(-1, dino_socket_bind(s, "127.0.0.1", 65536 + PORT + 11));
+    EXPECT_EQ(-1, dino_socket_bind(s, "127.0.0.1", -1));
+    EXPECT_EQ(-1, dino_socket_connect(s, "127.0.0.1", 70000));
+    EXPECT_EQ(0, dino_socket_bind(s, "127.0.0.1", 0)); // any free port
+    dino_socket_close(s);
+}
+
 UTEST(network, accept_on_unlistened_socket_fails)
 {
     dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);

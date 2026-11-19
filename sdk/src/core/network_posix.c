@@ -101,7 +101,7 @@ int dino_socket_close(dino_socket_t sock)
 
 // The address string picks the family, so one call works for both IPv4 and
 // IPv6 sockets. A string that is neither fails instead of silently binding or
-// connecting to 0.0.0.0.
+// connecting to 0.0.0.0, and so does a port that doesn't fit in 16 bits.
 static int dino_sockaddr(
     struct sockaddr_storage *addr, dino_socklen_t *len, const char *ip, int port)
 {
@@ -109,7 +109,7 @@ static int dino_sockaddr(
     struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)addr;
 
     memset(addr, 0, sizeof(*addr));
-    if (ip == NULL)
+    if (ip == NULL || port < 0 || port > 65535)
         return -1;
 
     if (inet_pton(AF_INET, ip, &v4->sin_addr) == 1)
