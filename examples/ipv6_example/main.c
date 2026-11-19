@@ -7,7 +7,7 @@
 
 // Server and client in one process: connect() completes against the listen
 // backlog before accept(), so a blocking echo needs no threads.
-static int echo(dino_domain_t domain, const char *ip)
+static int echo(dino_socket_domain_t domain, const char *ip)
 {
     dino_socket_t server = dino_socket_create(domain, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
     dino_socket_t client = dino_socket_create(domain, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);

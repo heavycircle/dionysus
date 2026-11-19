@@ -9,14 +9,16 @@ extern "C"
 #endif
 
 /**
- * Get the size of a file.
+ * Get the size of a regular file, including files over 2 GB on Windows,
+ * where ftell and stat's size stop at 2 GB.
  *
- * Supports large files up to the maximum size of uint64_t.
- *
- * @param  filepath     Path to the file.
- * @return Size of the file.
+ * @param  path  Path to the file, UTF-8 on every platform.
+ * @param  size  Receives the size in bytes; 0 on failure.
+ * @return 0 on success, -1 if the file doesn't exist, isn't a regular file
+ *         (a directory, for example) or can't be examined, or for a NULL
+ *         argument.
  */
-uint64_t dino_file_size(const char *filepath);
+int dino_file_size(const char *path, uint64_t *size);
 
 /**
  * Initialize fs environment.

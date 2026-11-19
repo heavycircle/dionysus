@@ -39,7 +39,9 @@ UTEST(file_size, small_file)
     ASSERT_TRUE(f != NULL);
     fwrite("0123456789", 1, 10, f);
     fclose(f);
-    EXPECT_EQ(10u, dino_file_size(path));
+    uint64_t size = 1;
+    EXPECT_EQ(0, dino_file_size(path, &size));
+    EXPECT_EQ(10u, size);
     remove(path);
 }
 
@@ -47,13 +49,31 @@ UTEST(file_size, empty_file)
 {
     const char *path = "dino_test_empty.bin";
     ASSERT_EQ(0, resize(path, 0));
-    EXPECT_EQ(0u, dino_file_size(path));
+    uint64_t size = 1;
+    EXPECT_EQ(0, dino_file_size(path, &size));
+    EXPECT_EQ(0u, size);
     remove(path);
 }
 
-UTEST(file_size, missing_file_is_zero)
+UTEST(file_size, missing_file_fails)
 {
-    EXPECT_EQ(0u, dino_file_size("dino_test_does_not_exist.bin"));
+    uint64_t size = 1;
+    EXPECT_EQ(-1, dino_file_size("dino_test_does_not_exist.bin", &size));
+    EXPECT_EQ(0u, size);
+}
+
+UTEST(file_size, directory_fails)
+{
+    uint64_t size = 1;
+    EXPECT_EQ(-1, dino_file_size(".", &size));
+    EXPECT_EQ(0u, size);
+}
+
+UTEST(file_size, null_arguments_fail)
+{
+    uint64_t size;
+    EXPECT_EQ(-1, dino_file_size(NULL, &size));
+    EXPECT_EQ(-1, dino_file_size("dino_test_does_not_exist.bin", NULL));
 }
 
 // Past both the 2 GiB and 4 GiB limits that dino_file_size exists for. The
@@ -63,7 +83,9 @@ UTEST(file_size, larger_than_4_gib)
     const char    *path = "dino_test_large.bin";
     const uint64_t size = 5ull << 30;
     ASSERT_EQ(0, resize(path, size));
-    EXPECT_EQ(size, dino_file_size(path));
+    uint64_t got = 0;
+    EXPECT_EQ(0, dino_file_size(path, &got));
+    EXPECT_EQ(size, got);
     remove(path);
 }
 

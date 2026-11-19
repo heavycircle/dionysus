@@ -14,7 +14,7 @@ targets and runs it that way; the socket examples check every step and exit nonz
 
 | **Category** | **Location**                                  | **SDK header**          | **Description**                                                                                                                     |
 | ------------ | --------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Big Files    | [`fs_example`](./fs_example/main.c)           | `dino/core/fs.h`        | Prints the size of `bigfile.img` with `dino_file_size`, which handles files over 2 GB on Windows. Prints 0 if the file is missing.   |
+| Big Files    | [`fs_example`](./fs_example/main.c)           | `dino/core/fs.h`        | Prints the size of `bigfile.img` with `dino_file_size`, which handles files over 2 GB on Windows, or says the file doesn't exist. |
 | Heap         | [`heap_example`](./heap_example/main.c)       | none                    | Plain `malloc`/`calloc`/`realloc`/`free` and float formatting. Shows the C library's allocator works on every target with no wrapper. |
 | Pipes        | [`pipe_example`](./pipe_example/main.c)       | `dino/core/pipe.h`      | A worker thread writes lines into a pipe and closes it; the reader uses `dino_pipe_wait` and `dino_pipe_read` until end of file.       |
 | Poll         | [`io_example`](./io_example/main.c)           | `dino/core/io.h`        | Ping/pong where every receive waits on `dino_poll`; also checks timeouts, writability and a peer hang-up.                             |

@@ -81,14 +81,14 @@ static char *take(struct collector *c, size_t *len)
     return data;
 }
 
-int dino_process_run(char *const argv[], const dino_run_opts_t *opts, dino_run_result_t *result)
+int dino_process_run(char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result)
 {
     if (!result)
         return -1;
     memset(result, 0, sizeof(*result));
     result->exit_code = -1;
 
-    dino_spawn_opts_t spawn = { 0 };
+    dino_process_spawn_opts_t spawn = { 0 };
     spawn.cwd               = opts ? opts->cwd : NULL;
     spawn.env               = opts ? opts->env : NULL;
     spawn.stdin_mode        = opts && opts->input ? DINO_STDIO_PIPE : DINO_STDIO_NULL;
@@ -142,7 +142,7 @@ int dino_process_run(char *const argv[], const dino_run_opts_t *opts, dino_run_r
     return status;
 }
 
-void dino_run_result_free(dino_run_result_t *result)
+void dino_process_result_free(dino_process_result_t *result)
 {
     if (!result)
         return;

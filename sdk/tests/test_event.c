@@ -834,7 +834,7 @@ UTEST(event, child_stdout_through_the_loop)
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
     char *const          argv[] = SHELL_ECHO;
-    dino_spawn_opts_t    opts   = { 0 };
+    dino_process_spawn_opts_t    opts   = { 0 };
     dino_process_t       proc;
     dino_process_pipes_t pipes;
     opts.stdout_mode = DINO_STDIO_PIPE;

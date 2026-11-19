@@ -16,19 +16,19 @@ typedef enum
 {
     DINO_AF_INET,
     DINO_AF_INET6
-} dino_domain_t;
+} dino_socket_domain_t;
 
 typedef enum
 {
     DINO_SOCK_STREAM,
     DINO_SOCK_DGRAM
-} dino_type_t;
+} dino_socket_type_t;
 
 typedef enum
 {
     DINO_IPPROTO_TCP,
     DINO_IPPROTO_UDP
-} dino_protocol_t;
+} dino_socket_protocol_t;
 
 /**
  * Initialize environment for making sockets (WSAStartup on Windows).
@@ -58,7 +58,7 @@ void dino_net_cleanup(void);
  * @param  protocol     Socket protocol (IPPROTO_TCP)
  * @return Socket, or DINO_INVALID_SOCKET on failure.
  */
-dino_socket_t dino_socket_create(dino_domain_t domain, dino_type_t type, dino_protocol_t protocol);
+dino_socket_t dino_socket_create(dino_socket_domain_t domain, dino_socket_type_t type, dino_socket_protocol_t protocol);
 
 /**
  * Close the socket connection and free the handle.
@@ -135,7 +135,7 @@ typedef enum
     DINO_SHUT_RD   = 0,
     DINO_SHUT_WR   = 1,
     DINO_SHUT_RDWR = 2
-} dino_shutdown_how_t;
+} dino_socket_shutdown_t;
 
 /**
  * Low-level socket option setter. Level and optname use platform values.
@@ -177,7 +177,7 @@ int dino_socket_set_nonblocking(dino_socket_t sock, int enable);
  * @param  how   Direction to shut down (DINO_SHUT_RD/WR/RDWR).
  * @return 0 on success, -1 on error.
  */
-int dino_socket_shutdown(dino_socket_t sock, dino_shutdown_how_t how);
+int dino_socket_shutdown(dino_socket_t sock, dino_socket_shutdown_t how);
 
 #ifdef __cplusplus
 }

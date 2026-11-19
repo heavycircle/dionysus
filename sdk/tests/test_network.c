@@ -21,7 +21,7 @@ struct pair
 
 // Listener, connected client and the accepted peer, all in one thread:
 // connect() completes against the listen backlog before accept().
-static int open_pair(struct pair *p, dino_domain_t domain, const char *ip, int port)
+static int open_pair(struct pair *p, dino_socket_domain_t domain, const char *ip, int port)
 {
     p->server = dino_socket_create(domain, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
     p->client = dino_socket_create(domain, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
@@ -47,7 +47,7 @@ static void close_pair(struct pair *p)
         dino_socket_close(p->server);
 }
 
-static void echo(int *utest_result, dino_domain_t domain, const char *ip, int port)
+static void echo(int *utest_result, dino_socket_domain_t domain, const char *ip, int port)
 {
     struct pair p;
     ASSERT_EQ(0, open_pair(&p, domain, ip, port));

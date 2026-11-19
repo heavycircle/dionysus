@@ -24,14 +24,14 @@ static inline int dino__process_valid_env_name(const char *name)
     return name && *name && !strchr(name, '=');
 }
 
-static inline void dino__process_modes(const dino_spawn_opts_t *opts, dino_stdio_t modes[3])
+static inline void dino__process_modes(const dino_process_spawn_opts_t *opts, dino_stdio_t modes[3])
 {
     modes[0] = opts ? opts->stdin_mode : DINO_STDIO_INHERIT;
     modes[1] = opts ? opts->stdout_mode : DINO_STDIO_INHERIT;
     modes[2] = opts ? opts->stderr_mode : DINO_STDIO_INHERIT;
 }
 
-static inline int dino__process_any_pipe(const dino_spawn_opts_t *opts)
+static inline int dino__process_any_pipe(const dino_process_spawn_opts_t *opts)
 {
     return opts
         && (opts->stdin_mode == DINO_STDIO_PIPE || opts->stdout_mode == DINO_STDIO_PIPE
