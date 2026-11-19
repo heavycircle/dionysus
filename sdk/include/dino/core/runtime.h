@@ -19,7 +19,7 @@
  *
  * Safe to call any number of times, from any thread.
  *
- * @return 0 on success, non-zero if any subsystem fails to initialise.
+ * @return 0 on success, -1 if any subsystem fails to initialise.
  */
 int dino_runtime_init(void);
 

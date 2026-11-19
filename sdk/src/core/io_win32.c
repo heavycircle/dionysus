@@ -108,7 +108,7 @@ int dino_fd_isset(dino_socket_t sock, dino_fd_set_t set)
 }
 
 int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, dino_fd_set_t efds,
-    long timeout_ms)
+    int timeout_ms)
 {
     (void)max_fd;
 

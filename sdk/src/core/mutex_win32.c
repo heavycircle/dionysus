@@ -73,10 +73,12 @@ int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex)
 
 // The timeout counts scheduler ticks and can end up to a tick early, so keep
 // waiting until the monotonic deadline has really passed.
-int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, uint32_t timeout_ms)
+int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
 {
     if (cond == DINO_INVALID_COND || mutex == DINO_INVALID_MUTEX)
         return -1;
+    if (timeout_ms < 0)
+        return dino_cond_wait(cond, mutex);
 
     uint64_t deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
     for (;;)

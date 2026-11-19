@@ -70,7 +70,7 @@ int dino_net_init(void)
         if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0)
             InterlockedExchange(&wsa_started, 1);
         else
-            rc = 1;
+            rc = -1;
     }
     ReleaseSRWLockExclusive(&wsa_lock);
     return rc;

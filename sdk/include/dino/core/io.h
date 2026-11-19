@@ -107,16 +107,15 @@ int dino_fd_isset(dino_socket_t sock, dino_fd_set_t set);
  * On Linux, max_fd should be the highest socket fd value plus 1.
  *
  * Pass DINO_INVALID_FD_SET for any set you do not wish to monitor.
- * timeout_ms: -1 to block indefinitely, 0 for immediate return.
  *
  * @param  max_fd     Highest fd + 1 (Linux only).
  * @param  rfds       Read-ready set, or DINO_INVALID_FD_SET.
  * @param  wfds       Write-ready set, or DINO_INVALID_FD_SET.
  * @param  efds       Exception set, or DINO_INVALID_FD_SET.
- * @param  timeout_ms Milliseconds to wait.
+ * @param  timeout_ms Milliseconds to wait; -1 to block; 0 for immediate return.
  * @return Number of ready sockets, 0 on timeout, -1 on error.
  */
 int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, dino_fd_set_t efds,
-    long timeout_ms);
+    int timeout_ms);
 
 #endif // DINO_CORE_IO_H

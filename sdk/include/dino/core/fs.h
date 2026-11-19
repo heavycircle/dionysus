@@ -22,7 +22,7 @@ uint64_t dino_file_size(const char *filepath);
  * writes to stdout or stderr would land in them. Descriptors that are already
  * open are left alone. No-op on Windows.
  *
- * @return 0 on success, non-zero if /dev/null could not be opened.
+ * @return 0 on success, -1 if /dev/null could not be opened.
  */
 int dino_fs_init(void);
 

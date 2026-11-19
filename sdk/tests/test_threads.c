@@ -441,6 +441,27 @@ UTEST(cond, timedwait_returns_when_signalled)
     dino_mutex_destroy(g.lock);
 }
 
+UTEST(cond, timedwait_with_negative_timeout_waits_until_signalled)
+{
+    struct gate g = { dino_mutex_create(), dino_cond_create(), 0, 0 };
+    ASSERT_NE(DINO_INVALID_MUTEX, g.lock);
+    ASSERT_NE(DINO_INVALID_COND, g.cond);
+
+    dino_thread_t t;
+    ASSERT_EQ(0, dino_thread_create(&t, open_gate_later, &g));
+    dino_mutex_lock(g.lock);
+    int rc = 0;
+    while (!g.open && rc == 0)
+        rc = dino_cond_timedwait(g.cond, g.lock, -1);
+    dino_mutex_unlock(g.lock);
+    EXPECT_EQ(0, rc);
+    EXPECT_EQ(1, g.open);
+
+    EXPECT_EQ(0, dino_thread_join(t, NULL));
+    dino_cond_destroy(g.cond);
+    dino_mutex_destroy(g.lock);
+}
+
 /* ---- Once ---- */
 
 static dino_once_t g_once = DINO_ONCE_INIT;

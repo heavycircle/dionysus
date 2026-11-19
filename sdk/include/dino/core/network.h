@@ -33,7 +33,7 @@ typedef enum
  * to call any number of times, from any thread; only the first successful call
  * does anything.
  *
- * @return 0 on success, non-zero on failure.
+ * @return 0 on success, -1 on failure.
  */
 int dino_net_init(void);
 
@@ -59,7 +59,7 @@ dino_socket_t dino_socket_create(dino_domain_t domain, dino_type_t type, dino_pr
  * Close the socket connection and free the handle.
  *
  * @param  sock     Socket to close.
- * @return 0 on success, non-zero on failure.
+ * @return 0 on success, -1 on failure.
  */
 int dino_socket_close(dino_socket_t sock);
 
@@ -70,7 +70,7 @@ int dino_socket_close(dino_socket_t sock);
  * @param  ip       IPv4 or IPv6 address literal to bind to, matching the socket's domain
  *                  (e.g. "0.0.0.0", "::", "::1"). Host names are not resolved.
  * @param  port     Port to bind to.
- * @return 0 on success, negative on error or if ip is not a valid address.
+ * @return 0 on success, -1 on error or if ip is not a valid address.
  */
 int dino_socket_bind(dino_socket_t sock, const char *ip, int port);
 
@@ -79,7 +79,7 @@ int dino_socket_bind(dino_socket_t sock, const char *ip, int port);
  *
  * @param  sock     Socket to listen for connections.
  * @param  backlog  Maximum length of the pending connection queue.
- * @return 0 on success, negative on error.
+ * @return 0 on success, -1 on error.
  */
 int dino_socket_listen(dino_socket_t sock, int backlog);
 
@@ -98,7 +98,7 @@ dino_socket_t dino_socket_accept(dino_socket_t sock);
  * @param  ip       IPv4 or IPv6 address literal to connect to, matching the socket's domain.
  *                  Host names are not resolved.
  * @param  port     Port to connect to.
- * @return Zero on connection, -1 on error or if ip is not a valid address.
+ * @return 0 on connection, -1 on error or if ip is not a valid address.
  */
 int dino_socket_connect(dino_socket_t sock, const char *ip, int port);
 
