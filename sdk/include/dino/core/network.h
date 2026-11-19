@@ -117,7 +117,8 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port);
  * @param  sock     Socket to send information.
  * @param  buf      Buffer to send to sock.
  * @param  len      Maximum length of buf.
- * @return Number of bytes sent, or -1 if an error occurred.
+ * @return Number of bytes sent, or -1 if an error occurred (including a
+ *         negative len).
  */
 int dino_socket_send(dino_socket_t sock, const void *buf, int len);
 
@@ -127,7 +128,8 @@ int dino_socket_send(dino_socket_t sock, const void *buf, int len);
  * @param  sock     Socket to receive information.
  * @param  buf      Buffer to store received information.
  * @param  len      Maximum length of buf.
- * @return Number of bytes received, or -1 if an error occurred.
+ * @return Number of bytes received, or -1 if an error occurred (including a
+ *         negative len).
  */
 int dino_socket_recv(dino_socket_t sock, void *buf, int len);
 

@@ -201,12 +201,16 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
 
 int dino_socket_send(dino_socket_t sock, const void *buf, int len)
 {
+    if (len < 0 || (len > 0 && !buf))
+        return -1;
     int sent = send((SOCKET)sock, (const char *)buf, len, 0);
     return (sent == SOCKET_ERROR) ? -1 : sent;
 }
 
 int dino_socket_recv(dino_socket_t sock, void *buf, int len)
 {
+    if (len < 0 || (len > 0 && !buf))
+        return -1;
     int received = recv((SOCKET)sock, (char *)buf, len, 0);
     return (received == SOCKET_ERROR) ? -1 : received;
 }
