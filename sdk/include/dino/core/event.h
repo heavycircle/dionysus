@@ -73,6 +73,10 @@ void dino_event_loop_destroy(dino_event_loop_t loop);
  * Start watching a socket. A socket can be in a loop once; remove it with
  * dino_event_del_socket before closing it.
  *
+ * READ and WRITE are reported only when asked for. Add a socket once it is
+ * connected, connecting or listening: before that Linux reports HANGUP at
+ * once and Windows reports nothing.
+ *
  * @param  loop      Loop to add to.
  * @param  sock      Socket to watch.
  * @param  events    DINO_EVENT_READ and/or DINO_EVENT_WRITE, optionally with

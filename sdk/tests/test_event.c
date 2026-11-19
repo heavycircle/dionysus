@@ -164,6 +164,27 @@ UTEST_F(event, hangup_when_the_peer_closes)
     EXPECT_TRUE(out[0].events & DINO_EVENT_HANGUP);
 }
 
+// Shut down both ways, which is EPOLLHUP on Linux: still only what was asked
+// for, plus HANGUP.
+UTEST_F(event, hangup_reports_only_the_interest)
+{
+    dino_event_t out[8];
+    ASSERT_EQ(0,
+        dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_WRITE, NULL));
+    dino_socket_close(utest_fixture->p.client);
+    utest_fixture->p.client = DINO_INVALID_SOCKET;
+    ASSERT_EQ(0, dino_socket_shutdown(utest_fixture->p.peer, DINO_SHUT_WR));
+
+    int hangup = 0;
+    for (int i = 0; i < 10 && !hangup; i++)
+    {
+        ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
+        EXPECT_FALSE(out[0].events & DINO_EVENT_READ);
+        hangup = (out[0].events & DINO_EVENT_HANGUP) != 0;
+    }
+    EXPECT_TRUE(hangup);
+}
+
 UTEST_F(event, del_stops_events)
 {
     dino_event_t out[8];

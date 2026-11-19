@@ -119,6 +119,13 @@ and a client each with their own loop, holding 1000 connections at once.
 | `DINO_EVENT_WAKE`    | another thread called `dino_event_wake`                       | `NULL`        |
 | `DINO_EVENT_ONESHOT` | (interest only) report once, then disarm until the next `mod` |               |
 
+`READ` and `WRITE` are reported only for a socket watched for them. `ERROR` and `HANGUP` come
+whenever they happen. Two cases still differ by platform:
+
+- A refused non-blocking `connect` reports `WRITE | ERROR`, and on Linux `HANGUP` too.
+- A socket that is neither connected, connecting nor listening reports `HANGUP` at once on Linux
+  (with `WRITE`, if watched for it) and nothing on Windows. Add a socket after `connect` or `listen`.
+
 ## Functions
 
 | Function                                                     | Does                                                                                     |
