@@ -1,7 +1,7 @@
 # Shared by the SDK and every project `dino init` creates. scripts/tidy.sh adds
 # --warnings-as-errors for CI; in editors these stay warnings. The `-*` would
 # also hide compiler warnings, so the portability warnings (calls with a dino_*
-# replacement, docs/portability-warnings.md) are let back in by name.
+# replacement, docs/guide/portability-warnings.md) are let back in by name.
 Checks: >
   -*,
   clang-analyzer-*,

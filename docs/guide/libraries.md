@@ -20,8 +20,8 @@ internal protocols) and third-party libraries you want every project to use at o
 
 ## Quick start
 
-The repository has a working pair: [`examples/org_library`](../examples/org_library) (a small
-`key = value` config reader with tests) and [`examples/org_app`](../examples/org_app), which uses it.
+The repository has a working pair: [`examples/org_library`](../../examples/org_library) (a small
+`key = value` config reader with tests) and [`examples/org_app`](../../examples/org_app), which uses it.
 
 ```sh
 export DINO_LIBRARY_PATH=$PWD/examples/org_library
@@ -67,7 +67,7 @@ Only local directories are supported. Getting the libraries onto a machine (a gi
 a volume mount, a derived Docker image) is up to you; see [Docker and CI](#docker-and-ci).
 
 Without `dino`, pass the list to CMake yourself, as a CMake list (`;`-separated), next to the
-settings shown in [CONTRIBUTING.md](../CONTRIBUTING.md#c-projects-and-examples):
+settings shown in [CONTRIBUTING.md](../../CONTRIBUTING.md#c-projects-and-examples):
 
 ```sh
 cmake ... -DCMAKE_PROJECT_INCLUDE=$SDK/cmake/Dino.cmake "-DDINO_LIBRARY_PATH=/opt/acme/acme_log;/opt/acme/acme_proto"
@@ -234,7 +234,7 @@ checkout itself.
 
 ## Docker and CI
 
-Inside the [Docker image](../README.md#getting-dino), paths in `DINO_LIBRARY_PATH` are container
+Inside the [Docker image](../../README.md#getting-dino), paths in `DINO_LIBRARY_PATH` are container
 paths. Either mount the libraries:
 
 ```sh

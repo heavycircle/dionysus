@@ -3,7 +3,7 @@
 // replacement with a warning attached, so code that links the SDK hears about
 // them at the call site: in `dino build`, in clangd and in clang-tidy.
 //
-// Opting out (docs/portability-warnings.md):
+// Opting out (docs/guide/portability-warnings.md):
 //   - a project: -DDINO_NO_PLATFORM_WARNINGS=ON
 //   - a target or file: define DINO_ALLOW_PLATFORM_CALLS
 //   - one call: DINO_PLATFORM_CALL(pid = fork());

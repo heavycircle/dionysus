@@ -182,7 +182,7 @@ gets it: `dino_executable()`, `dino_test()`, a plain `target_link_libraries(app 
 and [organization libraries](libraries.md). The SDK's own sources never see it.
 
 `tests/warnings.sh` checks all of this in CI on every target. It builds
-[`tests/fixtures/raw_calls`](../tests/fixtures/raw_calls), which calls every flagged function, in
+[`tests/fixtures/raw_calls`](../../tests/fixtures/raw_calls), which calls every flagged function, in
 four language modes, under clang's `-verify`: every call must produce its exact warning, and nothing
 else may warn, including flagged calls inside a system header's inline functions. It then builds the fixture again with the project opt-out, where nothing may warn.
 

@@ -107,7 +107,7 @@ that has a portable `dino_*` replacement:
 src/main.c:7:9: warning: 'pipe' is deprecated: pipe() is POSIX-only; use dino_pipe_create() from <dino/core/pipe.h> [-Wdeprecated-declarations]
 ```
 
-It needs no particular clangd or clang-tidy version. [docs/portability-warnings.md](docs/portability-warnings.md)
+It needs no particular clangd or clang-tidy version. [docs/guide/portability-warnings.md](docs/guide/portability-warnings.md)
 lists what's flagged and how to opt out for a project, a file or a single call.
 
 ### Organization libraries
@@ -124,8 +124,13 @@ export DINO_LIBRARY_PATH=/opt/acme/acme_log:/opt/acme/acme_proto
 target_link_libraries(app PRIVATE acme::proto)
 ```
 
-[docs/libraries.md](docs/libraries.md) covers the layout a library needs, testing one with
+[docs/guide/libraries.md](docs/guide/libraries.md) covers the layout a library needs, testing one with
 `dino test`, wrapping third-party code, and Docker and CI.
+
+## Documentation
+
+[docs/](docs/README.md) has the user guide: installing, building and testing projects, Docker,
+editor setup, organization libraries and the portability warnings.
 
 ## Contributing
 

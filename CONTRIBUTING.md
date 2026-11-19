@@ -121,8 +121,8 @@ sdk/
   CMakeLists.txt           the dino_core and dino_util static libraries
   testing/                 utest.h (vendored) and the leak counter, for dino_test()
   tests/                   the SDK's own tests, one test_<module>.c per module
-docs/                      user documentation: libraries.md (DINO_LIBRARY_PATH libraries),
-                           portability-warnings.md
+docs/                      user documentation: README.md (index), guide/ (using dino),
+                           sdk/ (the dino_* modules)
 examples/                  one standalone CMake project per SDK feature, plus org_library and
                            org_app (a DINO_LIBRARY_PATH library and a project that uses it)
 tests/examples.sh          builds and runs every example on every target
@@ -244,7 +244,7 @@ a known failure that starts passing fails the run, so remove its entry in the PR
 `tests/examples.sh /repo/examples arm64 win64` limits the run to some targets. `CFLAGS` from the
 environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings fail the build.
 
-`tests/warnings.sh [targets...]` checks the [portability warnings](docs/portability-warnings.md):
+`tests/warnings.sh [targets...]` checks the [portability warnings](docs/guide/portability-warnings.md):
 it builds `tests/fixtures/raw_calls` under clang's `-verify`, so every flagged call must warn
 exactly as its `expected-warning` comment says, in four language modes, and then builds it again
 with `DINO_NO_PLATFORM_WARNINGS` set, where nothing may warn. `--memcheck` repeats the check
@@ -296,7 +296,7 @@ the SDK as a subdirectory (unless the project already did), sets `DINO_SDK_VERSI
 `dino_executable(name sources...)`, which is `add_executable` plus `target_link_libraries(name
 PRIVATE dino_util)`, and `dino_test()`. That is why a user's `CMakeLists.txt` doesn't need to know
 where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same way, under
-`_dino_libs/` and `EXCLUDE_FROM_ALL`; see [docs/libraries.md](docs/libraries.md#how-it-works).
+`_dino_libs/` and `EXCLUDE_FROM_ALL`; see [docs/guide/libraries.md](docs/guide/libraries.md#how-it-works).
 
 | dino name | Zig triple | Output | Runs on an x86_64 Linux host via |
 | --- | --- | --- | --- |
@@ -364,7 +364,7 @@ of `core` and `DINO_CORE_` below.
    (headers on both platforms), `posix` or `win32`, creating the wrapper if there isn't one yet (copy
    an existing wrapper's shape). Then add the call with its `expected-warning` comment to
    `tests/fixtures/raw_calls`, and run `tests/warnings.sh`. Only flag calls the module really
-   replaces; see [docs/portability-warnings.md](docs/portability-warnings.md#how-it-works).
+   replaces; see [docs/guide/portability-warnings.md](docs/guide/portability-warnings.md#how-it-works).
 7. Add `examples/<name>_example/` (a `CMakeLists.txt` with `dino_executable` and a `main.c` that
    exits nonzero on failure, so the test matrix notices) and a row in `examples/README.md`. The
    test matrix picks it up automatically.

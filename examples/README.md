@@ -91,4 +91,4 @@ org_library/
 
 `org_app` doesn't configure unless `org_library` is on `DINO_LIBRARY_PATH`. `tests/examples.sh`
 registers it for every example, which also shows that a library nobody links is never built. See
-[docs/libraries.md](../docs/libraries.md) for the full guide.
+[docs/guide/libraries.md](../docs/guide/libraries.md) for the full guide.
