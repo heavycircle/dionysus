@@ -10,6 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <utest.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #include <dino/core/pipe.h>
 #include <dino/core/process.h>
@@ -135,6 +138,42 @@ UTEST(process, null_stdio)
     EXPECT_EQ(0, dino_process_wait(p, &code));
     EXPECT_EQ(0, code);
 }
+
+#ifndef _WIN32
+// A parent with stdin and stdout closed gets fds 0 and 1 for the stderr pipe,
+// so the child's end sat at fd 1, where the child opens /dev/null for its
+// stdout before it moves that end to fd 2.
+UTEST(process, pipes_survive_a_parent_with_closed_stdio)
+{
+    int saved_in = dup(0), saved_out = dup(1);
+    ASSERT_TRUE(saved_in >= 0 && saved_out >= 0);
+    close(0);
+    close(1);
+
+    char *const               argv[] = { "/bin/sh", "-c", "echo err >&2", NULL };
+    dino_process_spawn_opts_t opts   = { 0 };
+    opts.stdout_mode                 = DINO_STDIO_NULL;
+    opts.stderr_mode                 = DINO_STDIO_PIPE;
+    dino_process_t       p;
+    dino_process_pipes_t pipes;
+    char                 err[64] = "";
+    int                  spawned = dino_process_spawn(&p, argv, &opts, &pipes), code = -1;
+    if (spawned == 0)
+    {
+        read_all(pipes.err, err, sizeof(err));
+        dino_pipe_close(pipes.err);
+        dino_process_wait(p, &code);
+    }
+
+    dup2(saved_in, 0);
+    dup2(saved_out, 1);
+    close(saved_in);
+    close(saved_out);
+    ASSERT_EQ(0, spawned);
+    EXPECT_STREQ("err\n", err);
+    EXPECT_EQ(0, code);
+}
+#endif
 
 UTEST(process, working_directory)
 {
