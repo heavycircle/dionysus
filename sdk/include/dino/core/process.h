@@ -60,6 +60,13 @@ typedef struct
  * given: on Windows they are quoted by the MSVCRT rules that the child's C
  * runtime uses to split them again. All strings are UTF-8.
  *
+ * A Windows .bat or .cmd file runs under cmd.exe, which splits its command
+ * line by different rules. Each argument is quoted so that cmd.exe operators
+ * (& | < > ^ ...) in it stay literal, and an argument that quoting can't
+ * protect, one containing ", % or a line break, is refused with -1. The
+ * script still receives each argument with its quotes (%1 is "a b"; %~1
+ * removes them).
+ *
  * The child inherits only its stdin, stdout and stderr, never other handles or
  * sockets of the parent.
  *

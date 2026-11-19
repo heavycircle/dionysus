@@ -97,6 +97,11 @@ dino_process_wait(child, &code);
 
 - **`argv[0]`:** a path, or a bare name looked up on `PATH`. Windows also adds `.exe` and looks in a
   few system directories first.
+- **Batch files:** a `.bat` or `.cmd` file runs under `cmd.exe`, which reads `&`, `|`, `<`, `>` and
+  `^` in its command line as commands of its own. The SDK quotes every argument so they stay literal,
+  and refuses (returns `-1` for) an argument containing `"`, `%` or a line break, which quoting can't
+  protect. The script gets each argument with its quotes: `%1` is `"a b"`, `%~1` is `a b`. Passing
+  untrusted input to a batch file is still risky, since the script itself may expand `%~1` unquoted.
 - **Stdio modes:** each of `stdin_mode`, `stdout_mode` and `stderr_mode` is `DINO_STDIO_INHERIT` (the
   parent's own, the default), `DINO_STDIO_NULL` (`/dev/null` or `NUL`) or `DINO_STDIO_PIPE` (a new
   [pipe](pipe.md), whose parent end appears in `pipes.in`, `.out` or `.err`).

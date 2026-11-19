@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <wchar.h>
 
 #include <windows.h>
 
@@ -105,6 +106,53 @@ static wchar_t *command_line(char *const argv[])
     return w;
 }
 
+// CreateProcessW runs a .bat or .cmd file through cmd.exe, which splits the
+// command line by its own rules: an unquoted & | < > ^ ( ) ends the argument
+// and starts another command. Windows ignores trailing dots and spaces in the
+// name, so "x.bat. " is a batch file too.
+static int is_batch(const char *path)
+{
+    size_t n = strlen(path);
+    while (n > 0 && (path[n - 1] == '.' || path[n - 1] == ' '))
+        n--;
+    return n >= 4
+        && (_strnicmp(path + n - 4, ".bat", 4) == 0 || _strnicmp(path + n - 4, ".cmd", 4) == 0);
+}
+
+// cmd.exe from the system directory, never one found through the PATH, with
+// AutoRun scripts off (/d) and delayed expansion off (/v:OFF) so ! is literal.
+// Every argument is quoted, which makes the operators literal. What quoting
+// can't protect is refused: " ends the quoted part, % expands variables even
+// inside it, and a line break ends the command. /c strips the outer quotes.
+static wchar_t *batch_command_line(char *const argv[], wchar_t **application)
+{
+    for (int i = 0; argv[i]; i++)
+        if (strpbrk(argv[i], "\"%\r\n"))
+            return NULL;
+    struct buf b        = { 0 };
+    const char prefix[] = "cmd.exe /d /e:ON /v:OFF /c \"";
+    int        ok       = put(&b, prefix, sizeof(prefix) - 1) == 0;
+    for (int i = 0; ok && argv[i]; i++)
+        ok = (i == 0 || put(&b, " ", 1) == 0) && put(&b, "\"", 1) == 0
+            && put(&b, argv[i], strlen(argv[i])) == 0 && put(&b, "\"", 1) == 0;
+    ok = ok && put(&b, "\"", 1) == 0;
+
+    wchar_t dir[MAX_PATH];
+    UINT    len  = GetSystemDirectoryW(dir, MAX_PATH);
+    *application = ok && len > 0 && len < MAX_PATH - 8 ? malloc((len + 9) * sizeof(wchar_t)) : NULL;
+    wchar_t *w   = *application ? widen(b.data, (int)b.len) : NULL;
+    free(b.data);
+    if (!w)
+    {
+        free(*application);
+        *application = NULL;
+        return NULL;
+    }
+    wcscpy(*application, dir);
+    wcscat(*application, L"\\cmd.exe");
+    return w;
+}
+
 // "A=1\0B=2\0\0" in UTF-16.
 static wchar_t *environment_block(char *const env[])
 {
@@ -183,11 +231,12 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
     if (!argv || !argv[0])
         return -1;
 
-    dino_stdio_t                 modes[3];
-    HANDLE                       std[3]  = { NULL, NULL, NULL };
-    wchar_t                     *cmd     = command_line(argv);
-    wchar_t                     *cwd     = opts && opts->cwd ? widen(opts->cwd, -1) : NULL;
-    wchar_t                     *env     = opts && opts->env ? environment_block(opts->env) : NULL;
+    dino_stdio_t modes[3];
+    HANDLE       std[3] = { NULL, NULL, NULL };
+    wchar_t     *app    = NULL;
+    wchar_t     *cmd    = is_batch(argv[0]) ? batch_command_line(argv, &app) : command_line(argv);
+    wchar_t     *cwd    = opts && opts->cwd ? widen(opts->cwd, -1) : NULL;
+    wchar_t     *env    = opts && opts->env ? environment_block(opts->env) : NULL;
     LPPROC_THREAD_ATTRIBUTE_LIST attrs   = NULL;
     int                          started = 0;
 
@@ -224,7 +273,7 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
     si.StartupInfo.hStdError  = std[2];
     si.lpAttributeList        = attrs;
     PROCESS_INFORMATION pi    = { 0 };
-    if (CreateProcessW(NULL, cmd, NULL, NULL, TRUE,
+    if (CreateProcessW(app, cmd, NULL, NULL, TRUE,
             EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT, env, cwd, &si.StartupInfo,
             &pi))
     {
@@ -242,6 +291,7 @@ done:
     for (int i = 0; i < 3; i++)
         if (std[i])
             CloseHandle(std[i]);
+    free(app);
     free(cmd);
     free(cwd);
     free(env);

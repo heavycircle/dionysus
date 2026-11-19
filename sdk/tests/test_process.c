@@ -190,6 +190,39 @@ UTEST(process, arguments_arrive_unchanged)
         out);
 }
 
+#ifdef _WIN32
+// cmd.exe runs batch files and parses their command line itself, where & | < >
+// ^ ( ) start new commands unless quoted.
+UTEST(process, batch_file_arguments_cant_run_commands)
+{
+    FILE *f = fopen("dino_test_args.cmd", "wb");
+    ASSERT_TRUE(f != NULL);
+    fputs("@echo off\r\necho [%1]\r\n", f);
+    fclose(f);
+
+    char        out[512];
+    char *const plain[] = { "dino_test_args.cmd", "a&echo INJECTED", NULL };
+    EXPECT_EQ(0, run(plain, NULL, out, sizeof(out)));
+    EXPECT_STREQ("[\"a&echo INJECTED\"]\n", out);
+
+    char *const specials[] = { "dino_test_args.CMD", "^(x)|y<z> !v!", NULL };
+    EXPECT_EQ(0, run(specials, NULL, out, sizeof(out)));
+    EXPECT_STREQ("[\"^(x)|y<z> !v!\"]\n", out);
+
+    // What quoting can't protect is refused.
+    dino_process_t p;
+    char *const    quote[]   = { "dino_test_args.cmd", "a\" & echo INJECTED & \"", NULL };
+    char *const    percent[] = { "dino_test_args.cmd", "%PATH%", NULL };
+    char *const    newline[] = { "dino_test_args.cmd", "a\necho INJECTED", NULL };
+    char *const    dotted[]  = { "dino_test_args.cmd. ", "\"", NULL };
+    EXPECT_EQ(-1, dino_process_spawn(&p, quote, NULL, NULL));
+    EXPECT_EQ(-1, dino_process_spawn(&p, percent, NULL, NULL));
+    EXPECT_EQ(-1, dino_process_spawn(&p, newline, NULL, NULL));
+    EXPECT_EQ(-1, dino_process_spawn(&p, dotted, NULL, NULL));
+    remove("dino_test_args.cmd");
+}
+#endif
+
 UTEST(process, kill_ends_a_running_child)
 {
 #ifdef _WIN32
