@@ -165,6 +165,23 @@ UTEST(network, ports_outside_16_bits_are_rejected)
     dino_socket_close(s);
 }
 
+// Rebinding after a restart is the point; taking a port someone is listening
+// on is not, though Windows' SO_REUSEADDR would allow it (wine doesn't).
+UTEST(network, reuseaddr_never_shares_a_listening_port)
+{
+    dino_socket_t a = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t b = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    EXPECT_EQ(0, dino_socket_set_reuseaddr(a, 1));
+    EXPECT_EQ(0, dino_socket_set_reuseaddr(b, 1));
+    ASSERT_EQ(0, dino_socket_bind(a, "127.0.0.1", PORT + 12));
+    ASSERT_EQ(0, dino_socket_listen(a, 1));
+    EXPECT_EQ(-1, dino_socket_bind(b, "127.0.0.1", PORT + 12));
+    EXPECT_EQ(0, dino_socket_set_reuseaddr(a, 0));
+    EXPECT_EQ(-1, dino_socket_set_reuseaddr(DINO_INVALID_SOCKET, 1));
+    dino_socket_close(b);
+    dino_socket_close(a);
+}
+
 UTEST(network, accept_on_unlistened_socket_fails)
 {
     dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);

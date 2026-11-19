@@ -177,7 +177,12 @@ int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *v
 int dino_socket_set_v6only(dino_socket_t sock, int enable);
 
 /**
- * Enable or disable SO_REUSEADDR on sock.
+ * Let a server bind its port again right after restarting, while connections
+ * from the old process linger (SO_REUSEADDR on POSIX). Call before bind.
+ *
+ * It never lets a second socket bind a port another socket is listening on.
+ * Windows allows the restart case by default and its SO_REUSEADDR would allow
+ * that takeover, so there it only checks sock and succeeds.
  *
  * @param  sock    Socket to configure.
  * @param  enable  Non-zero to enable, 0 to disable.

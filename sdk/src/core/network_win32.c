@@ -230,10 +230,17 @@ int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *v
     return (rc == SOCKET_ERROR) ? -1 : 0;
 }
 
+// Windows already lets a server rebind its port while old connections linger,
+// which is all SO_REUSEADDR is for on POSIX. Its own SO_REUSEADDR does more:
+// a second socket may bind a port another socket is listening on and take its
+// connections. So it is never set (as libuv does).
 int dino_socket_set_reuseaddr(dino_socket_t sock, int enable)
 {
-    int flag = enable ? 1 : 0;
-    return dino_socket_setopt(sock, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+    (void)enable;
+    if (sock == DINO_INVALID_SOCKET)
+        return -1;
+    int type, len = sizeof(type);
+    return getsockopt((SOCKET)sock, SOL_SOCKET, SO_TYPE, (char *)&type, &len) == 0 ? 0 : -1;
 }
 
 int dino_socket_set_v6only(dino_socket_t sock, int enable)
