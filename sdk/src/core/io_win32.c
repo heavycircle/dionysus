@@ -100,7 +100,7 @@ void dino_fd_set_del(dino_fd_set_t set, dino_socket_t sock)
     FD_CLR((SOCKET)sock, (fd_set *)set);
 }
 
-int dino_fd_isset(dino_socket_t sock, dino_fd_set_t set)
+int dino_fd_set_has(dino_fd_set_t set, dino_socket_t sock)
 {
     if (set == DINO_INVALID_FD_SET)
         return 0;

@@ -74,25 +74,19 @@ void dino_log_write(dino_log_level_t level, const char *file, int line, const ch
  * __VA_ARGS__ allows calls without arguments without relying on the GNU
  * ", ##__VA_ARGS__" extension.
  */
-#define DINO_LOG_AT_(level, ...) dino_log_write(level, __FILE__, __LINE__, __VA_ARGS__)
+#define DINO__LOG_AT(level, ...) dino_log_write(level, __FILE__, __LINE__, __VA_ARGS__)
 
 #ifdef NDEBUG
 #define DINO_LOG_TRACE(...) ((void)(0 && printf(__VA_ARGS__)))
 #define DINO_LOG_DEBUG(...) ((void)(0 && printf(__VA_ARGS__)))
 #else
-#define DINO_LOG_TRACE(...) DINO_LOG_AT_(DINO_LOG_LEVEL_TRACE, __VA_ARGS__)
-#define DINO_LOG_DEBUG(...) DINO_LOG_AT_(DINO_LOG_LEVEL_DEBUG, __VA_ARGS__)
+#define DINO_LOG_TRACE(...) DINO__LOG_AT(DINO_LOG_LEVEL_TRACE, __VA_ARGS__)
+#define DINO_LOG_DEBUG(...) DINO__LOG_AT(DINO_LOG_LEVEL_DEBUG, __VA_ARGS__)
 #endif // NDEBUG
 
-#define DINO_LOG_INFO(...)  DINO_LOG_AT_(DINO_LOG_LEVEL_INFO, __VA_ARGS__)
-#define DINO_LOG_WARN(...)  DINO_LOG_AT_(DINO_LOG_LEVEL_WARN, __VA_ARGS__)
-#define DINO_LOG_ERROR(...) DINO_LOG_AT_(DINO_LOG_LEVEL_ERROR, __VA_ARGS__)
-
-#define LOG_TRACE DINO_LOG_TRACE
-#define LOG_DEBUG DINO_LOG_DEBUG
-#define LOG_INFO  DINO_LOG_INFO
-#define LOG_WARN  DINO_LOG_WARN
-#define LOG_ERROR DINO_LOG_ERROR
+#define DINO_LOG_INFO(...)  DINO__LOG_AT(DINO_LOG_LEVEL_INFO, __VA_ARGS__)
+#define DINO_LOG_WARN(...)  DINO__LOG_AT(DINO_LOG_LEVEL_WARN, __VA_ARGS__)
+#define DINO_LOG_ERROR(...) DINO__LOG_AT(DINO_LOG_LEVEL_ERROR, __VA_ARGS__)
 
 #ifdef __cplusplus
 }

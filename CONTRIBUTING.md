@@ -109,7 +109,7 @@ after changing `cli/` or `sdk/`.
 build.zig, build.zig.zon   Zig build for dino; build.zig.zon holds the version
 cli/                       dino source (main.zig, commands/, cmake.zig, libraries.zig, ...)
 sdk/
-  include/dino/core/       public headers: fs, io, kernel, mutex (+ condition variables, once), network,
+  include/dino/core/       public headers: event, fs, io, mutex (+ condition variables, once), network,
                            pipe, process, runtime, thread, time
   include/dino/util/       extras built on core: logging
   src/core/                implementations: <module>.c (shared, if any), <module>_posix.c and

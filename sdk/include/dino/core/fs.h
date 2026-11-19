@@ -31,11 +31,6 @@ uint64_t dino_file_size(const char *filepath);
  */
 int dino_fs_init(void);
 
-/**
- * Teardown file system environment. Leaves stdio open.
- */
-void dino_fs_cleanup(void);
-
 #ifdef __cplusplus
 }
 #endif

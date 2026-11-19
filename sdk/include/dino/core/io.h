@@ -97,11 +97,11 @@ void dino_fd_set_del(dino_fd_set_t set, dino_socket_t sock);
 /**
  * Test whether a socket is in the set (equivalent to FD_ISSET).
  *
- * @param  sock  Socket to test.
- * @param  set   Set to test against.
+ * @param  set   Set to test.
+ * @param  sock  Socket to look for.
  * @return Non-zero if present, 0 if absent.
  */
-int dino_fd_isset(dino_socket_t sock, dino_fd_set_t set);
+int dino_fd_set_has(dino_fd_set_t set, dino_socket_t sock);
 
 /* ---- Select ---- */
 

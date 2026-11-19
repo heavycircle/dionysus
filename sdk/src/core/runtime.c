@@ -16,5 +16,4 @@ int dino_runtime_init(void)
 void dino_runtime_cleanup(void)
 {
     dino_net_cleanup();
-    dino_fs_cleanup();
 }

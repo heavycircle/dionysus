@@ -41,8 +41,3 @@ int dino_fs_init(void)
 
     return 0;
 }
-
-// Stdio belongs to the program, so there is nothing to undo.
-void dino_fs_cleanup(void)
-{
-}

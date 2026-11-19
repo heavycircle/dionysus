@@ -28,7 +28,3 @@ int dino_fs_init(void)
 {
     return 0;
 }
-
-void dino_fs_cleanup(void)
-{
-}

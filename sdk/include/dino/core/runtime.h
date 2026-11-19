@@ -36,13 +36,6 @@ int dino_runtime_init(void);
  */
 void dino_runtime_cleanup(void);
 
-/**
- * Deprecated: setup is automatic. Expands to a harmless declaration so existing
- * `DINO_ENABLE_AUTO_RUNTIME;` lines keep compiling; to be removed by the 1.0 API
- * review.
- */
-#define DINO_ENABLE_AUTO_RUNTIME typedef int dino_auto_runtime_is_deprecated_
-
 #ifdef __cplusplus
 }
 #endif

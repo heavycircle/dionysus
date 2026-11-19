@@ -47,8 +47,6 @@ static void emit_every_macro(void)
     DINO_LOG_WARN("warn with %d", value);
     DINO_LOG_ERROR("error without arguments");
     DINO_LOG_ERROR("error with %d", value);
-    LOG_DEBUG("alias without arguments\n");
-    LOG_INFO("alias with %d\n", value);
 }
 
 UTEST(logging, every_macro_with_and_without_arguments)
@@ -58,18 +56,17 @@ UTEST(logging, every_macro_with_and_without_arguments)
     capture(buf, sizeof buf, emit_every_macro);
 
 #ifdef NDEBUG
-    // Trace, debug and the debug alias are compiled out.
-    EXPECT_EQ(7u, count_lines(buf));
+    // Trace and debug are compiled out.
+    EXPECT_EQ(6u, count_lines(buf));
     EXPECT_EQ(NULL, strstr(buf, "[D]"));
 #else
-    EXPECT_EQ(12u, count_lines(buf));
+    EXPECT_EQ(10u, count_lines(buf));
     EXPECT_NE(NULL, strstr(buf, "[T] test_logging.c:"));
     EXPECT_NE(NULL, strstr(buf, "[D] test_logging.c:"));
 #endif
     EXPECT_NE(NULL, strstr(buf, ": info with 7\n"));
     EXPECT_NE(NULL, strstr(buf, "[W] test_logging.c:"));
     EXPECT_NE(NULL, strstr(buf, "[E] test_logging.c:"));
-    EXPECT_NE(NULL, strstr(buf, ": alias with 7\n"));
 }
 
 static int emit_line;
