@@ -505,6 +505,49 @@ UTEST_F(event, timer_and_socket_in_one_wait)
     EXPECT_EQ(0, dino_event_timer_del(utest_fixture->loop, timer));
 }
 
+UTEST_F(event, timer_fires_while_a_socket_stays_ready)
+{
+    ASSERT_EQ(0,
+        dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    uint64_t           start = dino_time_monotonic_ns();
+    dino_event_timer_t timer = dino_event_timer_add(utest_fixture->loop, 10, 0, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
+
+    int          fired = 0;
+    dino_event_t out[1];
+    while (!fired && elapsed_ms(start) < 2000)
+    {
+        ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 1, 100));
+        fired = out[0].events == DINO_EVENT_TIMER;
+    }
+    EXPECT_TRUE(fired);
+    EXPECT_EQ(0, dino_event_timer_del(utest_fixture->loop, timer));
+}
+
+// The reverse: a repeating timer that is due at every wait leaves room for I/O.
+UTEST_F(event, due_timer_leaves_room_for_a_ready_socket)
+{
+    ASSERT_EQ(0,
+        dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    dino_event_timer_t timer = dino_event_timer_add(utest_fixture->loop, 0, 1, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
+
+    int          timers = 0, reads = 0;
+    dino_event_t out[1];
+    for (int i = 0; i < 20; i++)
+    {
+        dino_sleep_ms(2);
+        ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 1, 1000));
+        timers += out[0].events == DINO_EVENT_TIMER;
+        reads += (out[0].events & DINO_EVENT_READ) != 0;
+    }
+    EXPECT_GE(timers, 5);
+    EXPECT_GE(reads, 5);
+    EXPECT_EQ(0, dino_event_timer_del(utest_fixture->loop, timer));
+}
+
 UTEST(event, timer_invalid_args)
 {
     dino_event_loop_t loop = dino_event_loop_create();

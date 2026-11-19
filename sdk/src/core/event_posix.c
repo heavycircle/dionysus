@@ -269,17 +269,24 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
 
     struct epoll_event evs[BATCH];
-    int                cap = max < BATCH ? max : BATCH;
+    int                timers_first = dino__event_timers_turn(&loop->timers);
     uint64_t           deadline
         = dino_time_monotonic_ns() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0) * 1000000;
     for (;;)
     {
+        int n    = timers_first ? dino__event_timers_collect(&loop->timers, out, max) : 0;
         int left = dino__event_remaining_ms(timeout_ms, deadline);
-        int got = epoll_wait(loop->epfd, evs, cap, dino__event_timers_timeout(&loop->timers, left));
-        if (got < 0 && errno != EINTR)
-            return -1;
+        int cap  = max - n < BATCH ? max - n : BATCH;
+        int got  = 0;
+        if (cap > 0)
+        {
+            int wait = n > 0 ? 0 : dino__event_timers_timeout(&loop->timers, left);
+            got      = epoll_wait(loop->epfd, evs, cap, wait);
+            if (got < 0 && errno != EINTR)
+                return -1;
+        }
 
-        int n = 0, procs_ready = 0;
+        int procs_ready = 0;
         for (int i = 0; i < got; i++)
         {
             if (evs[i].data.ptr == &loop->proc_epfd)

@@ -177,6 +177,15 @@ int dino__event_timers_timeout(struct dino__event_timers *t, int timeout_ms)
     return timeout_ms < 0 || next < timeout_ms ? next : timeout_ms;
 }
 
+int dino__event_timers_turn(struct dino__event_timers *t)
+{
+    dino_mutex_lock(t->lock);
+    int first       = t->timers_first;
+    t->timers_first = !first;
+    dino_mutex_unlock(t->lock);
+    return first;
+}
+
 int dino__event_timers_collect(struct dino__event_timers *t, dino_event_t *out, int max)
 {
     int n = 0;

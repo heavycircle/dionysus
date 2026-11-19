@@ -164,7 +164,9 @@ int dino_event_del_process(dino_event_loop_t loop, dino_process_t process);
  * @param  loop        Loop to wait on.
  * @param  out         Receives up to max ready items.
  * @param  max         Size of out; must be at least 1. Items that don't fit
- *                     stay ready for the next wait.
+ *                     stay ready for the next wait. When due timers and
+ *                     other items don't all fit, waits take turns at which
+ *                     fills out first, so neither starves the other.
  * @param  timeout_ms  Milliseconds to wait; -1 to wait forever; 0 to check.
  * @return Number of items written to out, 0 when the time ran out, -1 on error.
  */

@@ -156,6 +156,9 @@ there, is an error), except the create functions, which return a handle or its i
   waited for a while) fires once and skips the periods it missed.
 - **Freeing:** a fired one-shot timer stays allocated until `dino_event_timer_del` or the loop is
   destroyed.
+- **Busy loops:** when timers and sockets are both ready and don't all fit in `out`, waits take
+  turns at filling it first. A socket that stays readable delays a timer by one wait at most, and a
+  timer that's due at every wait still leaves room for I/O, even with `max` of 1.
 - **Timeouts per wait:** a timer is how a loop gets a deadline for one operation. For a single wait,
   `timeout_ms` is simpler.
 
