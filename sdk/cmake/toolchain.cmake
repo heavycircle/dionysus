@@ -39,11 +39,16 @@ endfunction()
 dino_zig_tool(ar)
 dino_zig_tool(ranlib)
 
+# try_compile projects (check_function_exists and friends) read this file again
+# without the cache, so pass the target on, or every check runs against the
+# default target. They link a real executable: compiling alone would find any
+# function, since the check declares it itself.
+list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES ZIG_TARGET DINO_DYNAMIC)
+
 # Statically link. _INIT values only seed the cache on the first configure, so
 # reconfiguring never duplicates them and user-supplied flags are kept.
 # DINO_DYNAMIC is only for `dino test --memcheck`: valgrind can't see the
 # allocator inside a static binary.
-set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 if(NOT DINO_DYNAMIC)
     set(CMAKE_EXE_LINKER_FLAGS_INIT "-static")
 endif()

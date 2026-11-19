@@ -99,6 +99,10 @@ jobs:
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
             dionysus:ci /repo/tests/warnings.sh "${{ matrix.target }}"
 
+      # CMake configure checks (check_function_exists, ...) test this target.
+      - name: Configure checks
+        run: docker run --rm -v "$PWD:/repo:ro" dionysus:ci /repo/tests/configure.sh "${{ matrix.target }}"
+
       # docs/: every link resolves, and every complete C program builds and runs.
       - name: Documentation
         run: |
