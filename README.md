@@ -9,13 +9,13 @@ dino build --all
 ```
 
 ```
-build/arm/hello (5.2 KiB)
-build/arm64/hello (5.5 KiB)
-build/i386/hello (4.1 KiB)
-build/ppc/hello (6.4 KiB)
-build/win32/hello.exe (67.0 KiB)
+build/arm/hello (6.0 KiB)
+build/arm64/hello (6.3 KiB)
+build/i386/hello (4.9 KiB)
+build/ppc/hello (7.7 KiB)
+build/win32/hello.exe (66.5 KiB)
 build/win64/hello.exe (57.0 KiB)
-build/x86_64/hello (4.7 KiB)
+build/x86_64/hello (5.8 KiB)
 ```
 
 Linux builds are static ELF executables linked against musl; Windows builds are PE executables
@@ -107,7 +107,7 @@ that has a portable `dino_*` replacement:
 src/main.c:7:9: warning: 'pipe' is deprecated: pipe() is POSIX-only; use dino_pipe_create() from <dino/core/pipe.h> [-Wdeprecated-declarations]
 ```
 
-It needs no particular clangd or clang-tidy version. [docs/portability-warnings.md](docs/portability-warnings.md)
+It needs no particular clangd or clang-tidy version. [docs/guide/portability-warnings.md](docs/guide/portability-warnings.md)
 lists what's flagged and how to opt out for a project, a file or a single call.
 
 ### Organization libraries
@@ -124,8 +124,14 @@ export DINO_LIBRARY_PATH=/opt/acme/acme_log:/opt/acme/acme_proto
 target_link_libraries(app PRIVATE acme::proto)
 ```
 
-[docs/libraries.md](docs/libraries.md) covers the layout a library needs, testing one with
+[docs/guide/libraries.md](docs/guide/libraries.md) covers the layout a library needs, testing one with
 `dino test`, wrapping third-party code, and Docker and CI.
+
+## Documentation
+
+[docs/](docs/README.md) has the user guide (installing, building and testing projects, Docker,
+editors, organization libraries, troubleshooting) and a page for every SDK module. New here? Start
+with [Installing](docs/guide/install.md) and [your first project](docs/guide/first-project.md).
 
 ## Contributing
 

@@ -5,7 +5,7 @@ The `dino_*` portability layer: one C API over the places where Linux (musl) and
 rules and how to add a module.
 
 Code that links the SDK gets a warning when it calls one of the platform APIs below that has a
-`dino_*` replacement; see [docs/portability-warnings.md](../docs/portability-warnings.md).
+`dino_*` replacement; see [docs/guide/portability-warnings.md](../docs/guide/portability-warnings.md).
 
 ## API Changes
 
