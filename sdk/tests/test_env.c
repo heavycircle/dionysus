@@ -15,7 +15,7 @@
 
 static void child_sees(int *utest_result, const char *expected)
 {
-    char *const       argv[] = SHOW_VAR;
+    char *const           argv[] = SHOW_VAR;
     dino_process_result_t r;
     ASSERT_EQ(0, dino_process_run(argv, NULL, &r));
     char *cr = strchr(r.out, '\r');

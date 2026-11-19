@@ -87,7 +87,8 @@ void dino_net_cleanup(void)
     ReleaseSRWLockExclusive(&wsa_lock);
 }
 
-dino_socket_t dino_socket_create(dino_socket_domain_t domain, dino_socket_type_t type, dino_socket_protocol_t protocol)
+dino_socket_t dino_socket_create(
+    dino_socket_domain_t domain, dino_socket_type_t type, dino_socket_protocol_t protocol)
 {
     if (dino_net_init() != 0)
         return DINO_INVALID_SOCKET;

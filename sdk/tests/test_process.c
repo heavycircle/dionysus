@@ -51,7 +51,7 @@ static void strip_cr(char *s)
 static int run(char *const argv[], const dino_process_spawn_opts_t *base, char *out, int size)
 {
     dino_process_spawn_opts_t opts = base ? *base : (dino_process_spawn_opts_t) { 0 };
-    opts.stdout_mode       = DINO_STDIO_PIPE;
+    opts.stdout_mode               = DINO_STDIO_PIPE;
     dino_process_t       p;
     dino_process_pipes_t pipes;
     if (dino_process_spawn(&p, argv, &opts, &pipes) != 0)
@@ -93,9 +93,9 @@ UTEST(process, stdin_and_stderr_pipes)
     char *const argv[] = { "/bin/sh", "-c", "cat; echo oops >&2", NULL };
 #endif
     dino_process_spawn_opts_t opts = { 0 };
-    opts.stdin_mode        = DINO_STDIO_PIPE;
-    opts.stdout_mode       = DINO_STDIO_PIPE;
-    opts.stderr_mode       = DINO_STDIO_PIPE;
+    opts.stdin_mode                = DINO_STDIO_PIPE;
+    opts.stdout_mode               = DINO_STDIO_PIPE;
+    opts.stderr_mode               = DINO_STDIO_PIPE;
     dino_process_t       p;
     dino_process_pipes_t pipes;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, &opts, &pipes));
@@ -126,9 +126,9 @@ UTEST(process, null_stdio)
 #endif
     // stdin at end of file at once, so the copy ends; its output goes nowhere.
     dino_process_spawn_opts_t opts = { 0 };
-    opts.stdin_mode        = DINO_STDIO_NULL;
-    opts.stdout_mode       = DINO_STDIO_NULL;
-    opts.stderr_mode       = DINO_STDIO_NULL;
+    opts.stdin_mode                = DINO_STDIO_NULL;
+    opts.stdout_mode               = DINO_STDIO_NULL;
+    opts.stderr_mode               = DINO_STDIO_NULL;
     dino_process_t p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, &opts, NULL));
     int code = -1;
@@ -146,7 +146,7 @@ UTEST(process, working_directory)
     const char *dir = "/", *expected = "/\n";
 #endif
     dino_process_spawn_opts_t opts = { 0 };
-    opts.cwd               = dir;
+    opts.cwd                       = dir;
     char out[256];
     EXPECT_EQ(0, run(argv, &opts, out, sizeof(out)));
     EXPECT_STREQ(expected, out);
@@ -165,7 +165,7 @@ UTEST(process, environment_replaces_the_parents)
     char *const env[]  = { "DINO_TEST_VAR=from env", NULL };
 #endif
     dino_process_spawn_opts_t opts = { 0 };
-    opts.env               = env;
+    opts.env                       = env;
     char out[256];
     EXPECT_EQ(0, run(argv, &opts, out, sizeof(out)));
     EXPECT_STREQ("from env\n", out);
@@ -216,10 +216,10 @@ UTEST(process, signal_is_reported_as_128_plus_its_number)
 
 UTEST(process, missing_program_fails_to_spawn)
 {
-    char *const          argv[] = { "dino-test-no-such-program", NULL };
-    dino_process_t       p      = (dino_process_t)1;
-    dino_process_spawn_opts_t    opts   = { 0 };
-    dino_process_pipes_t pipes;
+    char *const               argv[] = { "dino-test-no-such-program", NULL };
+    dino_process_t            p      = (dino_process_t)1;
+    dino_process_spawn_opts_t opts   = { 0 };
+    dino_process_pipes_t      pipes;
     opts.stdout_mode = DINO_STDIO_PIPE;
     int rc           = dino_process_spawn(&p, argv, &opts, &pipes);
 #ifndef _WIN32
@@ -249,9 +249,9 @@ UTEST(process, invalid_arguments_are_rejected)
     EXPECT_EQ(-1, dino_process_spawn(&p, empty, NULL, NULL));
 
     // Asking for a pipe without somewhere to put it.
-    char *const       argv[] = SHELL("exit 0");
+    char *const               argv[] = SHELL("exit 0");
     dino_process_spawn_opts_t opts   = { 0 };
-    opts.stdout_mode         = DINO_STDIO_PIPE;
+    opts.stdout_mode                 = DINO_STDIO_PIPE;
     EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
 
     EXPECT_EQ(-1, dino_process_wait(DINO_INVALID_PROCESS, NULL));
@@ -359,8 +359,8 @@ UTEST(process, run_feeds_input_while_reading)
         input[i] = (i % 64 == 63) ? '\n' : (char)('a' + i % 26);
 
     dino_process_run_opts_t opts = { 0 };
-    opts.input           = input;
-    opts.input_len       = SIZE;
+    opts.input                   = input;
+    opts.input_len               = SIZE;
     dino_process_result_t r;
     ASSERT_EQ(0, dino_process_run(argv, &opts, &r));
     EXPECT_EQ(0, r.exit_code);
@@ -383,8 +383,8 @@ UTEST(process, run_survives_a_child_that_ignores_its_input)
     char *input = calloc(1, SIZE);
     ASSERT_TRUE(input != NULL);
     dino_process_run_opts_t opts = { 0 };
-    opts.input           = input;
-    opts.input_len       = SIZE;
+    opts.input                   = input;
+    opts.input_len               = SIZE;
     dino_process_result_t r;
     EXPECT_EQ(0, dino_process_run(argv, &opts, &r));
     EXPECT_EQ(0, r.exit_code);
@@ -400,9 +400,9 @@ UTEST(process, run_kills_after_the_timeout)
     char *const argv[] = SHELL("echo started; exec sleep 60");
 #endif
     dino_process_run_opts_t opts = { 0 };
-    opts.timeout_ms      = 200;
+    opts.timeout_ms              = 200;
     dino_process_result_t r;
-    uint64_t          start = dino_time_monotonic_ns();
+    uint64_t              start = dino_time_monotonic_ns();
     EXPECT_EQ(DINO_TIMEOUT, dino_process_run(argv, &opts, &r));
     EXPECT_GE((dino_time_monotonic_ns() - start) / 1000000, 200u);
     EXPECT_EQ(DINO_EXIT_KILLED, r.exit_code);
@@ -414,9 +414,9 @@ UTEST(process, run_kills_after_the_timeout)
 
 UTEST(process, run_reports_a_missing_program)
 {
-    char *const       argv[] = { "dino-test-no-such-program", NULL };
+    char *const           argv[] = { "dino-test-no-such-program", NULL };
     dino_process_result_t r;
-    int               rc = dino_process_run(argv, NULL, &r);
+    int                   rc = dino_process_run(argv, NULL, &r);
     // See missing_program_fails_to_spawn: under valgrind glibc can't tell.
     if (rc == 0)
         EXPECT_EQ(127, r.exit_code);
@@ -430,7 +430,7 @@ UTEST(process, current_id_is_the_childs_parent)
 {
     EXPECT_NE(0u, dino_process_current_id());
 #ifndef _WIN32
-    char *const       argv[] = SHELL("echo $PPID");
+    char *const           argv[] = SHELL("echo $PPID");
     dino_process_result_t r;
     ASSERT_EQ(0, dino_process_run(argv, NULL, &r));
     EXPECT_EQ(dino_process_current_id(), strtoull(r.out, NULL, 10));

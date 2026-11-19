@@ -58,7 +58,8 @@ void dino_net_cleanup(void);
  * @param  protocol     Socket protocol (IPPROTO_TCP)
  * @return Socket, or DINO_INVALID_SOCKET on failure.
  */
-dino_socket_t dino_socket_create(dino_socket_domain_t domain, dino_socket_type_t type, dino_socket_protocol_t protocol);
+dino_socket_t dino_socket_create(
+    dino_socket_domain_t domain, dino_socket_type_t type, dino_socket_protocol_t protocol);
 
 /**
  * Close the socket connection and free the handle.

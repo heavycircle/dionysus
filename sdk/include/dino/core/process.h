@@ -75,8 +75,8 @@ typedef struct
  * @return 0 on success, -1 if the program couldn't be started (not found, not
  *         executable, bad arguments).
  */
-int dino_process_spawn(dino_process_t *process, char *const argv[], const dino_process_spawn_opts_t *opts,
-    dino_process_pipes_t *pipes);
+int dino_process_spawn(dino_process_t *process, char *const argv[],
+    const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes);
 
 /**
  * Wait for a process to end and release it. The handle is invalid afterwards.
@@ -162,7 +162,8 @@ typedef struct
  * @return 0 when the child ran to the end, DINO_TIMEOUT when it was killed
  *         after opts->timeout_ms, -1 if it couldn't be started or on error.
  */
-int dino_process_run(char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result);
+int dino_process_run(
+    char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result);
 
 /**
  * Free what dino_process_run collected. Safe on a zeroed result.

@@ -26,8 +26,8 @@ static int decode_status(int status)
     return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
 }
 
-int dino_process_spawn(dino_process_t *process, char *const argv[], const dino_process_spawn_opts_t *opts,
-    dino_process_pipes_t *pipes)
+int dino_process_spawn(dino_process_t *process, char *const argv[],
+    const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
 {
     *process = DINO_INVALID_PROCESS;
     dino_process_pipes_t unused;
