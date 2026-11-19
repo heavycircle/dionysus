@@ -379,12 +379,14 @@ UTEST(event, timer_repeats)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    // Timed from before the add: the fifth firing is 100 ms after the add,
+    // which can be under 100 ms after a clock read taken later.
+    uint64_t           start = dino_time_monotonic_ns();
     dino_event_timer_t timer = dino_event_timer_add(loop, 20, 20, NULL);
     ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
 
     dino_event_t out[4];
     int          fired = 0;
-    uint64_t     start = dino_time_monotonic_ns();
     while (fired < 5 && elapsed_ms(start) < 5000)
     {
         int n = dino_event_wait(loop, out, 4, 1000);
