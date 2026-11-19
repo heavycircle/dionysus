@@ -376,6 +376,10 @@ of `core` and `DINO_CORE_` below.
 7. Add `examples/<name>_example/` (a `CMakeLists.txt` with `dino_executable` and a `main.c` that
    exits nonzero on failure, so the test matrix notices) and a row in `examples/README.md`. The
    test matrix picks it up automatically.
+8. Add `docs/sdk/<name>.md` in the shape of the existing pages (what it's for, one complete example
+   program, a table of every function, pitfalls, links to the header and the example), and a row in
+   the module tables of `docs/README.md` and `docs/sdk/README.md`. `tests/docs.sh` builds and runs
+   the example on every target.
 
 ## Code style
 
