@@ -108,8 +108,8 @@ uint64_t dino_process_id(dino_process_t process);
  * Like dino_process_wait, but give up after timeout_ms. On DINO_TIMEOUT the
  * process keeps running and the handle stays valid; on 0 it is released.
  *
- * On POSIX this checks every few milliseconds rather than sleeping until the
- * process exits.
+ * On Linux 5.3 and later it sleeps until the process exits (on a pidfd); older
+ * kernels check every few milliseconds instead.
  *
  * @param  process     Handle from dino_process_spawn.
  * @param  timeout_ms  Milliseconds to wait; -1 to wait forever; 0 to check.
