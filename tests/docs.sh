@@ -2,10 +2,11 @@
 # Keep the documentation honest:
 #   - every relative link in the Markdown (docs/, the READMEs, CONTRIBUTING.md)
 #     points at a file that exists, and every #anchor at a heading in it
-#   - every ```c block in docs/ that contains `int main(` is a complete program:
-#     it's built for each target and run (natively, under qemu-user or under
-#     wine), and must exit 0
-# Fragments without main() aren't built. Intended for the Docker image, which
+#   - every ```c block in docs/ that contains `int main(` or `UTEST_MAIN()` is a
+#     complete program (the latter a utest.h test, built with dino_test): it's
+#     built for each target and run (natively, under qemu-user or under wine),
+#     and must exit 0
+# Fragments without either aren't built. Intended for the Docker image, which
 # has every runner:
 #
 #   docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/docs.sh arm64 win64
@@ -79,7 +80,7 @@ while IFS= read -r page; do
         /^```c[[:space:]]*$/ { inblock = 1; text = ""; next }
         inblock && /^```/ {
             inblock = 0
-            if (text ~ /int main\(/) { n++; f = out "_" n ".c"; printf "%s", text > f; close(f) }
+            if (text ~ /int main\(|UTEST_MAIN\(\)/) { n++; f = out "_" n ".c"; printf "%s", text > f; close(f) }
             next
         }
         inblock { text = text $0 "\n" }
@@ -98,7 +99,11 @@ fi
     echo 'cmake_minimum_required(VERSION 3.15)'
     echo 'project(DocPrograms C)'
     for p in "${programs[@]}"; do
-        echo "dino_executable($p $p.c)"
+        if grep -q 'UTEST_MAIN()' "$proj/$p.c"; then
+            echo "dino_test($p $p.c)"
+        else
+            echo "dino_executable($p $p.c)"
+        fi
     done
 } >"$proj/CMakeLists.txt"
 
