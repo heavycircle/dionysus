@@ -83,23 +83,30 @@ void dino_fd_set_zero(dino_fd_set_t set)
     FD_ZERO((fd_set *)set);
 }
 
-void dino_fd_set_add(dino_fd_set_t set, dino_socket_t sock)
+// FD_SET and friends index a fixed 1024-bit array without checking.
+static int fits(dino_socket_t sock)
 {
-    if (set == DINO_INVALID_FD_SET)
-        return;
+    return sock < FD_SETSIZE;
+}
+
+int dino_fd_set_add(dino_fd_set_t set, dino_socket_t sock)
+{
+    if (set == DINO_INVALID_FD_SET || !fits(sock))
+        return -1;
     FD_SET((int)sock, (fd_set *)set);
+    return 0;
 }
 
 void dino_fd_set_del(dino_fd_set_t set, dino_socket_t sock)
 {
-    if (set == DINO_INVALID_FD_SET)
+    if (set == DINO_INVALID_FD_SET || !fits(sock))
         return;
     FD_CLR((int)sock, (fd_set *)set);
 }
 
 int dino_fd_set_has(dino_fd_set_t set, dino_socket_t sock)
 {
-    if (set == DINO_INVALID_FD_SET)
+    if (set == DINO_INVALID_FD_SET || !fits(sock))
         return 0;
     return FD_ISSET((int)sock, (fd_set *)set);
 }

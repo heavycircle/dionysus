@@ -138,9 +138,44 @@ UTEST(fd_set, add_test_remove)
     dino_socket_close(s);
 }
 
+// Sets are never passed to select here, so made-up socket values are fine.
+UTEST(fd_set, sockets_that_dont_fit_are_refused)
+{
+    dino_fd_set_t set   = dino_fd_set_create();
+    dino_fd_set_t other = dino_fd_set_create();
+    ASSERT_NE(DINO_INVALID_FD_SET, set);
+    ASSERT_NE(DINO_INVALID_FD_SET, other);
+
+    EXPECT_EQ(-1, dino_fd_set_add(set, DINO_INVALID_SOCKET));
+    EXPECT_FALSE(dino_fd_set_has(set, DINO_INVALID_SOCKET));
+    dino_fd_set_del(set, DINO_INVALID_SOCKET);
+#ifdef _WIN32
+    // At most 64 sockets, whatever their values.
+    for (dino_socket_t s = 0; s < 64; s++)
+        ASSERT_EQ(0, dino_fd_set_add(set, 1000 + s * 4));
+    EXPECT_EQ(0, dino_fd_set_add(set, 1000));
+    EXPECT_EQ(-1, dino_fd_set_add(set, 4));
+    EXPECT_FALSE(dino_fd_set_has(set, 4));
+#else
+    // Descriptors below 1024 only: the set is a 1024-bit array.
+    EXPECT_EQ(0, dino_fd_set_add(set, 1023));
+    EXPECT_TRUE(dino_fd_set_has(set, 1023));
+    for (dino_socket_t s = 1024; s < 4096; s++)
+    {
+        EXPECT_EQ(-1, dino_fd_set_add(set, s));
+        EXPECT_FALSE(dino_fd_set_has(set, s));
+        dino_fd_set_del(set, s);
+    }
+    for (dino_socket_t s = 0; s < 1024; s++)
+        EXPECT_FALSE(dino_fd_set_has(other, s));
+#endif
+    dino_fd_set_destroy(set);
+    dino_fd_set_destroy(other);
+}
+
 UTEST(fd_set, invalid_set_is_harmless)
 {
-    dino_fd_set_add(DINO_INVALID_FD_SET, 0);
+    EXPECT_EQ(-1, dino_fd_set_add(DINO_INVALID_FD_SET, 0));
     dino_fd_set_del(DINO_INVALID_FD_SET, 0);
     dino_fd_set_zero(DINO_INVALID_FD_SET);
     dino_fd_set_destroy(DINO_INVALID_FD_SET);

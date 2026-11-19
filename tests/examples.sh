@@ -42,6 +42,9 @@ for dir in "$src"/*/; do
         result=ok
         if ! dino build "$target" -C "$work/$name" >"$log" 2>&1; then
             result="build failed"
+        elif ! grep -q "^==> $target " "$log"; then
+            # dino's own lines and CMake's share the file: none may overwrite another.
+            result="build output missing from the log"
         elif [[ -z ${build_only[$name]:-} ]] &&
             ! timeout 120 dino run "$target" --no-build -C "$work/$name" >>"$log" 2>&1 </dev/null; then
             result="run failed"

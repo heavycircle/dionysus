@@ -379,12 +379,14 @@ UTEST(event, timer_repeats)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    // Timed from before the add: the fifth firing is 100 ms after the add,
+    // which can be under 100 ms after a clock read taken later.
+    uint64_t           start = dino_time_monotonic_ns();
     dino_event_timer_t timer = dino_event_timer_add(loop, 20, 20, NULL);
     ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
 
     dino_event_t out[4];
     int          fired = 0;
-    uint64_t     start = dino_time_monotonic_ns();
     while (fired < 5 && elapsed_ms(start) < 5000)
     {
         int n = dino_event_wait(loop, out, 4, 1000);
@@ -787,6 +789,27 @@ UTEST(event, pipe_joins_only_one_loop_on_windows)
     dino_pipe_close(w);
     dino_event_loop_destroy(a);
     dino_event_loop_destroy(b);
+}
+
+// Windows reuses handle values, so a new loop's port can get the destroyed
+// loop's value. The pipe is still attached to the dead port and must not pass
+// as attached to the new one.
+UTEST(event, pipe_refused_by_a_later_loop_on_windows)
+{
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    for (int i = 0; i < 8; i++)
+    {
+        dino_event_loop_t a = dino_event_loop_create();
+        if (i == 0)
+            ASSERT_EQ(0, dino_event_add_pipe(a, r, DINO_EVENT_READ, NULL));
+        else
+            EXPECT_EQ(-1, dino_event_add_pipe(a, r, DINO_EVENT_READ, NULL));
+        dino_event_del_pipe(a, r);
+        dino_event_loop_destroy(a);
+    }
+    dino_pipe_close(r);
+    dino_pipe_close(w);
 }
 #endif
 

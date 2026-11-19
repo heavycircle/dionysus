@@ -125,6 +125,21 @@ int dino__pipe_create_for_child(dino_pipe_t *parent_end, dino_pipe_t *child_end,
         return -1;
     *parent_end = parent_reads ? r : w;
     *child_end  = parent_reads ? w : r;
+    // In a parent with stdio closed the child's end can land on fd 0-2, where
+    // the child's other stdio redirections would replace it before it is moved
+    // into place. Keep it above them.
+    int fd = TO_FD(*child_end);
+    if (fd > 2)
+        return 0;
+    int moved = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+    close(fd);
+    if (moved < 0)
+    {
+        dino_pipe_close(*parent_end);
+        *parent_end = *child_end = DINO_INVALID_PIPE;
+        return -1;
+    }
+    *child_end = TO_HANDLE(moved);
     return 0;
 }
 
@@ -138,8 +153,9 @@ int dino__pipe_is_read_end(dino_pipe_t pipe)
     return (flags & O_ACCMODE) == O_RDONLY;
 }
 
-int dino__pipe_attach(dino_pipe_t pipe, intptr_t port)
+int dino__pipe_attach(dino_pipe_t pipe, intptr_t port, uint64_t loop_id)
 {
     (void)port;
+    (void)loop_id;
     return pipe == DINO_INVALID_PIPE ? -1 : 0;
 }

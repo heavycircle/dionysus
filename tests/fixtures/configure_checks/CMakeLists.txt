@@ -1,0 +1,43 @@
+# Configure checks must compile, link and size things for the target being
+# built, not pass no matter what. tests/configure.sh builds this per target.
+cmake_minimum_required(VERSION 3.20)
+project(configure_checks C)
+
+include(CheckFunctionExists)
+include(CheckIncludeFile)
+include(CheckTypeSize)
+
+check_function_exists(dino_no_such_function HAVE_MISSING)
+check_function_exists(fork HAVE_FORK)
+check_include_file(windows.h HAVE_WINDOWS_H)
+check_type_size("void *" POINTER_BYTES)
+
+if(ZIG_TARGET MATCHES "^(x86|arm|powerpc)-")
+    set(expected_pointer 4)
+else()
+    set(expected_pointer 8)
+endif()
+
+set(problems "")
+if(HAVE_MISSING)
+    list(APPEND problems "a function that doesn't exist was found")
+endif()
+if(WIN32 AND HAVE_FORK)
+    list(APPEND problems "fork was found on Windows")
+elseif(NOT WIN32 AND NOT HAVE_FORK)
+    list(APPEND problems "fork was not found on Linux")
+endif()
+if(WIN32 AND NOT HAVE_WINDOWS_H)
+    list(APPEND problems "windows.h was not found on Windows")
+elseif(NOT WIN32 AND HAVE_WINDOWS_H)
+    list(APPEND problems "windows.h was found on Linux")
+endif()
+if(NOT POINTER_BYTES EQUAL expected_pointer)
+    list(APPEND problems "pointers are ${POINTER_BYTES} bytes, not ${expected_pointer}")
+endif()
+if(problems)
+    string(REPLACE ";" "\n  " problems "${problems}")
+    message(FATAL_ERROR "configure checks for ${ZIG_TARGET}:\n  ${problems}")
+endif()
+
+dino_executable(configure_checks main.c)

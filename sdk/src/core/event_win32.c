@@ -116,6 +116,7 @@ struct dino_event_loop
     struct dino__event_timers    timers; // first: see event_internal.h
     SRWLOCK                      lock;
     HANDLE                       port;
+    uint64_t                     id; // for pipes: port HANDLE values get reused
     HANDLE                       afd;
     nt_device_io_control_file_fn ioctl;
     nt_cancel_io_file_ex_fn      cancel;
@@ -362,6 +363,8 @@ static HANDLE open_afd(HANDLE port, nt_create_file_fn create)
     return afd;
 }
 
+static volatile LONG64 loop_counter;
+
 dino_event_loop_t dino_event_loop_create(void)
 {
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
@@ -379,6 +382,7 @@ dino_event_loop_t dino_event_loop_create(void)
         ntdll, "NtDeviceIoControlFile");
     loop->cancel
         = (nt_cancel_io_file_ex_fn)(void (*)(void))GetProcAddress(ntdll, "NtCancelIoFileEx");
+    loop->id    = (uint64_t)InterlockedIncrement64(&loop_counter);
     loop->cap   = 16;
     loop->slots = (struct item **)calloc(loop->cap, sizeof(*loop->slots));
     InitializeSRWLock(&loop->lock);
@@ -595,7 +599,7 @@ int dino_event_add_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t event
     if (!dino__event_pipe_args_valid(loop, events) || dino__pipe_is_read_end(pipe) != 1)
         return -1;
     struct dino_event_loop *l = (struct dino_event_loop *)loop;
-    if (dino__pipe_attach(pipe, (intptr_t)l->port) != 0)
+    if (dino__pipe_attach(pipe, (intptr_t)l->port, l->id) != 0)
         return -1;
     return add_item(l, KIND_PIPE, pipe, (HANDLE)dino__pipe_to_os(pipe), events, userdata);
 }
