@@ -64,6 +64,5 @@ aren't written.
   never interleave.
 - **Length:** lines over 1 KB are truncated.
 - **`errno`** is left as it was, so logging inside error handling doesn't disturb it.
-- **Short names:** `LOG_TRACE` ... `LOG_ERROR` are shorter aliases for the macros.
 
 See also: [`examples/logging_example`](../../examples/logging_example/main.c).

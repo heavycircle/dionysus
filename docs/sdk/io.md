@@ -76,7 +76,7 @@ signal that the stream ended.
 dino_fd_set_t set = dino_fd_set_create();
 dino_fd_set_add(set, sock);
 int n = dino_select(max_fd, set, DINO_INVALID_FD_SET, DINO_INVALID_FD_SET, 1000);
-if (n > 0 && dino_fd_isset(sock, set)) { ... }
+if (n > 0 && dino_fd_set_has(set, sock)) { ... }
 dino_fd_set_destroy(set);
 ```
 
@@ -85,7 +85,7 @@ dino_fd_set_destroy(set);
 | `dino_fd_set_create()` | a new, empty set, or `DINO_INVALID_FD_SET` |
 | `dino_fd_set_destroy(set)` | free it |
 | `dino_fd_set_zero(set)`, `dino_fd_set_add(set, s)`, `dino_fd_set_del(set, s)` | `FD_ZERO`, `FD_SET`, `FD_CLR` |
-| `dino_fd_isset(s, set)` | `FD_ISSET`: non-zero if `s` is in the set |
+| `dino_fd_set_has(set, s)` | `FD_ISSET`: non-zero if `s` is in the set |
 | `dino_select(max_fd, rfds, wfds, efds, timeout_ms)` | wait; returns the number ready, `0` on timeout, `-1` on error |
 
 - **`max_fd`** is the highest socket plus one, as for `select()`. Windows ignores it, but pass it for

@@ -33,8 +33,8 @@ pick the shell per platform.
 int main(void)
 {
     char *const       argv[] = SHELL("echo out&& echo err 1>&2&& exit 3");
-    dino_run_opts_t   opts   = { 0 };
-    dino_run_result_t result;
+    dino_process_run_opts_t   opts   = { 0 };
+    dino_process_result_t result;
     opts.timeout_ms = 10000; // killed if it takes longer
 
     int rc = dino_process_run(argv, &opts, &result);
@@ -44,7 +44,7 @@ int main(void)
 
     int ok = rc == 0 && result.exit_code == 3 && strncmp(result.out, "out", 3) == 0
         && strncmp(result.err, "err", 3) == 0;
-    dino_run_result_free(&result);
+    dino_process_result_free(&result);
     return ok ? 0 : 1;
 }
 ```
@@ -56,20 +56,20 @@ everything it writes to stdout and stderr, and waits for it to exit.
 
 - **No deadlocks:** it reads both outputs and writes the input at the same time, so a child that
   fills one pipe while the parent is busy with another can't deadlock.
-- **Options:** `dino_run_opts_t` has `cwd`, `env`, `input`/`input_len` (`NULL`: stdin is empty) and
+- **Options:** `dino_process_run_opts_t` has `cwd`, `env`, `input`/`input_len` (`NULL`: stdin is empty) and
   `timeout_ms` (`0`: no limit; otherwise the child is killed after that long).
-- **Results:** `dino_run_result_t` has `out`/`out_len`, `err`/`err_len` (both NUL-terminated) and
+- **Results:** `dino_process_result_t` has `out`/`out_len`, `err`/`err_len` (both NUL-terminated) and
   `exit_code`.
 - **Return value:** `0` when the child ran to the end, `DINO_TIMEOUT` when it was killed for taking
   too long (`result` still holds what it wrote first), or `-1` if it couldn't be started. Call
-  `dino_run_result_free` in every case.
+  `dino_process_result_free` in every case.
 
 ## Talking to a running program: `dino_process_spawn`
 
 For a long-running child, or to stream its output, spawn it and use the pipes:
 
 ```
-dino_spawn_opts_t    opts = { 0 };
+dino_process_spawn_opts_t    opts = { 0 };
 dino_process_pipes_t pipes;
 opts.stdout_mode = DINO_STDIO_PIPE;      // pipes.out: read the child's stdout
 opts.stdin_mode  = DINO_STDIO_NULL;      // reads see end of file

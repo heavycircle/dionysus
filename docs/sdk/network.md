@@ -62,9 +62,9 @@ int main(void)
 | Function | Does | Returns |
 | --- | --- | --- |
 | `dino_socket_create(domain, type, protocol)` | A new socket. `DINO_AF_INET` or `DINO_AF_INET6`; `DINO_SOCK_STREAM` with `DINO_IPPROTO_TCP`, or `DINO_SOCK_DGRAM` with `DINO_IPPROTO_UDP`. | the socket, or `DINO_INVALID_SOCKET` |
-| `dino_socket_close(sock)` | Close it and free the handle. | `0`, non-zero on failure |
-| `dino_socket_bind(sock, ip, port)` | Bind to a local address. | `0`, negative on failure |
-| `dino_socket_listen(sock, backlog)` | Start accepting connections, with up to `backlog` waiting. | `0`, negative on failure |
+| `dino_socket_close(sock)` | Close it and free the handle. | `0`, `-1` |
+| `dino_socket_bind(sock, ip, port)` | Bind to a local address. | `0`, `-1` |
+| `dino_socket_listen(sock, backlog)` | Start accepting connections, with up to `backlog` waiting. | `0`, `-1` |
 | `dino_socket_accept(sock)` | Take the next connection. | the new socket, or `DINO_INVALID_SOCKET` |
 | `dino_socket_connect(sock, ip, port)` | Connect to a remote address. | `0`, `-1` on failure |
 | `dino_socket_send(sock, buf, len)` | Send up to `len` bytes. Never raises `SIGPIPE`. | bytes sent, `-1` on error |

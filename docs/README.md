@@ -41,6 +41,7 @@ target. Start with the [overview](sdk/README.md), which explains the conventions
 | [Logging](sdk/logging.md) | Levelled log lines |
 | [dino vs libc](sdk/libc.md) | What the C library already does portably, and what needs `dino_*` |
 | [Gotchas](sdk/gotchas.md) | Platform differences the API can't hide |
+| [Upgrading](sdk/upgrading.md) | What changed between SDK versions, with before-and-after code |
 
 The headers in [`sdk/include/dino/`](../sdk/include/dino) are the reference for every function. A
 generated API reference is planned in [#98](https://github.com/heavycircle/dionysus/issues/98).

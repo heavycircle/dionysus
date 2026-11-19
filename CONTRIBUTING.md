@@ -328,9 +328,17 @@ where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same w
 - **Handles are opaque.** Each resource type is a `typedef uintptr_t dino_<thing>_t` so the same
   header works on both platforms, with a `DINO_INVALID_<THING>` sentinel (for example
   `DINO_INVALID_SOCKET`, `DINO_INVALID_MUTEX`).
-- **Return values:** `0` for success and nonzero (usually `-1`) for failure, unless the function
-  returns a handle, in which case failure is the `DINO_INVALID_*` value. Document it in the
-  header's `@return`.
+- **Names:** `dino_<module>_<verb>` for functions and `dino_<module>_<thing>_t` for types
+  (`dino_socket_send`, `dino_process_spawn_opts_t`), `DINO_` for macros and constants. Nothing
+  outside these prefixes; `tests/headers.sh` checks it.
+- **Return values:** `0` for success and `-1` for failure, never a platform error code.
+  Constructors return the handle, with the `DINO_INVALID_*` value on failure; functions that start
+  something or produce several results take out-parameters and return `0` / `-1`. Waits return
+  `DINO_TIMEOUT` when the time runs out. Document it in the header's `@return`.
+- **Timeouts** are `int timeout_ms`: `-1` waits forever, `0` checks once.
+- **Strings are UTF-8** on every platform; Windows code converts them for the `W` APIs.
+- **Headers** are self-contained, in `extern "C"` guards, and documented with `/** */` comments
+  (`tests/headers.sh` checks the first two).
 - **No winpthreads.** Threads and mutexes use the Win32 API directly (`CreateThread`,
   `CRITICAL_SECTION`); winpthreads works but makes binaries much larger.
 - **Handles aren't inherited.** Every socket, pipe or file the SDK opens is close-on-exec on

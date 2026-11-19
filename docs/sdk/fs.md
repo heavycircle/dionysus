@@ -9,7 +9,8 @@ don't.
 ## File sizes over 2 GB
 
 On Windows, `long` is 32 bits even on 64-bit systems, so `ftell` and `fseek` fail on files of 2 GB
-or more, and `stat`'s size can be truncated. `dino_file_size` works for files of any size:
+or more, and `stat`'s size can be truncated. `dino_file_size` works for files of any size, and
+takes UTF-8 paths on Windows too:
 
 ```c
 #include <inttypes.h>
@@ -26,18 +27,21 @@ int main(void)
     fputs("twelve bytes", f);
     fclose(f);
 
-    uint64_t size = dino_file_size(path);
+    uint64_t size;
+    if (dino_file_size(path, &size) != 0)
+        return 1;
     printf("%s is %" PRIu64 " bytes\n", path, size);
     remove(path);
-    return size == 12 ? 0 : 1;
+
+    // A missing file is an error, not a size of 0.
+    int missing = dino_file_size(path, &size);
+    return size == 0 && missing == -1 ? 0 : 1;
 }
 ```
 
 | Function | Returns |
 | --- | --- |
-| `uint64_t dino_file_size(const char *path)` | the size in bytes, or `0` if the file doesn't exist or can't be read |
-
-A return of `0` is ambiguous: check that the file exists if an empty file matters to you.
+| `int dino_file_size(const char *path, uint64_t *size)` | `0` with the size in `*size`; `-1` (and `*size` 0) if the file doesn't exist, isn't a regular file (a directory, for example), can't be examined, or for a `NULL` argument |
 
 ## Stdio for programs the kernel starts
 
@@ -51,7 +55,6 @@ so you only call it yourself if you build with `DINO_NO_AUTO_RUNTIME`.
 
 | Function | Does | Returns |
 | --- | --- | --- |
-| `dino_fs_init()` | Point closed stdio descriptors at `/dev/null`. Does nothing on Windows. | `0`, non-zero if `/dev/null` couldn't be opened |
-| `dino_fs_cleanup()` | Nothing to undo: stdio stays open. | |
+| `dino_fs_init()` | Point closed stdio descriptors at `/dev/null`. Does nothing on Windows. | `0`, `-1` if `/dev/null` couldn't be opened |
 
 See also: [`examples/fs_example`](../../examples/fs_example/main.c).
