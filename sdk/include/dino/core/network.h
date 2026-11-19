@@ -53,6 +53,9 @@ void dino_net_cleanup(void);
 /**
  * Create a socket.
  *
+ * A DINO_AF_INET6 socket is v6-only on every platform; see
+ * dino_socket_set_v6only for one that also handles IPv4.
+ *
  * @param  domain       Socket domain (i.e., AF_INET)
  * @param  type         Socket type (i.e., SOCK_STREAM)
  * @param  protocol     Socket protocol (IPPROTO_TCP)
@@ -155,6 +158,21 @@ typedef enum
  * @return 0 on success, -1 on error.
  */
 int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, int len);
+
+/**
+ * Choose whether an IPv6 socket also handles IPv4.
+ *
+ * DINO_AF_INET6 sockets start v6-only on every platform (the OS defaults
+ * differ: dual-stack on Linux, v6-only on Windows). With enable 0 the socket
+ * is dual-stack: bound to "::" it also accepts IPv4 peers, which appear as
+ * IPv4-mapped addresses (::ffff:a.b.c.d), and it holds the port for IPv4 too.
+ * Call it before bind or connect.
+ *
+ * @param  sock    A DINO_AF_INET6 socket.
+ * @param  enable  Non-zero for v6-only (the default), 0 for dual-stack.
+ * @return 0 on success, -1 on error (including a socket that isn't IPv6).
+ */
+int dino_socket_set_v6only(dino_socket_t sock, int enable);
 
 /**
  * Enable or disable SO_REUSEADDR on sock.

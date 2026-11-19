@@ -95,6 +95,50 @@ UTEST(network, echo_ipv6)
     echo(utest_result, DINO_AF_INET6, "::1", PORT + 1);
 }
 
+// Linux defaults to dual-stack, Windows to v6-only: the SDK picks v6-only.
+UTEST(network, ipv6_sockets_are_v6_only_by_default)
+{
+    dino_socket_t v6 = dino_socket_create(DINO_AF_INET6, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t v4 = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t c  = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_set_reuseaddr(v6, 1);
+    ASSERT_EQ(0, dino_socket_bind(v6, "::", PORT + 9));
+    ASSERT_EQ(0, dino_socket_listen(v6, 1));
+    // The IPv4 side of the port is still free, and nothing listens on it yet.
+    EXPECT_NE(0, dino_socket_connect(c, "127.0.0.1", PORT + 9));
+    EXPECT_EQ(0, dino_socket_bind(v4, "0.0.0.0", PORT + 9));
+    dino_socket_close(c);
+    dino_socket_close(v4);
+    dino_socket_close(v6);
+}
+
+UTEST(network, set_v6only_0_accepts_ipv4_peers)
+{
+    dino_socket_t v6 = dino_socket_create(DINO_AF_INET6, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t c  = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_set_reuseaddr(v6, 1);
+    ASSERT_EQ(0, dino_socket_set_v6only(v6, 0));
+    ASSERT_EQ(0, dino_socket_bind(v6, "::", PORT + 10));
+    ASSERT_EQ(0, dino_socket_listen(v6, 1));
+    ASSERT_EQ(0, dino_socket_connect(c, "127.0.0.1", PORT + 10));
+    dino_socket_t peer = dino_socket_accept(v6);
+    EXPECT_NE(DINO_INVALID_SOCKET, peer);
+    EXPECT_EQ(2, dino_socket_send(c, "hi", 2));
+    char buf[2];
+    EXPECT_EQ(2, dino_socket_recv(peer, buf, 2));
+    dino_socket_close(peer);
+    dino_socket_close(c);
+    dino_socket_close(v6);
+}
+
+UTEST(network, set_v6only_needs_an_ipv6_socket)
+{
+    dino_socket_t v4 = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    EXPECT_EQ(-1, dino_socket_set_v6only(v4, 1));
+    EXPECT_EQ(-1, dino_socket_set_v6only(DINO_INVALID_SOCKET, 1));
+    dino_socket_close(v4);
+}
+
 UTEST(network, invalid_addresses_are_rejected)
 {
     const char *bad[] = { "localhost", "256.0.0.1", "::zz", "", NULL };

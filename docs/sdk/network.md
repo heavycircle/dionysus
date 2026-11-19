@@ -70,6 +70,7 @@ int main(void)
 | `dino_socket_send(sock, buf, len)`                   | Send up to `len` bytes. Never raises `SIGPIPE`.                                                                                                        | bytes sent, `-1` on error                               |
 | `dino_socket_recv(sock, buf, len)`                   | Receive up to `len` bytes.                                                                                                                             | bytes received, `0` when the peer closed, `-1` on error |
 | `dino_socket_shutdown(sock, how)`                    | Stop reading (`DINO_SHUT_RD`), writing (`DINO_SHUT_WR`) or both (`DINO_SHUT_RDWR`).                                                                    | `0`, `-1`                                               |
+| `dino_socket_set_v6only(sock, enable)`               | IPv6 sockets only: `0` makes one dual-stack, so bound to `"::"` it also accepts IPv4 peers. They start v6-only.                                        | `0`, `-1`                                               |
 | `dino_socket_set_reuseaddr(sock, enable)`            | `SO_REUSEADDR`, so a server can rebind its port right after restarting.                                                                                | `0`, `-1`                                               |
 | `dino_socket_set_nonblocking(sock, enable)`          | Non-blocking mode: calls that would wait return `-1` at once instead.                                                                                  | `0`, `-1`                                               |
 | `dino_socket_setopt(sock, level, optname, val, len)` | Any other option. `level` and `optname` are the platform's own constants (`SOL_SOCKET`, `TCP_NODELAY`, ...), so the call needs the platform's headers. | `0`, `-1`                                               |
@@ -81,6 +82,11 @@ int main(void)
   `"127.0.0.1"`, `"0.0.0.0"`, `"::1"` or `"::"`. Host names such as `"localhost"` are rejected,
   not resolved.
 - **Any interface:** bind to `"0.0.0.0"` (IPv4) or `"::"` (IPv6).
+- **IPv4 and IPv6 are separate.** An IPv6 socket is v6-only on every platform, so a server for
+  both families binds two sockets, `"0.0.0.0"` and `"::"`, on the same port. Or it calls
+  `dino_socket_set_v6only(sock, 0)` before binding one IPv6 socket to `"::"`, which then also
+  accepts IPv4 peers (shown as `::ffff:a.b.c.d`). Linux and Windows default differently; the SDK
+  sets it either way.
 - **Ports** are plain integers in host byte order.
 
 ## Pitfalls

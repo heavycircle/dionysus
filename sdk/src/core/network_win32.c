@@ -104,6 +104,12 @@ dino_socket_t dino_socket_create(
         os_domain, os_type, os_protocol, NULL, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
     if (s == INVALID_SOCKET)
         return DINO_INVALID_SOCKET;
+    // The OS default differs (dual-stack on Linux, v6-only on Windows).
+    if (os_domain == AF_INET6 && dino_socket_set_v6only((dino_socket_t)s, 1) != 0)
+    {
+        closesocket(s);
+        return DINO_INVALID_SOCKET;
+    }
 
     return (dino_socket_t)s;
 }
@@ -228,6 +234,19 @@ int dino_socket_set_reuseaddr(dino_socket_t sock, int enable)
 {
     int flag = enable ? 1 : 0;
     return dino_socket_setopt(sock, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
+}
+
+int dino_socket_set_v6only(dino_socket_t sock, int enable)
+{
+    // Some Winsock providers accept the option on an IPv4 socket; Linux
+    // refuses it, so check the family here.
+    WSAPROTOCOL_INFOW info;
+    int               len = sizeof(info);
+    if (getsockopt((SOCKET)sock, SOL_SOCKET, SO_PROTOCOL_INFOW, (char *)&info, &len) != 0
+        || info.iAddressFamily != AF_INET6)
+        return -1;
+    int flag = enable ? 1 : 0;
+    return dino_socket_setopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag));
 }
 
 int dino_socket_set_nonblocking(dino_socket_t sock, int enable)
