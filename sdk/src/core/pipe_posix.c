@@ -138,8 +138,9 @@ int dino__pipe_is_read_end(dino_pipe_t pipe)
     return (flags & O_ACCMODE) == O_RDONLY;
 }
 
-int dino__pipe_attach(dino_pipe_t pipe, intptr_t port)
+int dino__pipe_attach(dino_pipe_t pipe, intptr_t port, uint64_t loop_id)
 {
     (void)port;
+    (void)loop_id;
     return pipe == DINO_INVALID_PIPE ? -1 : 0;
 }

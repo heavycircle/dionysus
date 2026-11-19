@@ -19,8 +19,10 @@ int dino__pipe_create_for_child(dino_pipe_t *parent_end, dino_pipe_t *child_end,
 int dino__pipe_is_read_end(dino_pipe_t pipe);
 
 // Attach a pipe end to an event loop's completion port (a HANDLE). On
-// Windows the attachment is permanent: 0 if this is the port it is (now)
-// attached to, -1 for any other. Always 0 on POSIX, where there is no port.
-int dino__pipe_attach(dino_pipe_t pipe, intptr_t port);
+// Windows the attachment is permanent: 0 if this is the loop it is (now)
+// attached to, -1 for any other. Loops are told apart by loop_id, unique for
+// the process, because a destroyed loop's port HANDLE value gets reused.
+// Always 0 on POSIX, where there is no port.
+int dino__pipe_attach(dino_pipe_t pipe, intptr_t port, uint64_t loop_id);
 
 #endif // DINO_CORE_PIPE_INTERNAL_H

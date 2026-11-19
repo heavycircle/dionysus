@@ -788,6 +788,27 @@ UTEST(event, pipe_joins_only_one_loop_on_windows)
     dino_event_loop_destroy(a);
     dino_event_loop_destroy(b);
 }
+
+// Windows reuses handle values, so a new loop's port can get the destroyed
+// loop's value. The pipe is still attached to the dead port and must not pass
+// as attached to the new one.
+UTEST(event, pipe_refused_by_a_later_loop_on_windows)
+{
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    for (int i = 0; i < 8; i++)
+    {
+        dino_event_loop_t a = dino_event_loop_create();
+        if (i == 0)
+            ASSERT_EQ(0, dino_event_add_pipe(a, r, DINO_EVENT_READ, NULL));
+        else
+            EXPECT_EQ(-1, dino_event_add_pipe(a, r, DINO_EVENT_READ, NULL));
+        dino_event_del_pipe(a, r);
+        dino_event_loop_destroy(a);
+    }
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+}
 #endif
 
 UTEST_F(event, pipe_and_socket_in_one_loop)

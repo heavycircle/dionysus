@@ -15,10 +15,10 @@
 // client end from CreateFileW.
 struct dino_pipe
 {
-    HANDLE handle;
-    HANDLE port; // the event loop port it is attached to, for good
-    int    read_end;
-    int    overlapped; // every end except a child's stdio
+    HANDLE   handle;
+    uint64_t loop_id; // the event loop whose port it is attached to, for good
+    int      read_end;
+    int      overlapped; // every end except a child's stdio
 };
 
 static volatile LONG pipe_counter;
@@ -196,15 +196,15 @@ int dino__pipe_is_read_end(dino_pipe_t pipe)
     return pipe == DINO_INVALID_PIPE ? -1 : ((struct dino_pipe *)pipe)->read_end;
 }
 
-int dino__pipe_attach(dino_pipe_t pipe, intptr_t port)
+int dino__pipe_attach(dino_pipe_t pipe, intptr_t port, uint64_t loop_id)
 {
     struct dino_pipe *p = (struct dino_pipe *)pipe;
-    if (!p || !p->overlapped)
+    if (!p || !p->overlapped || !loop_id)
         return -1;
-    if (p->port)
-        return p->port == (HANDLE)port ? 0 : -1;
+    if (p->loop_id)
+        return p->loop_id == loop_id ? 0 : -1;
     if (!CreateIoCompletionPort(p->handle, (HANDLE)port, 0, 0))
         return -1;
-    p->port = (HANDLE)port;
+    p->loop_id = loop_id;
     return 0;
 }
