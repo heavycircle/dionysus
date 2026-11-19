@@ -49,9 +49,12 @@ export DINO_LIBRARY_PATH=/opt/acme/acme_log:/opt/acme/acme_proto
 
 - Each entry is a directory with a `CMakeLists.txt`. Relative entries are resolved against the
   directory you run `dino` from, and symlinks are followed.
+
 - Directory names must be unique, because each library builds in `build/<target>/_dino_libs/<name>`.
   An entry listed twice is used once.
+
 - Empty entries are ignored.
+
 - `dino build`, `run` and `test` check every entry and stop with an error naming the first bad one.
   `dino doctor` reports them all:
 
@@ -122,8 +125,7 @@ Rules and recommendations:
   `CMAKE_C_FLAGS` or `add_compile_options`. Optimization, stripping and the target triple come from
   dino's toolchain already, the same as for the SDK.
 - **Check the SDK version** with `DINO_SDK_VERSION` (for example `0.6.0`) if you rely on newer APIs.
-- **Depend on other registered libraries by name.** `target_link_libraries(acme_proto PUBLIC
-  acme::log)` works whatever order the entries are in, as long as both are registered.
+- **Depend on other registered libraries by name.** `target_link_libraries(acme_proto PUBLIC acme::log)` works whatever order the entries are in, as long as both are registered.
 - **Tests and tools are yours alone.** `dino_test()` targets only reach CTest when the library is
   the project being tested, and executables defined in a library never show up in a consuming
   project's `dino run`. Nothing in a library builds unless something links it. For other setup that
@@ -275,11 +277,11 @@ never run.
 
 ## Troubleshooting
 
-| Message | Cause |
-| --- | --- |
-| `DINO_LIBRARY_PATH entry '...' does not exist` | A typo, or a host path used inside Docker. |
-| `DINO_LIBRARY_PATH entry '...' has no CMakeLists.txt` | The entry points at the repository, not at the library directory inside it. |
-| `... has the same directory name as '...'` | Two libraries named alike, e.g. `a/log` and `b/log`. Rename one directory. |
-| `Target "app" links to: acme::log but the target was not found` | The library isn't on `DINO_LIBRARY_PATH` (check `dino doctor`), or its alias is spelled differently. |
-| `add_library cannot create target "..." because another target with the same name already exists` | Two libraries, or a library and the SDK or the project, define the same target name. |
-| `... needs the dino SDK 0.6 or newer` | The library's own version check: update `dino`. |
+| Message                                                                                           | Cause                                                                                                |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `DINO_LIBRARY_PATH entry '...' does not exist`                                                    | A typo, or a host path used inside Docker.                                                           |
+| `DINO_LIBRARY_PATH entry '...' has no CMakeLists.txt`                                             | The entry points at the repository, not at the library directory inside it.                          |
+| `... has the same directory name as '...'`                                                        | Two libraries named alike, e.g. `a/log` and `b/log`. Rename one directory.                           |
+| `Target "app" links to: acme::log but the target was not found`                                   | The library isn't on `DINO_LIBRARY_PATH` (check `dino doctor`), or its alias is spelled differently. |
+| `add_library cannot create target "..." because another target with the same name already exists` | Two libraries, or a library and the SDK or the project, define the same target name.                 |
+| `... needs the dino SDK 0.6 or newer`                                                             | The library's own version check: update `dino`.                                                      |

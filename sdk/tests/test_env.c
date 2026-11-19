@@ -15,14 +15,14 @@
 
 static void child_sees(int *utest_result, const char *expected)
 {
-    char *const       argv[] = SHOW_VAR;
-    dino_run_result_t r;
+    char *const           argv[] = SHOW_VAR;
+    dino_process_result_t r;
     ASSERT_EQ(0, dino_process_run(argv, NULL, &r));
     char *cr = strchr(r.out, '\r');
     if (cr)
         memmove(cr, cr + 1, strlen(cr));
     EXPECT_STREQ(expected, r.out);
-    dino_run_result_free(&r);
+    dino_process_result_free(&r);
 }
 
 UTEST(env, set_get_unset_and_children_see_it)

@@ -168,8 +168,8 @@ static HANDLE child_handle(int i, dino_stdio_t mode, dino_process_pipes_t *pipes
     return open_null();
 }
 
-int dino_process_spawn(dino_process_t *process, char *const argv[], const dino_spawn_opts_t *opts,
-    dino_process_pipes_t *pipes)
+int dino_process_spawn(dino_process_t *process, char *const argv[],
+    const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
 {
     *process = DINO_INVALID_PROCESS;
     dino_process_pipes_t unused;

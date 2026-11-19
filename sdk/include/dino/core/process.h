@@ -6,6 +6,11 @@
 
 #include <dino/core/pipe.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef uintptr_t dino_process_t;
 
 #define DINO_INVALID_PROCESS ((dino_process_t)0)
@@ -32,7 +37,7 @@ typedef struct
      */
     char *const *env;
     dino_stdio_t stdin_mode, stdout_mode, stderr_mode;
-} dino_spawn_opts_t;
+} dino_process_spawn_opts_t;
 
 /**
  * The parent's ends of the pipes asked for with DINO_STDIO_PIPE; the others
@@ -70,8 +75,8 @@ typedef struct
  * @return 0 on success, -1 if the program couldn't be started (not found, not
  *         executable, bad arguments).
  */
-int dino_process_spawn(dino_process_t *process, char *const argv[], const dino_spawn_opts_t *opts,
-    dino_process_pipes_t *pipes);
+int dino_process_spawn(dino_process_t *process, char *const argv[],
+    const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes);
 
 /**
  * Wait for a process to end and release it. The handle is invalid afterwards.
@@ -123,16 +128,16 @@ int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_
 /** Options for dino_process_run; zero-initialise and set what you need. */
 typedef struct
 {
-    const char  *cwd; /**< As in dino_spawn_opts_t. */
-    char *const *env; /**< As in dino_spawn_opts_t. */
+    const char  *cwd; /**< As in dino_process_spawn_opts_t. */
+    char *const *env; /**< As in dino_process_spawn_opts_t. */
     /** Bytes for the child's stdin, then end of file. NULL: stdin is null. */
     const void *input;
     size_t      input_len;
     /** Kill the child after this many milliseconds; 0 waits forever. */
     int timeout_ms;
-} dino_run_opts_t;
+} dino_process_run_opts_t;
 
-/** What dino_process_run collected; release with dino_run_result_free. */
+/** What dino_process_run collected; release with dino_process_result_free. */
 typedef struct
 {
     char  *out; /**< Everything written to stdout, NUL-terminated. */
@@ -140,7 +145,7 @@ typedef struct
     char  *err; /**< Everything written to stderr, NUL-terminated. */
     size_t err_len;
     int    exit_code; /**< As from dino_process_wait; DINO_EXIT_KILLED on timeout. */
-} dino_run_result_t;
+} dino_process_result_t;
 
 /**
  * Run a program to completion, collecting its stdout and stderr.
@@ -157,14 +162,15 @@ typedef struct
  * @return 0 when the child ran to the end, DINO_TIMEOUT when it was killed
  *         after opts->timeout_ms, -1 if it couldn't be started or on error.
  */
-int dino_process_run(char *const argv[], const dino_run_opts_t *opts, dino_run_result_t *result);
+int dino_process_run(
+    char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result);
 
 /**
  * Free what dino_process_run collected. Safe on a zeroed result.
  *
  * @param  result  Result to release; its fields are reset.
  */
-void dino_run_result_free(dino_run_result_t *result);
+void dino_process_result_free(dino_process_result_t *result);
 
 /* ---- The current process ---- */
 
@@ -208,5 +214,9 @@ int dino_env_set(const char *name, const char *value);
  * @return 0 on success, -1 on failure or invalid arguments.
  */
 int dino_env_unset(const char *name);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_PROCESS_H

@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef uintptr_t dino_socket_t;
 
 #define DINO_INVALID_SOCKET ((dino_socket_t)(~0))
@@ -11,19 +16,19 @@ typedef enum
 {
     DINO_AF_INET,
     DINO_AF_INET6
-} dino_domain_t;
+} dino_socket_domain_t;
 
 typedef enum
 {
     DINO_SOCK_STREAM,
     DINO_SOCK_DGRAM
-} dino_type_t;
+} dino_socket_type_t;
 
 typedef enum
 {
     DINO_IPPROTO_TCP,
     DINO_IPPROTO_UDP
-} dino_protocol_t;
+} dino_socket_protocol_t;
 
 /**
  * Initialize environment for making sockets (WSAStartup on Windows).
@@ -33,7 +38,7 @@ typedef enum
  * to call any number of times, from any thread; only the first successful call
  * does anything.
  *
- * @return 0 on success, non-zero on failure.
+ * @return 0 on success, -1 on failure.
  */
 int dino_net_init(void);
 
@@ -53,13 +58,14 @@ void dino_net_cleanup(void);
  * @param  protocol     Socket protocol (IPPROTO_TCP)
  * @return Socket, or DINO_INVALID_SOCKET on failure.
  */
-dino_socket_t dino_socket_create(dino_domain_t domain, dino_type_t type, dino_protocol_t protocol);
+dino_socket_t dino_socket_create(
+    dino_socket_domain_t domain, dino_socket_type_t type, dino_socket_protocol_t protocol);
 
 /**
  * Close the socket connection and free the handle.
  *
  * @param  sock     Socket to close.
- * @return 0 on success, non-zero on failure.
+ * @return 0 on success, -1 on failure.
  */
 int dino_socket_close(dino_socket_t sock);
 
@@ -70,7 +76,7 @@ int dino_socket_close(dino_socket_t sock);
  * @param  ip       IPv4 or IPv6 address literal to bind to, matching the socket's domain
  *                  (e.g. "0.0.0.0", "::", "::1"). Host names are not resolved.
  * @param  port     Port to bind to.
- * @return 0 on success, negative on error or if ip is not a valid address.
+ * @return 0 on success, -1 on error or if ip is not a valid address.
  */
 int dino_socket_bind(dino_socket_t sock, const char *ip, int port);
 
@@ -79,7 +85,7 @@ int dino_socket_bind(dino_socket_t sock, const char *ip, int port);
  *
  * @param  sock     Socket to listen for connections.
  * @param  backlog  Maximum length of the pending connection queue.
- * @return 0 on success, negative on error.
+ * @return 0 on success, -1 on error.
  */
 int dino_socket_listen(dino_socket_t sock, int backlog);
 
@@ -98,7 +104,7 @@ dino_socket_t dino_socket_accept(dino_socket_t sock);
  * @param  ip       IPv4 or IPv6 address literal to connect to, matching the socket's domain.
  *                  Host names are not resolved.
  * @param  port     Port to connect to.
- * @return Zero on connection, -1 on error or if ip is not a valid address.
+ * @return 0 on connection, -1 on error or if ip is not a valid address.
  */
 int dino_socket_connect(dino_socket_t sock, const char *ip, int port);
 
@@ -130,7 +136,7 @@ typedef enum
     DINO_SHUT_RD   = 0,
     DINO_SHUT_WR   = 1,
     DINO_SHUT_RDWR = 2
-} dino_shutdown_how_t;
+} dino_socket_shutdown_t;
 
 /**
  * Low-level socket option setter. Level and optname use platform values.
@@ -172,6 +178,10 @@ int dino_socket_set_nonblocking(dino_socket_t sock, int enable);
  * @param  how   Direction to shut down (DINO_SHUT_RD/WR/RDWR).
  * @return 0 on success, -1 on error.
  */
-int dino_socket_shutdown(dino_socket_t sock, dino_shutdown_how_t how);
+int dino_socket_shutdown(dino_socket_t sock, dino_socket_shutdown_t how);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_NETWORK_H

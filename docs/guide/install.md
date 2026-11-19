@@ -25,22 +25,22 @@ Windows hosts aren't tested yet; Linux is the supported host.
 
 `dino` drives two tools that must be on your `PATH`:
 
-| Tool | Version | Why |
-| --- | --- | --- |
-| [Zig](https://ziglang.org/download/) | 0.17.1 | its bundled clang, musl and MinGW-w64 are the compiler and C libraries for every target |
-| [CMake](https://cmake.org/download/) | 3.15 or newer | projects are ordinary CMake projects |
-| [Ninja](https://ninja-build.org/) | any | optional on Linux (`make` works too, more slowly); required on Windows |
+| Tool                                 | Version       | Why                                                                                     |
+| ------------------------------------ | ------------- | --------------------------------------------------------------------------------------- |
+| [Zig](https://ziglang.org/download/) | 0.17.1        | its bundled clang, musl and MinGW-w64 are the compiler and C libraries for every target |
+| [CMake](https://cmake.org/download/) | 3.15 or newer | projects are ordinary CMake projects                                                    |
+| [Ninja](https://ninja-build.org/)    | any           | optional on Linux (`make` works too, more slowly); required on Windows                  |
 
 Zig ships as an archive: unpack it anywhere and add the directory to `PATH`. Most distributions
 package CMake and Ninja (`apt install cmake ninja-build`).
 
 To run binaries for other targets, `dino run` and `dino test` also need:
 
-| Runner | For | Package (Debian/Ubuntu) |
-| --- | --- | --- |
-| `qemu-arm`, `qemu-aarch64`, `qemu-ppc` | the `arm`, `arm64` and `ppc` targets | `qemu-user` (or `qemu-user-static`) |
-| `wine` | `win64`; `win32` also needs 32-bit wine | `wine`, plus `wine32:i386` for win32 (after `dpkg --add-architecture i386`) |
-| `valgrind` | `dino test --memcheck` | `valgrind` |
+| Runner                                 | For                                     | Package (Debian/Ubuntu)                                                     |
+| -------------------------------------- | --------------------------------------- | --------------------------------------------------------------------------- |
+| `qemu-arm`, `qemu-aarch64`, `qemu-ppc` | the `arm`, `arm64` and `ppc` targets    | `qemu-user` (or `qemu-user-static`)                                         |
+| `wine`                                 | `win64`; `win32` also needs 32-bit wine | `wine`, plus `wine32:i386` for win32 (after `dpkg --add-architecture i386`) |
+| `valgrind`                             | `dino test --memcheck`                  | `valgrind`                                                                  |
 
 None of these are needed just to *build* for those targets.
 
@@ -106,11 +106,11 @@ All required tools found.
 
 ## Environment variables
 
-| Variable | Effect |
-| --- | --- |
-| `DINO_HOME` | Where `dino` keeps its unpacked SDK. Default: `$XDG_CACHE_HOME/dino` or `~/.cache/dino` (`%LOCALAPPDATA%\dino` on Windows). |
-| `DINO_SDK_PATH` | Build against this SDK directory instead of the built-in one. Used when working on the SDK itself. |
-| `DINO_LIBRARY_PATH` | [Organization libraries](libraries.md) every project can link. |
-| `CFLAGS` | Read by CMake on a project's first configure and added to every compile, e.g. `CFLAGS="-Wall -Wextra"`. |
+| Variable            | Effect                                                                                                                      |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `DINO_HOME`         | Where `dino` keeps its unpacked SDK. Default: `$XDG_CACHE_HOME/dino` or `~/.cache/dino` (`%LOCALAPPDATA%\dino` on Windows). |
+| `DINO_SDK_PATH`     | Build against this SDK directory instead of the built-in one. Used when working on the SDK itself.                          |
+| `DINO_LIBRARY_PATH` | [Organization libraries](libraries.md) every project can link.                                                              |
+| `CFLAGS`            | Read by CMake on a project's first configure and added to every compile, e.g. `CFLAGS="-Wall -Wextra"`.                     |
 
 Next: [your first project](first-project.md).

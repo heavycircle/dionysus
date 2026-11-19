@@ -53,17 +53,16 @@ aren't written.
 
 ## Functions and macros
 
-| | Does |
-| --- | --- |
-| `DINO_LOG_TRACE(fmt, ...)` ... `DINO_LOG_ERROR(fmt, ...)` | Log a line at that level, `printf`-style. The format must be a string literal. |
-| `dino_log_set_level(level)` / `dino_log_get_level()` | Set or read the lowest level written. |
-| `dino_log_set_output(FILE *stream)` | Write lines to `stream` instead of stderr; `NULL` goes back to stderr. Set `NULL` before closing the stream. |
-| `dino_log_write(level, file, line, fmt, ...)` | What the macros call, for wrappers of your own. |
+|                                                           | Does                                                                                                         |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `DINO_LOG_TRACE(fmt, ...)` ... `DINO_LOG_ERROR(fmt, ...)` | Log a line at that level, `printf`-style. The format must be a string literal.                               |
+| `dino_log_set_level(level)` / `dino_log_get_level()`      | Set or read the lowest level written.                                                                        |
+| `dino_log_set_output(FILE *stream)`                       | Write lines to `stream` instead of stderr; `NULL` goes back to stderr. Set `NULL` before closing the stream. |
+| `dino_log_write(level, file, line, fmt, ...)`             | What the macros call, for wrappers of your own.                                                              |
 
 - **One write per line:** each line is written with a single call, so lines from different threads
   never interleave.
 - **Length:** lines over 1 KB are truncated.
 - **`errno`** is left as it was, so logging inside error handling doesn't disturb it.
-- **Short names:** `LOG_TRACE` ... `LOG_ERROR` are shorter aliases for the macros.
 
 See also: [`examples/logging_example`](../../examples/logging_example/main.c).

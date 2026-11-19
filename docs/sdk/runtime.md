@@ -43,10 +43,10 @@ int main(void)
 }
 ```
 
-| Function | Does |
-| --- | --- |
-| `int dino_runtime_init(void)` | Initialize every subsystem now. `0` on success, non-zero if any fails. Safe to call any number of times, from any thread. |
-| `void dino_runtime_cleanup(void)` | Tear every subsystem down. Optional. A later call that needs a subsystem initializes it again. |
+| Function                          | Does                                                                                                                  |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `int dino_runtime_init(void)`     | Initialize every subsystem now. `0` on success, `-1` if any fails. Safe to call any number of times, from any thread. |
+| `void dino_runtime_cleanup(void)` | Tear every subsystem down. Optional. A later call that needs a subsystem initializes it again.                        |
 
 Each module's own init function (`dino_net_init()`, `dino_fs_init()`) does the same for that one
 module.
@@ -65,8 +65,3 @@ project(app C)
 Such a program calls `dino_fs_init()` (or `dino_runtime_init()`) itself if it can be started
 without stdio. [`examples/runtime_example`](../../examples/runtime_example) does this. Everything
 that starts on first use still does.
-
-## `DINO_ENABLE_AUTO_RUNTIME`
-
-Older code may have a `DINO_ENABLE_AUTO_RUNTIME;` line from before setup was automatic. It still
-compiles and does nothing. Delete it; the macro will be removed in 1.0.

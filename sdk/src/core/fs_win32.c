@@ -1,25 +1,33 @@
 #include <dino/core/fs.h>
 
+#include <stdlib.h>
+
 #include <windows.h>
 
-uint64_t dino_file_size(const char *filepath)
+// The attributes come without opening the file, so a file another process has
+// open without sharing still has a size.
+int dino_file_size(const char *path, uint64_t *size)
 {
-    HANDLE hFile = CreateFileA(
-        filepath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (hFile == INVALID_HANDLE_VALUE)
-    {
-        return 0;
-    }
+    if (size)
+        *size = 0;
+    if (!path || !size)
+        return -1;
 
-    LARGE_INTEGER size;
-    if (!GetFileSizeEx(hFile, &size))
-    {
-        CloseHandle(hFile);
-        return 0; // Error reading size
-    }
+    int len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
+    if (len <= 0)
+        return -1;
+    WCHAR *wide = malloc((size_t)len * sizeof(WCHAR));
+    if (!wide)
+        return -1;
+    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, len);
 
-    CloseHandle(hFile);
-    return (uint64_t)size.QuadPart;
+    WIN32_FILE_ATTRIBUTE_DATA info;
+    BOOL                      ok = GetFileAttributesExW(wide, GetFileExInfoStandard, &info);
+    free(wide);
+    if (!ok || (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+        return -1;
+    *size = ((uint64_t)info.nFileSizeHigh << 32) | info.nFileSizeLow;
+    return 0;
 }
 
 // The missing-stdio problem only affects processes spawned by the Linux kernel's
@@ -27,8 +35,4 @@ uint64_t dino_file_size(const char *filepath)
 int dino_fs_init(void)
 {
     return 0;
-}
-
-void dino_fs_cleanup(void)
-{
 }

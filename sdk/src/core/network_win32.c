@@ -13,7 +13,7 @@ typedef int dino_socklen_t;
 #define WSA_FLAG_NO_HANDLE_INHERIT 0x80
 #endif
 
-static int translate_domain(dino_domain_t domain)
+static int translate_domain(dino_socket_domain_t domain)
 {
     switch (domain)
     {
@@ -26,7 +26,7 @@ static int translate_domain(dino_domain_t domain)
     }
 }
 
-static int translate_type(dino_type_t type)
+static int translate_type(dino_socket_type_t type)
 {
     switch (type)
     {
@@ -39,7 +39,7 @@ static int translate_type(dino_type_t type)
     }
 }
 
-static int translate_protocol(dino_protocol_t protocol)
+static int translate_protocol(dino_socket_protocol_t protocol)
 {
     switch (protocol)
     {
@@ -70,7 +70,7 @@ int dino_net_init(void)
         if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0)
             InterlockedExchange(&wsa_started, 1);
         else
-            rc = 1;
+            rc = -1;
     }
     ReleaseSRWLockExclusive(&wsa_lock);
     return rc;
@@ -87,7 +87,8 @@ void dino_net_cleanup(void)
     ReleaseSRWLockExclusive(&wsa_lock);
 }
 
-dino_socket_t dino_socket_create(dino_domain_t domain, dino_type_t type, dino_protocol_t protocol)
+dino_socket_t dino_socket_create(
+    dino_socket_domain_t domain, dino_socket_type_t type, dino_socket_protocol_t protocol)
 {
     if (dino_net_init() != 0)
         return DINO_INVALID_SOCKET;
@@ -228,7 +229,7 @@ int dino_socket_set_nonblocking(dino_socket_t sock, int enable)
     return ioctlsocket((SOCKET)sock, FIONBIO, &mode) == 0 ? 0 : -1;
 }
 
-int dino_socket_shutdown(dino_socket_t sock, dino_shutdown_how_t how)
+int dino_socket_shutdown(dino_socket_t sock, dino_socket_shutdown_t how)
 {
     int rc = shutdown((SOCKET)sock, (int)how);
     return (rc == SOCKET_ERROR) ? -1 : 0;

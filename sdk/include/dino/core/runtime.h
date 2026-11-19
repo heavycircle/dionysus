@@ -1,6 +1,11 @@
 #ifndef DINO_CORE_RUNTIME_H
 #define DINO_CORE_RUNTIME_H
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /**
  * The SDK sets itself up; programs don't need to call anything first:
  *
@@ -19,7 +24,7 @@
  *
  * Safe to call any number of times, from any thread.
  *
- * @return 0 on success, non-zero if any subsystem fails to initialise.
+ * @return 0 on success, -1 if any subsystem fails to initialise.
  */
 int dino_runtime_init(void);
 
@@ -31,11 +36,8 @@ int dino_runtime_init(void);
  */
 void dino_runtime_cleanup(void);
 
-/**
- * Deprecated: setup is automatic. Expands to a harmless declaration so existing
- * `DINO_ENABLE_AUTO_RUNTIME;` lines keep compiling; to be removed by the 1.0 API
- * review.
- */
-#define DINO_ENABLE_AUTO_RUNTIME typedef int dino_auto_runtime_is_deprecated_
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_RUNTIME_H

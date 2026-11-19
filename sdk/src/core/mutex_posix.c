@@ -38,14 +38,14 @@ int dino_mutex_lock(dino_mutex_t mutex)
 {
     if (mutex == DINO_INVALID_MUTEX)
         return -1;
-    return pthread_mutex_lock((pthread_mutex_t *)mutex);
+    return pthread_mutex_lock((pthread_mutex_t *)mutex) == 0 ? 0 : -1;
 }
 
 int dino_mutex_unlock(dino_mutex_t mutex)
 {
     if (mutex == DINO_INVALID_MUTEX)
         return -1;
-    return pthread_mutex_unlock((pthread_mutex_t *)mutex);
+    return pthread_mutex_unlock((pthread_mutex_t *)mutex) == 0 ? 0 : -1;
 }
 
 int dino_mutex_trylock(dino_mutex_t mutex)
@@ -91,10 +91,12 @@ int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex)
     return pthread_cond_wait((pthread_cond_t *)cond, (pthread_mutex_t *)mutex) == 0 ? 0 : -1;
 }
 
-int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, uint32_t timeout_ms)
+int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
 {
     if (cond == DINO_INVALID_COND || mutex == DINO_INVALID_MUTEX)
         return -1;
+    if (timeout_ms < 0)
+        return dino_cond_wait(cond, mutex);
 
     struct timespec deadline;
     clock_gettime(CLOCK_MONOTONIC, &deadline);

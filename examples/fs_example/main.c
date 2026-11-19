@@ -7,8 +7,12 @@
 
 int main(void)
 {
-    uint64_t size = dino_file_size(BIG_FILE);
+    uint64_t size;
+    if (dino_file_size(BIG_FILE, &size) != 0)
+    {
+        printf("%s doesn't exist (create one to see its size)\n", BIG_FILE);
+        return 0;
+    }
     printf("Size of %s is %" PRIu64 "\n", BIG_FILE, size);
-
     return 0;
 }

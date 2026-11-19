@@ -5,7 +5,7 @@ messages you're most likely to meet, what they mean, and what to do.
 
 ## Setup
 
-**``zig was not found on PATH (run `dino doctor`)``**, or the same for `cmake`
+**`` zig was not found on PATH (run `dino doctor`) ``**, or the same for `cmake`
 
 Install it ([Installing](install.md)) and make sure the directory is on `PATH` in the shell that
 runs `dino`. Zig is an archive, not an installer: add its directory to `PATH` yourself.
@@ -31,11 +31,11 @@ itself. Unset it to use the SDK built into `dino`.
 
 ## Building
 
-**``no CMakeLists.txt in '...' (create one with `dino init`)``**
+**`` no CMakeLists.txt in '...' (create one with `dino init`) ``**
 
 Run `dino` in the project directory, or pass `-C <dir>`.
 
-**``unknown target 'x' (see `dino targets`)``**
+**`` unknown target 'x' (see `dino targets`) ``**
 
 Use a name from `dino targets` (`arm`, `arm64`, `i386`, `ppc`, `win32`, `win64`, `x86_64`) or a
 full Zig target triple.
@@ -93,7 +93,7 @@ start in a new prefix takes a while as it builds one. The Docker image avoids bo
 
 `dino run --exe a`.
 
-**``arm64 has not been built yet; run `dino build arm64` ``**
+**`` arm64 has not been built yet; run `dino build arm64`  ``**
 
 `--no-build` needs an existing build for that target.
 

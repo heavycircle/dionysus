@@ -9,11 +9,11 @@ same with ten sockets or ten thousand, unlike [`dino_poll`](io.md).
 ## How it works
 
 1. Create a loop with `dino_event_loop_create()`.
-2. Add what to watch, each with a `userdata` pointer of your choosing: sockets (for reading and/or
+1. Add what to watch, each with a `userdata` pointer of your choosing: sockets (for reading and/or
    writing), pipe read ends, processes (for their exit), timers.
-3. Call `dino_event_wait()`. It blocks until something is ready, then fills an array of
+1. Call `dino_event_wait()`. It blocks until something is ready, then fills an array of
    `dino_event_t`, each with the `events` that are ready and the item's `userdata`.
-4. Handle each one, and wait again.
+1. Handle each one, and wait again.
 
 Readiness is **level-triggered**: a socket that still has unread data is reported again by the next
 wait, so you never lose an event by not reading everything at once.
@@ -108,32 +108,32 @@ and a client each with their own loop, holding 1000 connections at once.
 
 ## Events
 
-| Flag | Means | `userdata` |
-| --- | --- | --- |
-| `DINO_EVENT_READ` | data to read, a connection to accept, or end of stream | the item's |
-| `DINO_EVENT_WRITE` | a send won't block, or a non-blocking `connect` finished | the item's |
-| `DINO_EVENT_ERROR` | an error on the socket; always reported | the item's |
-| `DINO_EVENT_HANGUP` | the peer closed or shut down; always reported | the item's |
-| `DINO_EVENT_TIMER` | a timer fired | the timer's |
-| `DINO_EVENT_EXIT` | a watched process ended | the process's |
-| `DINO_EVENT_WAKE` | another thread called `dino_event_wake` | `NULL` |
-| `DINO_EVENT_ONESHOT` | (interest only) report once, then disarm until the next `mod` | |
+| Flag                 | Means                                                         | `userdata`    |
+| -------------------- | ------------------------------------------------------------- | ------------- |
+| `DINO_EVENT_READ`    | data to read, a connection to accept, or end of stream        | the item's    |
+| `DINO_EVENT_WRITE`   | a send won't block, or a non-blocking `connect` finished      | the item's    |
+| `DINO_EVENT_ERROR`   | an error on the socket; always reported                       | the item's    |
+| `DINO_EVENT_HANGUP`  | the peer closed or shut down; always reported                 | the item's    |
+| `DINO_EVENT_TIMER`   | a timer fired                                                 | the timer's   |
+| `DINO_EVENT_EXIT`    | a watched process ended                                       | the process's |
+| `DINO_EVENT_WAKE`    | another thread called `dino_event_wake`                       | `NULL`        |
+| `DINO_EVENT_ONESHOT` | (interest only) report once, then disarm until the next `mod` |               |
 
 ## Functions
 
-| Function | Does |
-| --- | --- |
-| `dino_event_loop_create()` / `dino_event_loop_destroy(loop)` | Create a loop, or destroy it. Destroying drops what's registered without closing it. |
-| `dino_event_add_socket(loop, sock, events, ud)` | Watch a socket for `DINO_EVENT_READ` and/or `DINO_EVENT_WRITE`. |
-| `dino_event_mod_socket(loop, sock, events, ud)` | Change what it's watched for and its userdata. Rearms a fired `ONESHOT`. |
-| `dino_event_del_socket(loop, sock)` | Stop watching it. Do this before closing the socket. |
-| `dino_event_add_pipe`, `_mod_pipe`, `_del_pipe` | The same for the read end of a [pipe](pipe.md), `READ` only. |
-| `dino_event_add_process(loop, process, ud)` | Report `DINO_EVENT_EXIT` once when a [process](process.md) ends. |
-| `dino_event_del_process(loop, process)` | Stop watching it. Must come before `dino_process_wait`. |
-| `dino_event_timer_add(loop, delay_ms, interval_ms, ud)` | A timer firing after `delay_ms`, then every `interval_ms` (`0`: once). Returns a handle. |
-| `dino_event_timer_del(loop, timer)` | Delete a timer, fired or not. Every timer must be deleted (or the loop destroyed). |
-| `dino_event_wait(loop, out, max, timeout_ms)` | Wait. Returns how many items it wrote to `out`, `0` on timeout, `-1` on error. |
-| `dino_event_wake(loop)` | Make a wait return a `DINO_EVENT_WAKE` item, from any thread. |
+| Function                                                     | Does                                                                                     |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `dino_event_loop_create()` / `dino_event_loop_destroy(loop)` | Create a loop, or destroy it. Destroying drops what's registered without closing it.     |
+| `dino_event_add_socket(loop, sock, events, ud)`              | Watch a socket for `DINO_EVENT_READ` and/or `DINO_EVENT_WRITE`.                          |
+| `dino_event_mod_socket(loop, sock, events, ud)`              | Change what it's watched for and its userdata. Rearms a fired `ONESHOT`.                 |
+| `dino_event_del_socket(loop, sock)`                          | Stop watching it. Do this before closing the socket.                                     |
+| `dino_event_add_pipe`, `_mod_pipe`, `_del_pipe`              | The same for the read end of a [pipe](pipe.md), `READ` only.                             |
+| `dino_event_add_process(loop, process, ud)`                  | Report `DINO_EVENT_EXIT` once when a [process](process.md) ends.                         |
+| `dino_event_del_process(loop, process)`                      | Stop watching it. Must come before `dino_process_wait`.                                  |
+| `dino_event_timer_add(loop, delay_ms, interval_ms, ud)`      | A timer firing after `delay_ms`, then every `interval_ms` (`0`: once). Returns a handle. |
+| `dino_event_timer_del(loop, timer)`                          | Delete a timer, fired or not. Every timer must be deleted (or the loop destroyed).       |
+| `dino_event_wait(loop, out, max, timeout_ms)`                | Wait. Returns how many items it wrote to `out`, `0` on timeout, `-1` on error.           |
+| `dino_event_wake(loop)`                                      | Make a wait return a `DINO_EVENT_WAKE` item, from any thread.                            |
 
 Everything returns `0` on success and `-1` on error (adding an item twice, or deleting one that isn't
 there, is an error), except the create functions, which return a handle or its invalid value.

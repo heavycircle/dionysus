@@ -8,16 +8,15 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-uint64_t dino_file_size(const char *filepath)
+int dino_file_size(const char *path, uint64_t *size)
 {
+    if (size)
+        *size = 0;
     struct stat st;
-
-    if (stat(filepath, &st) != 0)
-    {
-        return 0;
-    }
-
-    return (uint64_t)st.st_size;
+    if (!path || !size || stat(path, &st) != 0 || !S_ISREG(st.st_mode))
+        return -1;
+    *size = (uint64_t)st.st_size;
+    return 0;
 }
 
 int dino_fs_init(void)
@@ -40,9 +39,4 @@ int dino_fs_init(void)
     }
 
     return 0;
-}
-
-// Stdio belongs to the program, so there is nothing to undo.
-void dino_fs_cleanup(void)
-{
 }

@@ -37,23 +37,23 @@ It doesn't depend on which clangd or clang-tidy version is installed (see
 
 Only calls that have a `dino_*` replacement, on the platform where the call exists:
 
-| Calls | Platform | Use instead |
-| --- | --- | --- |
-| `fork`, `execv`, `execvp`, `execve`, `execl`, `execlp`, `execle`, `posix_spawn`, `posix_spawnp`, `waitpid` | Linux | `dino_process_spawn`, `dino_process_wait` (`dino/core/process.h`) |
-| `CreateProcessA`, `CreateProcessW` | Windows | `dino_process_spawn` |
-| `pipe`, `pipe2` | Linux | `dino_pipe_create` (`dino/core/pipe.h`) |
-| `CreatePipe` | Windows | `dino_pipe_create` |
-| `pthread_create`, `pthread_join`, `pthread_detach` | both | `dino_thread_*` (`dino/core/thread.h`) |
-| `CreateThread`, `_beginthread`, `_beginthreadex` | Windows | `dino_thread_create` |
-| `pthread_mutex_*`, `pthread_cond_*`, `pthread_once` | both | `dino_mutex_*`, `dino_cond_*`, `dino_once` (`dino/core/mutex.h`) |
-| `InitializeCriticalSection`, `InitializeCriticalSectionAndSpinCount` | Windows | `dino_mutex_create` |
-| `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `setsockopt`, `shutdown` | both | `dino_socket_*` (`dino/core/network.h`) |
-| `closesocket`, `WSAStartup`, `WSACleanup` | Windows | `dino_socket_close`, `dino_net_init`, `dino_net_cleanup` |
-| `poll`, `select` | Linux | `dino_poll`, `dino_select` (`dino/core/io.h`) |
-| `WSAPoll`, `select` | Windows | `dino_poll`, `dino_select` |
-| `sleep`, `usleep` | both | `dino_sleep_ms`, `dino_sleep_us` (`dino/core/time.h`) |
-| `nanosleep`, `clock_gettime` | Linux | `dino_sleep_us`, `dino_time_monotonic_ns` |
-| `Sleep`, `QueryPerformanceCounter` | Windows | `dino_sleep_ms`, `dino_time_monotonic_ns` |
+| Calls                                                                                                      | Platform | Use instead                                                       |
+| ---------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| `fork`, `execv`, `execvp`, `execve`, `execl`, `execlp`, `execle`, `posix_spawn`, `posix_spawnp`, `waitpid` | Linux    | `dino_process_spawn`, `dino_process_wait` (`dino/core/process.h`) |
+| `CreateProcessA`, `CreateProcessW`                                                                         | Windows  | `dino_process_spawn`                                              |
+| `pipe`, `pipe2`                                                                                            | Linux    | `dino_pipe_create` (`dino/core/pipe.h`)                           |
+| `CreatePipe`                                                                                               | Windows  | `dino_pipe_create`                                                |
+| `pthread_create`, `pthread_join`, `pthread_detach`                                                         | both     | `dino_thread_*` (`dino/core/thread.h`)                            |
+| `CreateThread`, `_beginthread`, `_beginthreadex`                                                           | Windows  | `dino_thread_create`                                              |
+| `pthread_mutex_*`, `pthread_cond_*`, `pthread_once`                                                        | both     | `dino_mutex_*`, `dino_cond_*`, `dino_once` (`dino/core/mutex.h`)  |
+| `InitializeCriticalSection`, `InitializeCriticalSectionAndSpinCount`                                       | Windows  | `dino_mutex_create`                                               |
+| `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `setsockopt`, `shutdown`                  | both     | `dino_socket_*` (`dino/core/network.h`)                           |
+| `closesocket`, `WSAStartup`, `WSACleanup`                                                                  | Windows  | `dino_socket_close`, `dino_net_init`, `dino_net_cleanup`          |
+| `poll`, `select`                                                                                           | Linux    | `dino_poll`, `dino_select` (`dino/core/io.h`)                     |
+| `WSAPoll`, `select`                                                                                        | Windows  | `dino_poll`, `dino_select`                                        |
+| `sleep`, `usleep`                                                                                          | both     | `dino_sleep_ms`, `dino_sleep_us` (`dino/core/time.h`)             |
+| `nanosleep`, `clock_gettime`                                                                               | Linux    | `dino_sleep_us`, `dino_time_monotonic_ns`                         |
+| `Sleep`, `QueryPerformanceCounter`                                                                         | Windows  | `dino_sleep_ms`, `dino_time_monotonic_ns`                         |
 
 On Windows, the `pthread_*` calls come from winpthreads, a library `dino_thread_*` and
 `dino_mutex_*` don't need.
@@ -188,10 +188,10 @@ else may warn, including flagged calls inside a system header's inline functions
 
 ## Troubleshooting
 
-| Symptom | Cause |
-| --- | --- |
-| A call you expected to be flagged isn't | It's in a header dino doesn't wrap, the file defines `DINO_ALLOW_PLATFORM_CALLS`, or the language mode hides the declaration (see [What's flagged](#whats-flagged)). |
-| `'DINO_ALLOW_PLATFORM_CALLS' macro redefined` | A file defines it without a value while the target or project defines it too. Write `#define DINO_ALLOW_PLATFORM_CALLS 1`. |
-| No warnings at all, even in `dino build` | The project builds with `-Wno-deprecated-declarations`, which hides these along with every other deprecation. Remove it, or use the opt-outs above for the calls you mean to keep. |
-| The editor doesn't show the warnings | clangd can't find `compile_commands.json`. Run `dino build` once; it writes the file to the project root. |
-| A build error inside `sdk/portability/` | A bug: please open an issue with the target and the `-std` / feature macros in use. |
+| Symptom                                       | Cause                                                                                                                                                                              |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A call you expected to be flagged isn't       | It's in a header dino doesn't wrap, the file defines `DINO_ALLOW_PLATFORM_CALLS`, or the language mode hides the declaration (see [What's flagged](#whats-flagged)).               |
+| `'DINO_ALLOW_PLATFORM_CALLS' macro redefined` | A file defines it without a value while the target or project defines it too. Write `#define DINO_ALLOW_PLATFORM_CALLS 1`.                                                         |
+| No warnings at all, even in `dino build`      | The project builds with `-Wno-deprecated-declarations`, which hides these along with every other deprecation. Remove it, or use the opt-outs above for the calls you mean to keep. |
+| The editor doesn't show the warnings          | clangd can't find `compile_commands.json`. Run `dino build` once; it writes the file to the project root.                                                                          |
+| A build error inside `sdk/portability/`       | A bug: please open an issue with the target and the `-std` / feature macros in use.                                                                                                |

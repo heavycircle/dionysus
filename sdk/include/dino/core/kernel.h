@@ -1,4 +1,0 @@
-#ifndef DINO_CORE_KERNEL_H
-#define DINO_CORE_KERNEL_H
-
-#endif // DINO_CORE_KERNEL_H

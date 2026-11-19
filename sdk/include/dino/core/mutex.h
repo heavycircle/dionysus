@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 typedef uintptr_t dino_mutex_t;
 
 #define DINO_INVALID_MUTEX ((dino_mutex_t)0)
@@ -25,7 +30,7 @@ void dino_mutex_destroy(dino_mutex_t mutex);
  * Acquire the mutex, blocking if necessary.
  *
  * @param mutex  Handle to lock.
- * @return 0 on success, non-zero on error.
+ * @return 0 on success, -1 on error.
  */
 int dino_mutex_lock(dino_mutex_t mutex);
 
@@ -33,7 +38,7 @@ int dino_mutex_lock(dino_mutex_t mutex);
  * Release the mutex.
  *
  * @param mutex  Handle to unlock.
- * @return 0 on success, non-zero on error.
+ * @return 0 on success, -1 on error.
  */
 int dino_mutex_unlock(dino_mutex_t mutex);
 
@@ -41,7 +46,7 @@ int dino_mutex_unlock(dino_mutex_t mutex);
  * Attempt to acquire the mutex without blocking.
  *
  * @param mutex  Handle to try-lock.
- * @return 0 if acquired, non-zero if already held or on error.
+ * @return 0 if acquired, -1 if already held or on error.
  */
 int dino_mutex_trylock(dino_mutex_t mutex);
 
@@ -87,7 +92,8 @@ void dino_cond_destroy(dino_cond_t cond);
 int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex);
 
 /**
- * Like dino_cond_wait, but give up after timeout_ms.
+ * Like dino_cond_wait, but give up after timeout_ms; -1 waits forever, like
+ * dino_cond_wait.
  *
  * Measured on the monotonic clock (see dino/core/time.h), so changing the wall
  * clock doesn't shorten or extend it. DINO_TIMEOUT means at least timeout_ms
@@ -95,10 +101,10 @@ int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex);
  *
  * @param cond        Condition to wait on.
  * @param mutex       Mutex protecting the condition, locked once.
- * @param timeout_ms  Milliseconds to wait at most.
+ * @param timeout_ms  Milliseconds to wait at most; -1 to wait forever.
  * @return 0 when woken, DINO_TIMEOUT when the time ran out, -1 on error.
  */
-int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, uint32_t timeout_ms);
+int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms);
 
 /**
  * Wake one thread waiting on cond, if any.
@@ -134,5 +140,9 @@ typedef uintptr_t dino_once_t;
  * @return 0 on success, -1 for a NULL argument or on error.
  */
 int dino_once(dino_once_t *once, void (*fn)(void));
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // DINO_CORE_MUTEX_H

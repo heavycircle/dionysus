@@ -57,13 +57,13 @@ int main(void)
 
 ## Functions
 
-| Function | Does | Returns |
-| --- | --- | --- |
-| `dino_thread_create(&t, fn, arg)` | Start `fn(arg)` on a new thread. | `0`, `-1` (`t` is then `DINO_INVALID_THREAD`) |
-| `dino_thread_join(t, &result)` | Wait for it to finish, store `fn`'s return value (`result` may be `NULL`), release it. | `0`, `-1` for an invalid handle or the calling thread itself |
-| `dino_thread_detach(t)` | Let it finish on its own; it's released when it does. | `0`, `-1` |
-| `dino_thread_current_id()` | The calling thread's OS thread ID, unique among running threads, for logs. | the ID |
-| `dino_thread_yield()` | Give up the rest of the time slice. | |
+| Function                          | Does                                                                                   | Returns                                                      |
+| --------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `dino_thread_create(&t, fn, arg)` | Start `fn(arg)` on a new thread.                                                       | `0`, `-1` (`t` is then `DINO_INVALID_THREAD`)                |
+| `dino_thread_join(t, &result)`    | Wait for it to finish, store `fn`'s return value (`result` may be `NULL`), release it. | `0`, `-1` for an invalid handle or the calling thread itself |
+| `dino_thread_detach(t)`           | Let it finish on its own; it's released when it does.                                  | `0`, `-1`                                                    |
+| `dino_thread_current_id()`        | The calling thread's OS thread ID, unique among running threads, for logs.             | the ID                                                       |
+| `dino_thread_yield()`             | Give up the rest of the time slice.                                                    |                                                              |
 
 ## Rules
 

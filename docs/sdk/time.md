@@ -28,12 +28,12 @@ int main(void)
 
 ## Functions
 
-| Function | Does |
-| --- | --- |
-| `void dino_sleep_ms(uint32_t ms)` | Sleep for at least `ms` milliseconds. |
-| `void dino_sleep_us(uint64_t us)` | Sleep for at least `us` microseconds. Uses a high-resolution timer on Windows, so short sleeps aren't rounded up to the scheduler tick where the system supports it. |
-| `uint64_t dino_time_monotonic_ns(void)` | Nanoseconds since an arbitrary fixed point. Only differences between two readings mean anything. Never goes backwards. |
-| `uint64_t dino_time_unix_ms(void)` | Milliseconds since 1970-01-01 00:00:00 UTC, from the wall clock. |
+| Function                                | Does                                                                                                                                                                 |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `void dino_sleep_ms(uint32_t ms)`       | Sleep for at least `ms` milliseconds.                                                                                                                                |
+| `void dino_sleep_us(uint64_t us)`       | Sleep for at least `us` microseconds. Uses a high-resolution timer on Windows, so short sleeps aren't rounded up to the scheduler tick where the system supports it. |
+| `uint64_t dino_time_monotonic_ns(void)` | Nanoseconds since an arbitrary fixed point. Only differences between two readings mean anything. Never goes backwards.                                               |
+| `uint64_t dino_time_unix_ms(void)`      | Milliseconds since 1970-01-01 00:00:00 UTC, from the wall clock.                                                                                                     |
 
 - **Never early:** sleeps resume after signals (Linux) and early wake-ups (Windows) until the full time
   has passed. They can last longer than asked, never shorter. `0` returns at once.

@@ -125,14 +125,14 @@ UTEST(fd_set, add_test_remove)
     dino_fd_set_t set = dino_fd_set_create();
     ASSERT_NE(DINO_INVALID_FD_SET, set);
 
-    EXPECT_FALSE(dino_fd_isset(s, set));
+    EXPECT_FALSE(dino_fd_set_has(set, s));
     dino_fd_set_add(set, s);
-    EXPECT_TRUE(dino_fd_isset(s, set));
+    EXPECT_TRUE(dino_fd_set_has(set, s));
     dino_fd_set_del(set, s);
-    EXPECT_FALSE(dino_fd_isset(s, set));
+    EXPECT_FALSE(dino_fd_set_has(set, s));
     dino_fd_set_add(set, s);
     dino_fd_set_zero(set);
-    EXPECT_FALSE(dino_fd_isset(s, set));
+    EXPECT_FALSE(dino_fd_set_has(set, s));
 
     dino_fd_set_destroy(set);
     dino_socket_close(s);
@@ -144,7 +144,7 @@ UTEST(fd_set, invalid_set_is_harmless)
     dino_fd_set_del(DINO_INVALID_FD_SET, 0);
     dino_fd_set_zero(DINO_INVALID_FD_SET);
     dino_fd_set_destroy(DINO_INVALID_FD_SET);
-    EXPECT_FALSE(dino_fd_isset(0, DINO_INVALID_FD_SET));
+    EXPECT_FALSE(dino_fd_set_has(DINO_INVALID_FD_SET, 0));
 }
 
 UTEST(select, times_out_then_sees_data)
@@ -162,7 +162,7 @@ UTEST(select, times_out_then_sees_data)
     dino_fd_set_add(rfds, p.peer);
     EXPECT_EQ(
         1, dino_select(p.peer + 1, rfds, DINO_INVALID_FD_SET, DINO_INVALID_FD_SET, TIMEOUT_MS));
-    EXPECT_TRUE(dino_fd_isset(p.peer, rfds));
+    EXPECT_TRUE(dino_fd_set_has(rfds, p.peer));
 
     dino_fd_set_destroy(rfds);
     close_pair(&p);

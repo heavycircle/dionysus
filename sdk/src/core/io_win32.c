@@ -100,7 +100,7 @@ void dino_fd_set_del(dino_fd_set_t set, dino_socket_t sock)
     FD_CLR((SOCKET)sock, (fd_set *)set);
 }
 
-int dino_fd_isset(dino_socket_t sock, dino_fd_set_t set)
+int dino_fd_set_has(dino_fd_set_t set, dino_socket_t sock)
 {
     if (set == DINO_INVALID_FD_SET)
         return 0;
@@ -108,7 +108,7 @@ int dino_fd_isset(dino_socket_t sock, dino_fd_set_t set)
 }
 
 int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, dino_fd_set_t efds,
-    long timeout_ms)
+    int timeout_ms)
 {
     (void)max_fd;
 
@@ -117,7 +117,7 @@ int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, di
     if (timeout_ms >= 0)
     {
         tv.tv_sec  = timeout_ms / 1000;
-        tv.tv_usec = (timeout_ms % 1000) * 1000;
+        tv.tv_usec = (long)(timeout_ms % 1000) * 1000;
         tvp        = &tv;
     }
 
