@@ -43,12 +43,25 @@ set_version() {
     git add "$zon" "$cmake"
 }
 
+# The docs pin the image to the release they ship with, so a tag's docs name
+# an image that exists once release.yml publishes it.
+pin_docs() {
+    local image='ghcr\.io/heavycircle/dionysus:' page
+    # A read loop rather than mapfile: macOS ships bash 3.2.
+    { git grep -lE "${image}[0-9]+\.[0-9]+\.[0-9]+" -- '*.md' || true; } | while IFS= read -r page; do
+        sed -E -i.bak "s|($image)[0-9]+\.[0-9]+\.[0-9]+|\1$1|g" "$page"
+        rm -f "$page.bak"
+        git add "$page"
+    done
+}
+
 bump() {
     set_version "$1" -dev
     git commit -q -m "build: bump version to $1-dev"
 }
 
 set_version "$release" ""
+pin_docs "$release"
 # Until the tag exists, build.zig rightly rejects a non-dev version.
 zig build test -Dversion-string="$release"
 git commit -q -m "release: v$release"

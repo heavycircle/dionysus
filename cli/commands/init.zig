@@ -14,7 +14,7 @@ pub const usage =
     \\
     \\Creates:
     \\    CMakeLists.txt         Builds every .c file under src/ and links the SDK
-    \\    src/main.c             A starting point that uses the dino SDK
+    \\    src/main.c             A hello-world program to start from
     \\    tests/test_main.c      A first test (utest.h); run with `dino test`
     \\    .gitignore             Ignores build output
     \\    .clang-format          The SDK's formatting rules, for clang-format and editors

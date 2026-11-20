@@ -529,6 +529,10 @@ Maintainers cut releases with `scripts/release.sh` from a clean checkout:
 - **On `release-X.Y`** (tree at `X.Y.Z-dev`): commits `release: vX.Y.Z`, tags it, bumps the
   branch to `X.Y.(Z+1)-dev`.
 
+The release commit also sets every `ghcr.io/heavycircle/dionysus:X.Y.Z` in the Markdown to the new
+version, so the docs at a tag name the image that tag publishes. Write image references in the docs
+with a full version (any will do); the next release fixes it up.
+
 The script runs the unit tests, checks that the freshly built `dino` reports exactly the new
 version, and prints the `git push` command instead of pushing. Review the commits, then push. For
 a major release, bump `main` to `X+1.0.0-dev` by hand in a normal PR first.
