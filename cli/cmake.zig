@@ -170,7 +170,7 @@ fn commandLine(ctx: *Ctx, argv: []const []const u8) []const u8 {
 
 pub const Executable = struct {
     name: []const u8,
-    /// Path relative to the current working directory.
+    /// Path relative to the current working directory, or absolute.
     path: []const u8,
     /// Defined with dino_test(); `dino run` skips these unless asked for by name.
     is_test: bool = false,
@@ -224,7 +224,8 @@ pub fn executables(ctx: *Ctx, cfg: Config) Ctx.Error![]const Executable {
         if (std.mem.startsWith(u8, artifact, library_build_dir)) continue;
         list.append(ctx.arena, .{
             .name = info.name,
-            .path = ctx.join(&.{ cfg.build_dir, artifact }),
+            // Absolute when CMAKE_RUNTIME_OUTPUT_DIRECTORY is outside the build dir.
+            .path = if (std.fs.path.isAbsolute(artifact)) artifact else ctx.join(&.{ cfg.build_dir, artifact }),
             .is_test = if (info.folder) |f| std.mem.eql(u8, f.name, test_folder) else false,
         }) catch @panic("OOM");
     }

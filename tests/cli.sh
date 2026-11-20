@@ -55,6 +55,13 @@ case_clean_failed() {
     [[ ! -e build ]]
 }
 
+# `dino run` finds an executable built outside the build directory.
+case_run_output_outside_build() {
+    project run_outside
+    sed -i '/^dino_executable/i set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)' CMakeLists.txt
+    dino run | grep -qx 'Hello from run_outside!'
+}
+
 cases=("$@")
 if ((${#cases[@]} == 0)); then
     while read -r c; do cases+=("$c"); done < <(declare -F | sed -n 's/^declare -f case_//p')
