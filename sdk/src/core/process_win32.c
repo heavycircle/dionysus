@@ -262,19 +262,18 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
         pipes = &unused;
     }
     pipes->in = pipes->out = pipes->err = DINO_INVALID_PIPE;
-    if (!argv || !argv[0])
+    dino_stdio_t modes[3];
+    if (!argv || !argv[0] || !dino__process_modes(opts, modes))
         return -1;
 
-    dino_stdio_t modes[3];
-    HANDLE       std[3] = { NULL, NULL, NULL };
-    wchar_t     *app    = NULL;
-    wchar_t     *cmd    = is_batch(argv[0]) ? batch_command_line(argv, &app) : command_line(argv);
-    wchar_t     *cwd    = opts && opts->cwd ? widen(opts->cwd, -1) : NULL;
-    wchar_t     *env    = opts && opts->env ? environment_block(opts->env) : NULL;
+    HANDLE   std[3] = { NULL, NULL, NULL };
+    wchar_t *app    = NULL;
+    wchar_t *cmd    = is_batch(argv[0]) ? batch_command_line(argv, &app) : command_line(argv);
+    wchar_t *cwd    = opts && opts->cwd ? widen(opts->cwd, -1) : NULL;
+    wchar_t *env    = opts && opts->env ? environment_block(opts->env) : NULL;
     LPPROC_THREAD_ATTRIBUTE_LIST attrs   = NULL;
     int                          started = 0;
 
-    dino__process_modes(opts, modes);
     if (!cmd || (opts && opts->cwd && !cwd) || (opts && opts->env && !env))
         goto done;
     // A batch file's app is cmd.exe, which already finds it from the new cwd.

@@ -66,17 +66,16 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
         pipes = &unused;
     }
     pipes->in = pipes->out = pipes->err = DINO_INVALID_PIPE;
-    if (!argv || !argv[0])
+    dino_stdio_t modes[3];
+    if (!argv || !argv[0] || !dino__process_modes(opts, modes))
         return -1;
 
-    dino_stdio_t modes[3];
-    dino_pipe_t  child[3] = { DINO_INVALID_PIPE, DINO_INVALID_PIPE, DINO_INVALID_PIPE };
+    dino_pipe_t child[3] = { DINO_INVALID_PIPE, DINO_INVALID_PIPE, DINO_INVALID_PIPE };
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t          attr;
     int                        started   = 0;
     int                        have_attr = 0;
 
-    dino__process_modes(opts, modes);
     if (posix_spawn_file_actions_init(&actions) != 0)
         return -1;
     for (int fd = 0; fd < 3; fd++)
