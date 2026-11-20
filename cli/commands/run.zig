@@ -44,9 +44,9 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (try build.parseCommon(ctx, &args, arg, &opts)) {
             continue;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else if (target_name != null) {
-            return ctx.fail("`dino run` takes a single target", .{});
+            return ctx.usage("`dino run` takes a single target", .{});
         } else {
             target_name = arg;
         }
@@ -57,9 +57,10 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     const executables = if (no_build)
         try existingExecutables(ctx, opts)
     else blk: {
-        const result = (try build.buildTargets(ctx, opts))[0];
-        if (!result.ok) return 1;
-        break :blk result.executables;
+        const results = try build.buildTargets(ctx, opts);
+        if (ctx.interruptedCode()) |code| return code;
+        if (!results[0].ok) return 1;
+        break :blk results[0].executables;
     };
     const exe = try pick(ctx, executables, exe_name);
 
@@ -94,8 +95,12 @@ fn existingExecutables(ctx: *Ctx, opts: build.Options) Ctx.Error![]const cmake.E
         .target = target,
         .mode = opts.mode,
     };
-    if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }))) {
+    const cache = std.Io.Dir.cwd().readFileAlloc(ctx.io, ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }), ctx.arena, .limited(16 << 20)) catch
         return ctx.fail("{s} has not been built yet; run `dino build {s}`", .{ target.name, target.name });
+    // build/<target> holds one mode at a time, whichever was built last.
+    const built = cmake.cacheValue(cache, "CMAKE_BUILD_TYPE") orelse "";
+    if (opts.mode_given and !std.mem.eql(u8, built, opts.mode.cmakeName())) {
+        return ctx.fail("{s} holds a {s} build, not {s}; run without --no-build to build it", .{ cfg.build_dir, built, opts.mode.cmakeName() });
     }
     return cmake.executables(ctx, cfg);
 }

@@ -29,6 +29,12 @@ writable directory.
 `DINO_SDK_PATH` must point at the `sdk/` directory of a Dionysus checkout, not at the checkout
 itself. Unset it to use the SDK built into `dino`.
 
+**`.../sdk/<version> is not a complete SDK (an older dino may have been interrupted)`**
+
+`dino` unpacks its SDK into the cache directory (see `dino doctor`) and marks it complete only when
+every file is there. This directory has no mark, most likely from an older dino stopped while
+unpacking. Remove the directory named in the message; the next command unpacks it again.
+
 ## Building
 
 **`` no CMakeLists.txt in '...' (create one with `dino init`) ``**
@@ -96,6 +102,17 @@ start in a new prefix takes a while as it builds one. The Docker image avoids bo
 **`` arm64 has not been built yet; run `dino build arm64`  ``**
 
 `--no-build` needs an existing build for that target.
+
+**`build/x86_64 holds a Release build, not Debug; run without --no-build to build it`**
+
+`build/<target>/` holds one build mode at a time, whichever was built last. Drop `--no-build`, or
+the `--debug`/`--release` that asks for the other mode.
+
+**`'test' can't be a project name: CMake or dino already has a target by that name`**
+
+`dino init` names the project after its directory, and CMake and dino already define targets named
+`all`, `clean`, `help`, `install`, `package`, `test`, `test_main` and `dino_*`. Use a directory with
+another name.
 
 **A program that works on Linux fails under wine, or the other way round**
 

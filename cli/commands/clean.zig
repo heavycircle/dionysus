@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 const Ctx = @import("../Ctx.zig");
 const Args = @import("../Args.zig");
+const cmake = @import("../cmake.zig");
 const targets = @import("../targets.zig");
 
 pub const usage =
@@ -23,9 +24,12 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (try args.value(ctx, arg, &.{"-C"})) |v| {
             project = v;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else {
-            const t = targets.resolve(arg) catch return ctx.fail("unknown target '{s}'", .{arg});
+            const t = if (std.mem.eql(u8, arg, targets.memcheck.name))
+                targets.memcheck
+            else
+                targets.resolve(arg) catch return ctx.usage("unknown target '{s}'", .{arg});
             names.append(ctx.arena, t.name) catch @panic("OOM");
         }
     }
@@ -48,7 +52,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     for (names.items) |name| {
         const dir = ctx.join(&.{ build_root, name });
         // Only directories carrying dino's stamp are ours to delete.
-        if (!ctx.exists(ctx.join(&.{ dir, ".dino-stamp" }))) continue;
+        if (!ctx.exists(ctx.join(&.{ dir, cmake.stamp_file }))) continue;
         cwd.deleteTree(ctx.io, dir) catch |e| return ctx.fail("removing {s}: {t}", .{ dir, e });
         ctx.print("    removed  {s}\n", .{dir});
         removed += 1;
