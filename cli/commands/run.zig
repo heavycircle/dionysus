@@ -57,9 +57,10 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     const executables = if (no_build)
         try existingExecutables(ctx, opts)
     else blk: {
-        const result = (try build.buildTargets(ctx, opts))[0];
-        if (!result.ok) return 1;
-        break :blk result.executables;
+        const results = try build.buildTargets(ctx, opts);
+        if (ctx.interruptedCode()) |code| return code;
+        if (!results[0].ok) return 1;
+        break :blk results[0].executables;
     };
     const exe = try pick(ctx, executables, exe_name);
 

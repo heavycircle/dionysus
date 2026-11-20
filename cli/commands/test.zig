@@ -87,12 +87,14 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     var failed: usize = 0;
     for (results, passed) |r, *ok| {
         ok.* = r.ok;
+        if (ctx.interrupted != null) break;
         if (r.ok) {
             ctx.step("testing {s}", .{r.cfg.target.name});
             ok.* = try ctest(ctx, r.cfg.build_dir, r.cfg.target, opts, filter, ctest_args);
         }
         if (!ok.*) failed += 1;
     }
+    if (ctx.interruptedCode()) |code| return code;
     if (results.len > 1) {
         ctx.print("\n", .{});
         ctx.step("summary: {d} passed, {d} failed", .{ results.len - failed, failed });

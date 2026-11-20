@@ -17,6 +17,9 @@ const Noop = struct {
         return .{};
     }
     pub fn forwardTo(_: *Noop, _: std.process.Child.Id) void {}
+    pub fn received(_: *Noop) ?u8 {
+        return null;
+    }
     pub fn restore(_: *Noop) void {}
 };
 
@@ -28,12 +31,15 @@ const Posix = struct {
     var child: std.atomic.Value(linux.pid_t) = .init(0);
     /// A signal that arrived before the child's pid was known.
     var pending: std.atomic.Value(u32) = .init(0);
+    /// The last signal that arrived, forwarded or not.
+    var last: std.atomic.Value(u32) = .init(0);
 
     old: [signals.len]linux.Sigaction = undefined,
 
     pub fn install() Posix {
         child.store(0, .release);
         pending.store(0, .release);
+        last.store(0, .release);
         var g: Posix = .{};
         const action: linux.Sigaction = .{
             .handler = .{ .sigaction = handle },
@@ -50,12 +56,18 @@ const Posix = struct {
         if (sig != 0) _ = linux.kill(pid, @fromBackingInt(@intCast(sig)));
     }
 
+    pub fn received(_: *Posix) ?u8 {
+        const sig = last.load(.acquire);
+        return if (sig == 0) null else @intCast(sig);
+    }
+
     pub fn restore(g: *Posix) void {
         for (signals, &g.old) |sig, *old| _ = linux.sigaction(sig, old, null);
         child.store(0, .release);
     }
 
     fn handle(sig: SIG, info: *const linux.siginfo_t, _: ?*anyopaque) callconv(.c) void {
+        last.store(@backingInt(sig), .release);
         // A positive code means the kernel sent it, for a terminal key.
         if ((sig == .INT or sig == .QUIT) and info.code > 0) return;
         const pid = child.load(.acquire);
@@ -77,18 +89,28 @@ const Windows = struct {
     const CTRL_C_EVENT = 0;
     const CTRL_BREAK_EVENT = 1;
 
+    var interrupted: std.atomic.Value(bool) = .init(false);
+
     pub fn install() Windows {
+        interrupted.store(false, .release);
         _ = SetConsoleCtrlHandler(handle, .TRUE);
         return .{};
     }
 
     pub fn forwardTo(_: *Windows, _: std.process.Child.Id) void {}
 
+    /// Reported as SIGINT, so dino exits 130 as on Linux.
+    pub fn received(_: *Windows) ?u8 {
+        return if (interrupted.load(.acquire)) 2 else null;
+    }
+
     pub fn restore(_: *Windows) void {
         _ = SetConsoleCtrlHandler(handle, .FALSE);
     }
 
     fn handle(event: u32) callconv(.winapi) BOOL {
-        return if (event == CTRL_C_EVENT or event == CTRL_BREAK_EVENT) .TRUE else .FALSE;
+        if (event != CTRL_C_EVENT and event != CTRL_BREAK_EVENT) return .FALSE;
+        interrupted.store(true, .release);
+        return .TRUE;
     }
 };
