@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 512 512">
+  <defs>
+    <g id="dino">
+      <path d="M140 300 C 95 300 55 285 28 250 C 40 315 90 360 150 365 Z"/>
+      <rect x="165" y="370" width="50" height="70" rx="20"/>
+      <rect x="255" y="370" width="50" height="70" rx="20"/>
+      <ellipse cx="230" cy="330" rx="110" ry="85"/>
+      <path d="M250 280 L285 195 L370 205 L335 295 Z"/>
+      <ellipse cx="345" cy="170" rx="82" ry="58"/>
+    </g>
+    <path id="leaf" d="M0 -20 Q 15 0 0 20 Q -15 0 0 -20 Z M0 -20 L0 20"/>
+  </defs>
+  <g stroke="#24502c" stroke-width="8" stroke-linejoin="round" fill="#8e44ad">
+    <path d="M140 290 L128 222 L184 264 Z"/>
+    <path d="M188 256 L194 190 L236 248 Z"/>
+    <path d="M262 256 L226 206 L280 214 Z"/>
+  </g>
+  <use xlink:href="#dino" fill="#24502c" stroke="#24502c" stroke-width="16" stroke-linejoin="round"/>
+  <use xlink:href="#dino" fill="#5cb85c"/>
+  <ellipse cx="255" cy="350" rx="62" ry="48" fill="#c5e384"/>
+  <g fill="none" stroke="#24502c" stroke-width="6" stroke-linecap="round">
+    <path d="M388 192 Q 402 202 416 190"/>
+  </g>
+  <circle cx="362" cy="152" r="10" fill="#1d2b20"/>
+  <circle cx="365" cy="149" r="3.5" fill="#fff"/>
+  <circle cx="412" cy="160" r="4" fill="#24502c"/>
+  <g transform="translate(0 4)">
+    <g fill="#3d8b3d" stroke="#24502c" stroke-width="5" stroke-linejoin="round">
+      <use xlink:href="#leaf" transform="translate(292 126) rotate(-60)"/>
+      <use xlink:href="#leaf" transform="translate(345 105) rotate(90)"/>
+      <use xlink:href="#leaf" transform="translate(398 124) rotate(60)"/>
+    </g>
+    <g fill="#8e44ad" stroke="#24502c" stroke-width="4">
+      <circle cx="316" cy="110" r="10"/><circle cx="328" cy="118" r="10"/><circle cx="318" cy="124" r="10"/>
+      <circle cx="372" cy="110" r="10"/><circle cx="362" cy="118" r="10"/><circle cx="372" cy="124" r="10"/>
+    </g>
+  </g>
+  <g stroke="#24502c" stroke-width="7" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M385 288 L385 322 M362 324 L408 324" fill="none"/>
+    <path d="M358 232 L412 232 Q 414 284 385 289 Q 356 284 358 232 Z" fill="#eef6fb"/>
+    <path d="M361 256 L409 256 Q 405 282 385 285 Q 365 282 361 256 Z" fill="#8e1b3a" stroke="none"/>
+    <path d="M358 232 L412 232 Q 414 284 385 289 Q 356 284 358 232 Z" fill="none"/>
+    <path d="M300 305 Q 340 300 372 296" fill="none" stroke-width="34"/>
+    <path d="M300 305 Q 340 300 372 296" fill="none" stroke="#5cb85c" stroke-width="20"/>
+  </g>
+</svg>
