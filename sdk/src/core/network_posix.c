@@ -1,6 +1,3 @@
-// accept4 and SOCK_CLOEXEC.
-#define _GNU_SOURCE
-
 #include <dino/core/network.h>
 
 #include <arpa/inet.h>

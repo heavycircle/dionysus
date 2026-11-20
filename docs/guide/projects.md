@@ -126,6 +126,15 @@ endif()
 
 In C, `_WIN32` is defined for both Windows targets and `__linux__` for the Linux ones.
 
+## Compiler flags and the SDK
+
+The SDK is compiled as part of the project, with the project's `CFLAGS` and CMake settings.
+
+- **Language standard:** any C standard works, strict ISO C included (`CFLAGS=-std=c11`, or
+  `CMAKE_C_STANDARD 11` with `CMAKE_C_EXTENSIONS OFF`). The SDK asks for the POSIX declarations it
+  needs itself. Set before `project()`, `CMAKE_C_STANDARD` applies to the SDK too; set after it,
+  only to the project's own targets, since `project()` is where dino adds the SDK.
+
 ## SDK options
 
 These change how the SDK is built, so they must be set **before `project()`**, which is where dino

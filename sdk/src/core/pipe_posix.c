@@ -1,6 +1,3 @@
-// pipe2.
-#define _GNU_SOURCE
-
 #include <dino/core/pipe.h>
 
 #include <dino/core/time.h>

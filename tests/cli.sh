@@ -187,6 +187,17 @@ case_init_dash_c() {
     grep -q 'project(here C)' here/CMakeLists.txt
 }
 
+# The SDK and the test harness build under strict ISO C, whether it's asked
+# for in CFLAGS or with CMAKE_C_STANDARD before project().
+case_strict_c() {
+    project strict_c
+    CFLAGS=-std=c11 dino test >/dev/null || return 1
+    project strict_c_standard
+    sed -i '/^project/i set(CMAKE_C_STANDARD 11)\nset(CMAKE_C_EXTENSIONS OFF)' CMakeLists.txt
+    dino test -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'std=c11 .*mutex_posix\.c' out
+}
+
 # A program that exits 7 after its first SIGINT or SIGTERM, and reports how
 # many arrived.
 signal_program() {

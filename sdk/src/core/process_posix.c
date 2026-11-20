@@ -1,6 +1,3 @@
-// posix_spawn_file_actions_addchdir_np.
-#define _GNU_SOURCE
-
 #include <dino/core/process.h>
 
 #include <dirent.h>
