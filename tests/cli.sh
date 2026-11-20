@@ -63,6 +63,15 @@ case_run_output_outside_build() {
     dino run | grep -qx 'Hello from run_outside!'
 }
 
+# `dino run --no-build --debug` doesn't run a release build in its place.
+case_no_build_checks_mode() {
+    project no_build_mode
+    dino build >/dev/null || return 1
+    dino run --no-build --debug && return 1
+    dino run --no-build --release >/dev/null || return 1
+    dino run --no-build >/dev/null
+}
+
 # A program that exits 7 after its first SIGINT or SIGTERM, and reports how
 # many arrived.
 signal_program() {
