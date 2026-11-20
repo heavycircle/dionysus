@@ -94,8 +94,12 @@ fn existingExecutables(ctx: *Ctx, opts: build.Options) Ctx.Error![]const cmake.E
         .target = target,
         .mode = opts.mode,
     };
-    if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }))) {
+    const cache = std.Io.Dir.cwd().readFileAlloc(ctx.io, ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }), ctx.arena, .limited(16 << 20)) catch
         return ctx.fail("{s} has not been built yet; run `dino build {s}`", .{ target.name, target.name });
+    // build/<target> holds one mode at a time, whichever was built last.
+    const built = cmake.cacheValue(cache, "CMAKE_BUILD_TYPE") orelse "";
+    if (opts.mode_given and !std.mem.eql(u8, built, opts.mode.cmakeName())) {
+        return ctx.fail("{s} holds a {s} build, not {s}; run without --no-build to build it", .{ cfg.build_dir, built, opts.mode.cmakeName() });
     }
     return cmake.executables(ctx, cfg);
 }

@@ -91,7 +91,8 @@ dino run -- --verbose input.txt   # arguments for the program go after --
 - **wine output:** wine's own `fixme:` chatter is silenced unless you set `WINEDEBUG` yourself.
 - **Several executables:** pick one with `--exe <name>`. Test executables (from `dino_test()`) are
   never picked automatically, only by name.
-- **Skipping the build:** `--no-build` runs what's already in `build/<target>/`.
+- **Skipping the build:** `--no-build` runs what's already in `build/<target>/`, whichever mode
+  was built last. With `--debug` or `--release` as well, it fails if that isn't the mode there.
 
 The binaries in `build/` are ordinary files, so you can also copy them to the machine they're for
 and run them there.

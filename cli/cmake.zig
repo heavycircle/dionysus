@@ -94,6 +94,25 @@ pub fn needsConfigure(ctx: *Ctx, cfg: Config) bool {
     return !std.mem.eql(u8, recorded(ctx, cfg).stamp, s[0 .. s.len - 1]);
 }
 
+/// The value of `name` in a CMakeCache.txt (`NAME:TYPE=value` lines).
+pub fn cacheValue(cache: []const u8, name: []const u8) ?[]const u8 {
+    var lines = std.mem.splitScalar(u8, cache, '\n');
+    while (lines.next()) |raw| {
+        const line = std.mem.trimEnd(u8, raw, "\r");
+        if (!std.mem.startsWith(u8, line, name) or line.len == name.len or line[name.len] != ':') continue;
+        const eq = std.mem.indexOfScalar(u8, line, '=') orelse continue;
+        return line[eq + 1 ..];
+    }
+    return null;
+}
+
+test cacheValue {
+    const cache = "# comment\nCMAKE_BUILD_TYPE_X:STRING=no\nCMAKE_BUILD_TYPE:STRING=Debug\r\nOTHER:BOOL=ON\n";
+    try std.testing.expectEqualStrings("Debug", cacheValue(cache, "CMAKE_BUILD_TYPE").?);
+    try std.testing.expectEqualStrings("ON", cacheValue(cache, "OTHER").?);
+    try std.testing.expect(cacheValue(cache, "MISSING") == null);
+}
+
 pub const RunOptions = struct {
     verbose: bool = false,
     jobs: ?u32 = null,

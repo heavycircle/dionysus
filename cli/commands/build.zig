@@ -34,6 +34,8 @@ pub const Options = struct {
     project: []const u8 = ".",
     targets: []const Target = &.{},
     mode: cmake.Mode = .release,
+    /// --debug or --release was given, not just defaulted.
+    mode_given: bool = false,
     run: cmake.RunOptions = .{},
     extra: []const []const u8 = &.{},
 };
@@ -85,8 +87,10 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
 pub fn parseCommon(ctx: *Ctx, args: *Args, arg: []const u8, opts: *Options) Ctx.Error!bool {
     if (std.mem.eql(u8, arg, "--debug")) {
         opts.mode = .debug;
+        opts.mode_given = true;
     } else if (std.mem.eql(u8, arg, "--release")) {
         opts.mode = .release;
+        opts.mode_given = true;
     } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--verbose")) {
         opts.run.verbose = true;
     } else if (try args.value(ctx, arg, &.{ "-j", "--jobs" })) |v| {
