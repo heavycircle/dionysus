@@ -74,7 +74,7 @@ int main(void)
 | `dino_socket_set_reuseaddr(sock, enable)`            | So a server can rebind its port right after restarting (`SO_REUSEADDR` on Linux; Windows allows it already, and its `SO_REUSEADDR` would let another socket take the port, so it isn't set). | `0`, `-1`                                               |
 | `dino_socket_set_nonblocking(sock, enable)`          | Non-blocking mode: calls that would wait return `-1` at once instead.                                                                                                                        | `0`, `-1`                                               |
 | `dino_socket_setopt(sock, level, optname, val, len)` | Any other option. `level` and `optname` are the platform's own constants (`SOL_SOCKET`, `TCP_NODELAY`, ...), so the call needs the platform's headers.                                       | `0`, `-1`                                               |
-| `dino_net_init()` / `dino_net_cleanup()`             | Socket subsystem setup and teardown. Both optional: see [runtime](runtime.md).                                                                                                               | `0` / -                                                 |
+| `dino_net_init()` / `dino_net_cleanup()`             | Socket subsystem setup and teardown. Both optional: see [runtime](runtime.md). Call `dino_net_init` to find out up front whether sockets will work.                                          | `0`, `-1` / -                                           |
 
 ## Addresses
 
