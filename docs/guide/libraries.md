@@ -90,7 +90,7 @@ acme_log/
 ```
 
 ```cmake
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(AcmeLog C)
 
 if(DINO_SDK_VERSION VERSION_LESS 0.6)
@@ -168,7 +168,7 @@ acme-dino/
 `acme_proto/CMakeLists.txt` depends on the other library by name:
 
 ```cmake
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(AcmeProto C)
 
 add_library(acme_proto STATIC src/frame.c src/client.c)
@@ -215,7 +215,7 @@ cjson/
 ```
 
 ```cmake
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(cJSON C)
 
 add_library(cjson STATIC cJSON.c)

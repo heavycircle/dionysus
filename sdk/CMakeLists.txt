@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 
 # Projects that still add_subdirectory() the SDK would otherwise redefine the
 # target that Dino.cmake already created.

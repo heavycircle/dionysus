@@ -70,7 +70,7 @@ A large project can give each part its own `CMakeLists.txt`:
 
 ```cmake
 # CMakeLists.txt
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(app C)
 add_subdirectory(lib/storage)
 dino_executable(app src/main.c)
@@ -132,7 +132,7 @@ These change how the SDK is built, so they must be set **before `project()`**, w
 adds the SDK. They can also be passed as `dino build -- -D<OPTION>=ON`.
 
 ```cmake
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 set(DINO_NO_PLATFORM_WARNINGS ON)
 project(app C)
 ```

@@ -58,7 +58,12 @@ jobs:
           # build.zig derives the version from `git describe`.
           fetch-depth: 0
       - uses: ./.github/actions/setup-zig
+      - uses: astral-sh/setup-uv@v6
       - run: zig build test
+
+      # A new project and the SDK tests, built with the oldest CMake dino supports.
+      - name: Oldest supported CMake
+        run: zig build && tests/cmake-minimum.sh
 
   targets:
     runs-on: ubuntu-24.04

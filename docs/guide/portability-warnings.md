@@ -78,7 +78,7 @@ of opt-out, from the whole project down to one call.
 the SDK:
 
 ```cmake
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 set(DINO_NO_PLATFORM_WARNINGS ON)
 project(app C)
 ```

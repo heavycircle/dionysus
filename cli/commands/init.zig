@@ -33,7 +33,7 @@ pub const usage =
 ;
 
 const cmake_template =
-    \\cmake_minimum_required(VERSION 3.15)
+    \\cmake_minimum_required(VERSION 3.20)
     \\project({0s} C)
     \\
     \\file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.c)

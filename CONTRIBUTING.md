@@ -29,7 +29,7 @@ Dionysus lets you write C once and get tiny, fully static binaries for Linux (mu
 | Tool | Version | Needed for |
 | --- | --- | --- |
 | [Zig](https://ziglang.org/download/) | **0.17.1** exactly (`minimum_zig_version` in `build.zig.zon`) | building `dino`; it is also the C compiler and linker for every target |
-| CMake | 3.15 or newer | building any C project |
+| CMake | 3.20 or newer | building any C project |
 | Ninja, or make | any | CMake generator; Ninja is required on Windows hosts |
 | `qemu-user` | any | running arm, arm64 and ppc builds on an x86_64 host (optional) |
 | `wine` (plus `wine32` for win32) | any | running Windows builds on Linux (optional) |
@@ -136,6 +136,7 @@ tests/warnings.sh          checks the portability warnings against tests/fixture
 tests/docs.sh              checks docs links and builds and runs the C programs in docs/
 tests/headers.sh           checks every public header compiles alone as C and C++ and stays namespaced
 tests/cli.sh               checks the dino command line end to end
+tests/cmake-minimum.sh     builds and tests with the oldest supported CMake
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
 scripts/lintcommit.sh      checks commit messages
@@ -268,6 +269,11 @@ against glibc's headers.
 `dino init` and the command line. Each `case_<name>` function is one check on a fresh project for
 the host target; name cases to run only those. Unit tests in `cli/` cover what doesn't need CMake.
 
+`tests/cmake-minimum.sh` installs the oldest CMake dino supports (3.20.5, from PyPI) and builds a
+new project and the SDK tests with it. Raising the minimum means changing `min_cmake` in
+`cli/commands/doctor.zig`, the `cmake_minimum_required` lines (SDK, `dino init`'s template,
+examples, docs) and the version this script installs, together.
+
 ### CI
 
 `.github/workflows/ci.yml` runs on every PR and on pushes to `main` and `release-*`:
@@ -275,13 +281,14 @@ the host target; name cases to run only those. Unit tests in `cli/` cover what d
 | Job | What it checks |
 | --- | --- |
 | `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
-| `unit` | `zig build test` |
+| `unit` | `zig build test`, and `tests/cmake-minimum.sh` |
 | `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh` and `tests/docs.sh`; the x86_64 job also runs the SDK tests under valgrind, the warnings against glibc (`--memcheck`) and `tests/cli.sh` |
 
 Run the same checks locally before asking for review:
 
 ```sh
 zig fmt --check build.zig cli && zig build test
+tests/cmake-minimum.sh
 git ls-files '*.c' '*.h' | xargs uvx --from clang-format==19.1.7 clang-format --dry-run --Werror
 git ls-files '*.sh' | xargs uvx --from shellcheck-py==0.10.0.1 shellcheck
 tests/headers.sh

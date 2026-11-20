@@ -14,9 +14,9 @@ runs `dino`. Zig is an archive, not an installer: add its directory to `PATH` yo
 
 CMake needs a build tool. Install `ninja-build` (faster) or `make`. On Windows, Ninja is required.
 
-**`cmake version 3.x.y; 3.15 or newer is required`** (from `dino doctor`)
+**`cmake version 3.x.y; 3.20 or newer is required`** (from `dino doctor`)
 
-Install a newer CMake. Ubuntu 18.04's 3.10 is too old. Kitware's apt repository has current
+Install a newer CMake. Ubuntu 20.04's 3.16 is too old. Kitware's apt repository has current
 versions, as does `uv tool install cmake`.
 
 **`cannot locate a cache directory; set DINO_HOME`**

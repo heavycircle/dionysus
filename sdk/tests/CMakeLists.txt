@@ -1,7 +1,7 @@
 # The SDK's own tests. Every test_*.c is one test executable:
 #
 #   DINO_SDK_PATH=$PWD/sdk dino test --all -C sdk/tests
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(DinoSdkTests C)
 
 file(GLOB tests CONFIGURE_DEPENDS test_*.c)
