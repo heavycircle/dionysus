@@ -88,6 +88,30 @@ case_usage_errors() {
     [[ $code == 1 ]] || { echo "dino build without a project: exit $code"; return 1; }
 }
 
+# Names CMake or dino already use are refused before anything is written.
+case_init_reserved_names() {
+    local name
+    for name in test all help install clean package dino_core dino_anything test_main; do
+        mkdir -p "$work/reserved/$name"
+        (cd "$work/reserved/$name" && dino init --no-configure)
+        [[ $? == 2 ]] || { echo "$name: not refused"; return 1; }
+        [[ -z $(ls -A "$work/reserved/$name") ]] || { echo "$name: files written"; return 1; }
+    done
+    dino init --no-configure "$work/reserved/new/help"
+    [[ $? == 2 && ! -e $work/reserved/new ]] || { echo "new dir created"; return 1; }
+    mkdir -p "$work/reserved/testing" && cd "$work/reserved/testing" && dino init --no-configure >/dev/null
+}
+
+# init -C <dir> works from <dir>, as -C does elsewhere.
+case_init_dash_c() {
+    mkdir -p "$work/c" && cd "$work/c" || return 1
+    dino init --no-configure -C base app >/dev/null || return 1
+    [[ -f base/app/CMakeLists.txt ]] || return 1
+    grep -q 'project(app C)' base/app/CMakeLists.txt || return 1
+    dino init --no-configure -C here >/dev/null || return 1
+    grep -q 'project(here C)' here/CMakeLists.txt
+}
+
 # A program that exits 7 after its first SIGINT or SIGTERM, and reports how
 # many arrived.
 signal_program() {

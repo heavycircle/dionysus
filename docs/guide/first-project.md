@@ -29,6 +29,10 @@ hello/
 already has some of these. It also configures the project once, so `compile_commands.json` exists
 before the first build and your editor works straight away. `--no-configure` skips that step.
 
+The project, and its program, are named after the directory. A name that CMake or dino already
+uses for a target is refused before anything is written: `all`, `clean`, `help`, `install`,
+`package`, `test`, `test_main` and anything starting with `dino_`.
+
 The generated `CMakeLists.txt`:
 
 ```cmake
