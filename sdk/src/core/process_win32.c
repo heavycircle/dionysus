@@ -277,8 +277,12 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
     if (!cmd || (opts && opts->cwd && !cwd) || (opts && opts->env && !env))
         goto done;
     // A batch file's app is cmd.exe, which already finds it from the new cwd.
-    if (!app && cwd && is_relative_path(argv[0]) && !(app = find_in(cwd, argv[0])))
-        goto done;
+    if (!app && cwd && is_relative_path(argv[0]))
+    {
+        app = find_in(cwd, argv[0]);
+        if (!app)
+            goto done;
+    }
     for (int i = 0; i < 3; i++)
     {
         std[i] = child_handle(i, modes[i], pipes);
