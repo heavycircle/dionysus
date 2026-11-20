@@ -56,9 +56,11 @@ typedef struct
  *
  * argv[0] is the program: a path, or a bare name looked up on PATH (Windows
  * also looks in the parent's directory, the current directory and the system
- * directories first, and adds .exe). The arguments reach the child exactly as
- * given: on Windows they are quoted by the MSVCRT rules that the child's C
- * runtime uses to split them again. All strings are UTF-8.
+ * directories first, and adds .exe). A relative path (./tool, bin/tool) is
+ * found from opts->cwd when that is set, on Windows too, where .exe is added.
+ * The arguments reach the child exactly as given: on Windows they are quoted
+ * by the MSVCRT rules that the child's C runtime uses to split them again.
+ * All strings are UTF-8.
  *
  * A Windows .bat or .cmd file runs under cmd.exe, which splits its command
  * line by different rules. Each argument is quoted so that cmd.exe operators
@@ -68,7 +70,10 @@ typedef struct
  * removes them).
  *
  * The child inherits only its stdin, stdout and stderr, never other handles or
- * sockets of the parent.
+ * sockets of the parent, even ones opened without the SDK and without
+ * close-on-exec. On Linux those are closed in the child by listing
+ * /proc/self/fd: one another thread opens during the spawn can still reach it,
+ * and without /proc they are inherited.
  *
  * Reading only stdout while the child also fills a stderr pipe can deadlock
  * once that pipe's 64 KB are full; read both, or redirect one to
@@ -80,7 +85,7 @@ typedef struct
  * @param  pipes    Receives the parent's pipe ends; may be NULL if no stream
  *                  is DINO_STDIO_PIPE.
  * @return 0 on success, -1 if the program couldn't be started (not found, not
- *         executable, bad arguments).
+ *         executable, bad arguments, a stdio mode outside dino_stdio_t).
  */
 int dino_process_spawn(dino_process_t *process, char *const argv[],
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes);
@@ -101,10 +106,11 @@ int dino_process_wait(dino_process_t process, int *exit_code);
 
 /**
  * End a process immediately (SIGKILL / TerminateProcess). It can't clean up.
- * Still wait for it afterwards.
+ * Still wait for it afterwards. A process that already exited is left as it
+ * was, keeping its own exit code.
  *
  * @param  process  Handle from dino_process_spawn, not yet waited for.
- * @return 0 on success, -1 on error.
+ * @return 0 on success (including when it had already exited), -1 on error.
  */
 int dino_process_kill(dino_process_t process);
 
@@ -140,7 +146,8 @@ typedef struct
     /** Bytes for the child's stdin, then end of file. NULL: stdin is null. */
     const void *input;
     size_t      input_len;
-    /** Kill the child after this many milliseconds; 0 waits forever. */
+    /** Give up after this many milliseconds, killing the child if it is still
+     *  running; 0 waits forever. */
     int timeout_ms;
 } dino_process_run_opts_t;
 
@@ -151,7 +158,7 @@ typedef struct
     size_t out_len;
     char  *err; /**< Everything written to stderr, NUL-terminated. */
     size_t err_len;
-    int    exit_code; /**< As from dino_process_wait; DINO_EXIT_KILLED on timeout. */
+    int    exit_code; /**< As from dino_process_wait; DINO_EXIT_KILLED if killed. */
 } dino_process_result_t;
 
 /**
@@ -159,15 +166,18 @@ typedef struct
  *
  * Both outputs are read, and the input written, at the same time, so a child
  * that fills one pipe while the parent waits on another can't deadlock. It
- * returns once the child has exited and both outputs are closed (a grandchild
- * that keeps them open keeps it waiting, up to the timeout).
+ * returns once the child has exited and both outputs are closed. A process the
+ * child started that keeps the pipes open keeps it waiting, up to the timeout:
+ * then it stops reading and writing and returns DINO_TIMEOUT with the child's
+ * own exit code.
  *
  * @param  argv    Program and arguments, as for dino_process_spawn.
  * @param  opts    Options, or NULL for the defaults.
  * @param  result  Receives the output and exit code, even on DINO_TIMEOUT
  *                 (what was written before the kill). Free it either way.
- * @return 0 when the child ran to the end, DINO_TIMEOUT when it was killed
- *         after opts->timeout_ms, -1 if it couldn't be started or on error.
+ * @return 0 when the child ran to the end, DINO_TIMEOUT when opts->timeout_ms
+ *         ran out (the child was killed, or something it started still held
+ *         the pipes), -1 if it couldn't be started or on error.
  */
 int dino_process_run(
     char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result);

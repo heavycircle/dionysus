@@ -3,6 +3,7 @@
 
 #include <dino/core/process.h>
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -26,6 +27,33 @@ static int decode_status(int status)
     return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
 }
 
+// Windows passes a child only the handles it lists. Here every descriptor
+// without close-on-exec would reach it, so close those in the child, as
+// posix_spawn_file_actions_addclosefrom_np would (musl has none). One that
+// another thread opens meanwhile can slip through; without /proc, children
+// inherit as before.
+static int close_inherited(posix_spawn_file_actions_t *actions)
+{
+    DIR *dir = opendir("/proc/self/fd");
+    if (!dir)
+        return 0;
+    int            self = dirfd(dir);
+    int            rc   = 0;
+    struct dirent *e;
+    while (rc == 0 && (e = readdir(dir)) != NULL)
+    {
+        char *end;
+        long  fd = strtol(e->d_name, &end, 10);
+        if (end == e->d_name || *end || fd < 3 || fd == self || fd > INT32_MAX)
+            continue;
+        int flags = fcntl((int)fd, F_GETFD);
+        if (flags >= 0 && !(flags & FD_CLOEXEC))
+            rc = posix_spawn_file_actions_addclose(actions, (int)fd);
+    }
+    closedir(dir);
+    return rc;
+}
+
 int dino_process_spawn(dino_process_t *process, char *const argv[],
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
 {
@@ -38,17 +66,16 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
         pipes = &unused;
     }
     pipes->in = pipes->out = pipes->err = DINO_INVALID_PIPE;
-    if (!argv || !argv[0])
+    dino_stdio_t modes[3];
+    if (!argv || !argv[0] || !dino__process_modes(opts, modes))
         return -1;
 
-    dino_stdio_t modes[3];
-    dino_pipe_t  child[3] = { DINO_INVALID_PIPE, DINO_INVALID_PIPE, DINO_INVALID_PIPE };
+    dino_pipe_t child[3] = { DINO_INVALID_PIPE, DINO_INVALID_PIPE, DINO_INVALID_PIPE };
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t          attr;
     int                        started   = 0;
     int                        have_attr = 0;
 
-    dino__process_modes(opts, modes);
     if (posix_spawn_file_actions_init(&actions) != 0)
         return -1;
     for (int fd = 0; fd < 3; fd++)
@@ -63,7 +90,8 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
         if (rc != 0)
             goto done;
     }
-    if (opts && opts->cwd && posix_spawn_file_actions_addchdir_np(&actions, opts->cwd) != 0)
+    if (close_inherited(&actions) != 0
+        || (opts && opts->cwd && posix_spawn_file_actions_addchdir_np(&actions, opts->cwd) != 0))
         goto done;
 
     // The child starts with no signals blocked and SIGPIPE at its default, even
@@ -127,8 +155,6 @@ uint64_t dino_process_id(dino_process_t process)
     return (uint64_t)process;
 }
 
-// Polls with a short, growing sleep: pidfd_open would need Linux 5.3 and a
-// fallback anyway.
 int dino__pidfd_open(dino_process_t process)
 {
 #ifdef SYS_pidfd_open

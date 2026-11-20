@@ -3,6 +3,30 @@
 What changed in the SDK between versions, and how to update code that uses it. The compiler finds
 almost everything here: a removed or renamed name fails to build, and the error points at the line.
 
+## To 0.6.1
+
+Fixes only; nothing fails to build. These change what a program sees at run time.
+
+### `dino_process_run` keeps to its timeout
+
+A process the child started in the background, holding stdout, stderr or stdin open, kept
+`dino_process_run` waiting long past `timeout_ms`. It now stops at the deadline and returns
+`DINO_TIMEOUT`, with the output read so far and the child's own `exit_code`, where it used to
+return `0` once the background process let go.
+
+### Linux children no longer inherit your descriptors
+
+A descriptor the program opened without close-on-exec (with `open`, `dup` or `socket` rather than
+the SDK) reached every child on Linux, though the docs said children get only stdin, stdout and
+stderr, as on Windows. It is closed in the child now. A program that handed a child a descriptor
+this way passes it as stdin, stdout or stderr instead.
+
+### A relative program path is found from `cwd` on Windows too
+
+`dino_process_spawn` with `cwd` set and a relative `argv[0]` such as `./tool` looked for the
+program in the new directory on Linux but in the parent's on Windows. Both use `cwd` now. Code that
+relied on Windows' old behaviour passes an absolute path.
+
 ## To 0.6
 
 0.6 is the last release before 1.0 allowed to break the API. The API review

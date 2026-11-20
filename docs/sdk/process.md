@@ -11,7 +11,9 @@ that matter are handled for you:
 - **Exit codes** come back the same way: the code the program exited with, `128 + signal` if a signal
   ended it (Linux), and `DINO_EXIT_KILLED` (137) after `dino_process_kill` on both platforms.
 - **Inheritance:** the child gets only its stdin, stdout and stderr, never the parent's other files,
-  sockets or pipes.
+  sockets or pipes. That includes descriptors you opened yourself without close-on-exec: on Linux
+  the SDK closes them in the child by listing `/proc/self/fd`. Two gaps remain there: one another
+  thread opens during the spawn can still get through, and without `/proc` they're inherited.
 
 The program you run is still platform-specific. There's no `/bin/sh` on Windows, so the examples
 pick the shell per platform.
@@ -57,12 +59,17 @@ everything it writes to stdout and stderr, and waits for it to exit.
 - **No deadlocks:** it reads both outputs and writes the input at the same time, so a child that
   fills one pipe while the parent is busy with another can't deadlock.
 - **Options:** `dino_process_run_opts_t` has `cwd`, `env`, `input`/`input_len` (`NULL`: stdin is empty) and
-  `timeout_ms` (`0`: no limit; otherwise the child is killed after that long).
+  `timeout_ms` (`0`: no limit; otherwise it gives up after that long, killing the child if it's
+  still running).
 - **Results:** `dino_process_result_t` has `out`/`out_len`, `err`/`err_len` (both NUL-terminated) and
   `exit_code`.
 - **Return value:** `0` when the child ran to the end, `DINO_TIMEOUT` when it was killed for taking
   too long (`result` still holds what it wrote first), or `-1` if it couldn't be started. Call
   `dino_process_result_free` in every case.
+- **Background processes:** a process the child started that keeps stdout, stderr or stdin open
+  keeps `dino_process_run` waiting after the child exits. With a timeout it stops at the deadline
+  and returns `DINO_TIMEOUT`, with what was read so far and the child's own `exit_code`. Without
+  one it waits as long as they stay open, as a shell's `$(...)` does.
 
 ## Talking to a running program: `dino_process_spawn`
 
@@ -92,11 +99,12 @@ dino_process_wait(child, &code);
 | `dino_process_spawn(&p, argv, opts, &pipes)`      | Start `argv[0]` with arguments. `opts` and `pipes` may be `NULL`.                                      | `0`, `-1` if it couldn't be started |
 | `dino_process_wait(p, &code)`                     | Wait for it to end, store how it ended, release it.                                                    | `0`, `-1`                           |
 | `dino_process_wait_timeout(p, timeout_ms, &code)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid. | `0`, `DINO_TIMEOUT`, `-1`           |
-| `dino_process_kill(p)`                            | End it now (`SIGKILL` / `TerminateProcess`). Still wait for it afterwards.                             | `0`, `-1`                           |
+| `dino_process_kill(p)`                            | End it now (`SIGKILL` / `TerminateProcess`); `0` if it already exited. Still wait for it afterwards.   | `0`, `-1`                           |
 | `dino_process_id(p)`                              | Its OS process ID, for logs.                                                                           | the ID                              |
 
 - **`argv[0]`:** a path, or a bare name looked up on `PATH`. Windows also adds `.exe` and looks in a
-  few system directories first.
+  few system directories first. A relative path such as `./tool` or `bin/tool` is found from `cwd`
+  when that is set, on both platforms (Windows adds `.exe` to it too).
 - **Batch files:** a `.bat` or `.cmd` file runs under `cmd.exe`, which reads `&`, `|`, `<`, `>` and
   `^` in its command line as commands of its own. The SDK quotes every argument so they stay literal,
   and refuses (returns `-1` for) an argument containing `"`, `%` or a line break, which quoting can't
