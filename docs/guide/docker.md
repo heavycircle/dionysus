@@ -44,6 +44,14 @@ container.
 
 Passing `--user` yourself also works; the image then runs as that user.
 
+Mounts under the image's home directory, such as a zig cache shared between runs, are left as they
+are, read-only ones included:
+
+```sh
+docker run --rm -v "$PWD:/work" -v "$HOME/.cache/zig:/home/dino/.cache/zig" \
+    ghcr.io/heavycircle/dionysus:stable dino build --all
+```
+
 ## Wine
 
 Every container user gets a wine prefix that links to a shared, prebuilt one in the image, so the

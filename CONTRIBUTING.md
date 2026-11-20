@@ -90,13 +90,16 @@ changing `cli/` or `sdk/`.
 The container starts as root only to pick a user (`scripts/docker-entrypoint.sh`): the owner of the
 working directory, so files written into a mounted project keep their owner. `dino` (UID 1000) is
 remapped to that UID; a root-owned mount (rootless Docker, Docker Desktop) runs as root; `--user` is
-respected. Wine is the hard part: it refuses a prefix owned by another user, and re-owning the
+respected. Remapping edits `/etc/passwd` rather than calling `usermod -u`, which re-owns the whole
+home directory, and re-owns only files under `/home/dino` that the image made: still owned by UID
+1000 and on the image's own filesystem, so mounts there (a zig cache, a read-only directory) are
+never touched. Wine is the hard part: it refuses a prefix owned by another user, and re-owning the
 1.4 GB one built into the image takes minutes. So the real prefix lives in `/opt/wine-prefix`,
 world-writable, and each user's `~/.wine` is a few KB of registry copies and links into it. The
 entrypoint also writes the prefix's `wineserver` file (Debian's wine names its socket directory
 there); without it, wine processes started together on a fresh container race to create it and
-some fail (#71). `tests/docker.sh dionysus` checks the cases, including parallel wine starts; CI
-runs it.
+some fail (#71). `tests/docker.sh dionysus` checks the cases, including parallel wine starts and
+mounts under the home directory; CI runs it.
 
 **Devcontainer.** `.devcontainer/devcontainer.json` uses the same image, for VS Code ("Reopen in
 Container"), GitHub Codespaces, or the `devcontainer` CLI. It runs `zig build` on creation and puts

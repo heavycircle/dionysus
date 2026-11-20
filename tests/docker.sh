@@ -53,6 +53,36 @@ check other-uid 4321
 check root-owned 0
 check explicit-user 4321 --user 4321
 
+# A mount under /home/dino (a zig cache, say) isn't re-owned when dino is
+# remapped, and a read-only one doesn't stop the run. One owned by the image's
+# UID 1000 is the case a plain `find -xdev` would still touch: it visits the
+# mount point itself.
+# Usage: check_home_mount NAME MOUNT_POINT MOUNT_OWNER
+check_home_mount() {
+    local name=$1 target=$2 mount_owner=$3 dir=$work/$1
+    mkdir -p "$dir/project" "$dir/mount"
+    docker run --rm -v "$dir:/p" --entrypoint sh "$image" -c \
+        "chown 4321:4321 /p/project && touch /p/mount/host-file && chown -R $mount_owner:$mount_owner /p/mount && chmod 1777 /p/mount"
+    if ! docker run --rm -v "$dir/project:/work" -v "$dir/mount:$target" "$image" \
+        sh -c 'dino init app >/dev/null && dino build -C app >/dev/null' >"$work/$name.log" 2>&1; then
+        echo "FAILED: $name"
+        sed 's/^/        /' "$work/$name.log" | tail -n 20
+        failed=1
+        return
+    fi
+    local owner
+    owner=$(docker run --rm -v "$dir:/p" --entrypoint stat "$image" -c %u /p/mount /p/mount/host-file | sort -u)
+    if [[ $owner != "$mount_owner" ]]; then
+        echo "FAILED: $name: the mount under /home/dino was re-owned (now UID $owner)"
+        failed=1
+        return
+    fi
+    echo "ok      $name: a mount under /home/dino keeps its owner"
+}
+
+check_home_mount home-mount /home/dino/.cache/zig 5555
+check_home_mount home-mount-ro /home/dino/reference:ro 1000
+
 # Nothing mounted: /work belongs to dino, so the image behaves as before.
 user=$(docker run --rm "$image" id -un)
 if [[ $user == dino ]]; then
