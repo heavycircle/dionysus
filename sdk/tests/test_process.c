@@ -393,6 +393,19 @@ UTEST(process, invalid_arguments_are_rejected)
     opts.stdout_mode                 = DINO_STDIO_PIPE;
     EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
 
+    // Stdio modes outside the enum, on every stream.
+    dino_process_pipes_t pipes;
+    for (int stream = 0; stream < 3; stream++)
+    {
+        dino_stdio_t bad[] = { (dino_stdio_t)3, (dino_stdio_t)-1 };
+        for (int i = 0; i < 2; i++)
+        {
+            dino_process_spawn_opts_t o                                                    = { 0 };
+            *(stream == 0 ? &o.stdin_mode : stream == 1 ? &o.stdout_mode : &o.stderr_mode) = bad[i];
+            EXPECT_EQ(-1, dino_process_spawn(&p, argv, &o, &pipes));
+        }
+    }
+
     EXPECT_EQ(-1, dino_process_wait(DINO_INVALID_PROCESS, NULL));
     EXPECT_EQ(-1, dino_process_kill(DINO_INVALID_PROCESS));
     EXPECT_EQ(0u, dino_process_id(DINO_INVALID_PROCESS));

@@ -24,11 +24,18 @@ static inline int dino__process_valid_env_name(const char *name)
     return name && *name && !strchr(name, '=');
 }
 
-static inline void dino__process_modes(const dino_process_spawn_opts_t *opts, dino_stdio_t modes[3])
+// 0 if any mode is outside the enum, which each platform would otherwise
+// treat its own way.
+static inline int dino__process_modes(const dino_process_spawn_opts_t *opts, dino_stdio_t modes[3])
 {
     modes[0] = opts ? opts->stdin_mode : DINO_STDIO_INHERIT;
     modes[1] = opts ? opts->stdout_mode : DINO_STDIO_INHERIT;
     modes[2] = opts ? opts->stderr_mode : DINO_STDIO_INHERIT;
+    for (int i = 0; i < 3; i++)
+        if (modes[i] != DINO_STDIO_INHERIT && modes[i] != DINO_STDIO_NULL
+            && modes[i] != DINO_STDIO_PIPE)
+            return 0;
+    return 1;
 }
 
 static inline int dino__process_any_pipe(const dino_process_spawn_opts_t *opts)
