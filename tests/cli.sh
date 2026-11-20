@@ -132,6 +132,37 @@ endif()' >>CMakeLists.txt
     [[ ! -e compile_commands.json ]]
 }
 
+# dinos started together unpack the embedded SDK into an empty cache without
+# getting in each other's way.
+case_parallel_sdk_unpack() {
+    local i pids=() failed=0
+    for i in 1 2 3 4 5 6; do
+        project "unpack$i"
+    done
+    for i in 1 2 3 4 5 6; do
+        (cd "$work/unpack$i" && DINO_SDK_PATH='' DINO_HOME=$work/unpack_home dino build >log 2>&1) &
+        pids+=($!)
+    done
+    for i in "${pids[@]}"; do wait "$i" || failed=1; done
+    ((failed == 0)) || { cat "$work"/unpack*/log; return 1; }
+    [[ $(ls "$work/unpack_home/sdk") != *.tmp-* ]]
+}
+
+# An unpacked SDK without its marker isn't deleted (it may be another dino's,
+# just renamed into place); dino says what to remove instead.
+case_sdk_leftover_reported() {
+    project leftover
+    export DINO_SDK_PATH='' DINO_HOME=$work/leftover_home
+    dino doctor >/dev/null 2>&1
+    local sdk
+    sdk=$(echo "$DINO_HOME"/sdk/*)
+    [[ -f $sdk/.dino-sdk ]] || return 1
+    rm "$sdk/.dino-sdk"
+    dino build 2>err && return 1
+    cat err
+    grep -q 'is not a complete SDK' err && [[ -d $sdk/cmake ]]
+}
+
 # Names CMake or dino already use are refused before anything is written.
 case_init_reserved_names() {
     local name
