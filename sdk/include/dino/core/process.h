@@ -56,9 +56,11 @@ typedef struct
  *
  * argv[0] is the program: a path, or a bare name looked up on PATH (Windows
  * also looks in the parent's directory, the current directory and the system
- * directories first, and adds .exe). The arguments reach the child exactly as
- * given: on Windows they are quoted by the MSVCRT rules that the child's C
- * runtime uses to split them again. All strings are UTF-8.
+ * directories first, and adds .exe). A relative path (./tool, bin/tool) is
+ * found from opts->cwd when that is set, on Windows too, where .exe is added.
+ * The arguments reach the child exactly as given: on Windows they are quoted
+ * by the MSVCRT rules that the child's C runtime uses to split them again.
+ * All strings are UTF-8.
  *
  * A Windows .bat or .cmd file runs under cmd.exe, which splits its command
  * line by different rules. Each argument is quoted so that cmd.exe operators

@@ -21,6 +21,12 @@ the SDK) reached every child on Linux, though the docs said children get only st
 stderr, as on Windows. It is closed in the child now. A program that handed a child a descriptor
 this way passes it as stdin, stdout or stderr instead.
 
+### A relative program path is found from `cwd` on Windows too
+
+`dino_process_spawn` with `cwd` set and a relative `argv[0]` such as `./tool` looked for the
+program in the new directory on Linux but in the parent's on Windows. Both use `cwd` now. Code that
+relied on Windows' old behaviour passes an absolute path.
+
 ## To 0.6
 
 0.6 is the last release before 1.0 allowed to break the API. The API review

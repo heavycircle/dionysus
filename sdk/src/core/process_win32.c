@@ -154,6 +154,40 @@ static wchar_t *batch_command_line(char *const argv[], wchar_t **application)
 }
 
 // "A=1\0B=2\0\0" in UTF-16.
+// A program path with a separator but no root (./tool, bin\tool) is looked up
+// in the child's working directory, as on Linux; CreateProcessW alone would
+// look in the parent's. The match becomes lpApplicationName, so the child's
+// argv[0] stays as given.
+static int is_relative_path(const char *path)
+{
+    if (!strpbrk(path, "/\\") || path[0] == '/' || path[0] == '\\')
+        return 0;
+    return !(path[0] && path[1] == ':');
+}
+
+static wchar_t *find_in(const wchar_t *dir, const char *program)
+{
+    wchar_t *name = widen(program, -1);
+    if (!name)
+        return NULL;
+    for (wchar_t *c = name; *c; c++)
+        if (*c == L'/')
+            *c = L'\\';
+    wchar_t *found = NULL;
+    DWORD    len   = SearchPathW(dir, name, L".exe", 0, NULL, NULL);
+    if (len)
+    {
+        found = malloc(len * sizeof(wchar_t));
+        if (found && SearchPathW(dir, name, L".exe", len, found, NULL) == 0)
+        {
+            free(found);
+            found = NULL;
+        }
+    }
+    free(name);
+    return found;
+}
+
 static wchar_t *environment_block(char *const env[])
 {
     struct buf b = { 0 };
@@ -242,6 +276,9 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
 
     dino__process_modes(opts, modes);
     if (!cmd || (opts && opts->cwd && !cwd) || (opts && opts->env && !env))
+        goto done;
+    // A batch file's app is cmd.exe, which already finds it from the new cwd.
+    if (!app && cwd && is_relative_path(argv[0]) && !(app = find_in(cwd, argv[0])))
         goto done;
     for (int i = 0; i < 3; i++)
     {
