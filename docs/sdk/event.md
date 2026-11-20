@@ -153,9 +153,13 @@ there, is an error), except the create functions, which return a handle or its i
 - **Stopping or handing over work:** `dino_event_wake` makes a waiting thread return a
   `DINO_EVENT_WAKE` item. Use it to stop a loop or to tell it there's work queued for it. Wakes not
   yet reported merge into one.
-- **Several threads on one loop:** level-triggered readiness would report one ready socket to each of
-  them. Add the socket with `DINO_EVENT_ONESHOT`, so one event goes to one thread, and rearm it with
-  `dino_event_mod_socket` once that thread has handled it.
+- **Several threads on one loop:** add sockets with `DINO_EVENT_ONESHOT`, so one event goes to one
+  thread, and rearm each with `dino_event_mod_socket` once that thread has handled it. Without
+  `ONESHOT`, one ready socket wakes every waiting thread on Linux but only one on Windows.
+- **Deleting while another thread waits:** after a `del` (or `dino_event_timer_del`) returns, no wait
+  that starts later reports the item. A wait already running in another thread may still return
+  one last event for it, so a thread that frees an item's userdata must make sure no other thread
+  is mid-wait, for example by deleting from the thread that waits.
 
 ## Timers
 

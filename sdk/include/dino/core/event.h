@@ -21,7 +21,8 @@ extern "C"
  * Readiness is level-triggered: a socket that is still readable is reported
  * again by the next wait. DINO_EVENT_ONESHOT reports it once and then disarms
  * it until dino_event_mod_socket, so that one event goes to one thread when
- * several threads wait on the same loop.
+ * several threads wait on the same loop. Without it, one ready socket wakes
+ * every waiting thread on Linux and one of them on Windows.
  *
  * Every function may be called from any thread, including while another thread
  * is blocked in dino_event_wait, except dino_event_loop_destroy.
@@ -97,7 +98,8 @@ int dino_event_mod_socket(
     dino_event_loop_t loop, dino_socket_t sock, uint32_t events, void *userdata);
 
 /**
- * Stop watching a socket. No event for it is reported after this returns.
+ * Stop watching a socket. No wait that starts after this returns reports it;
+ * a wait already running in another thread may still return one event for it.
  *
  * @return 0 on success, -1 on error (including when sock isn't added).
  */
@@ -134,7 +136,8 @@ int dino_event_add_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t event
 int dino_event_mod_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata);
 
 /**
- * Stop watching a pipe. No event for it is reported after this returns.
+ * Stop watching a pipe. No wait that starts after this returns reports it, as
+ * for dino_event_del_socket.
  *
  * @return 0 on success, -1 on error (including when pipe isn't added).
  */
@@ -156,7 +159,8 @@ int dino_event_del_pipe(dino_event_loop_t loop, dino_pipe_t pipe);
 int dino_event_add_process(dino_event_loop_t loop, dino_process_t process, void *userdata);
 
 /**
- * Stop watching a process. Its exit is not reported after this returns.
+ * Stop watching a process. No wait that starts after this returns reports its
+ * exit, as for dino_event_del_socket.
  *
  * @return 0 on success, -1 on error (including when process isn't added).
  */
@@ -205,7 +209,8 @@ dino_event_timer_t dino_event_timer_add(
     dino_event_loop_t loop, uint32_t delay_ms, uint32_t interval_ms, void *userdata);
 
 /**
- * Delete a timer, fired or not. It is not reported after this returns.
+ * Delete a timer, fired or not. No wait that starts after this returns
+ * reports it, as for dino_event_del_socket.
  *
  * @param  loop   Loop it was added to.
  * @param  timer  Timer from dino_event_timer_add.
