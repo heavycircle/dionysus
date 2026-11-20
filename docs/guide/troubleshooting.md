@@ -29,6 +29,12 @@ writable directory.
 `DINO_SDK_PATH` must point at the `sdk/` directory of a Dionysus checkout, not at the checkout
 itself. Unset it to use the SDK built into `dino`.
 
+**`.../sdk/<version> is not a complete SDK (an older dino may have been interrupted)`**
+
+`dino` unpacks its SDK into the cache directory (see `dino doctor`) and marks it complete only when
+every file is there. This directory has no mark, most likely from an older dino stopped while
+unpacking. Remove the directory named in the message; the next command unpacks it again.
+
 ## Building
 
 **`` no CMakeLists.txt in '...' (create one with `dino init`) ``**
