@@ -88,6 +88,14 @@ case_usage_errors() {
     [[ $code == 1 ]] || { echo "dino build without a project: exit $code"; return 1; }
 }
 
+# Every command has help, help and version included.
+case_help() {
+    local c
+    for c in init build run test targets doctor clean help version; do
+        dino help "$c" | grep -q "^Usage: dino $c" || { echo "help $c"; return 1; }
+    done
+}
+
 # Names CMake or dino already use are refused before anything is written.
 case_init_reserved_names() {
     local name
