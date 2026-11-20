@@ -42,7 +42,8 @@ The image starts as root only to choose a user, then runs your command as the ow
 under rootless Docker and Docker Desktop, where your files appear to be owned by root inside the
 container.
 
-Passing `--user` yourself also works; the image then runs as that user.
+Passing `--user` yourself also works; the image then runs as that user. That includes `--user 0`
+(or `--user root`), to run as root whoever owns `/work`.
 
 Mounts under the image's home directory, such as a zig cache shared between runs, are left as they
 are, read-only ones included:

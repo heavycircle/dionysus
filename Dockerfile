@@ -45,7 +45,7 @@ FROM base
 COPY --from=build /usr/local/bin/dino /usr/local/bin/dino
 COPY scripts/docker-entrypoint.sh /usr/local/bin/dino-entrypoint
 
-RUN useradd --create-home dino && install -d -o dino -g dino /work
+RUN useradd --create-home dino && install -d -o dino -g dino /work && groupadd --system dino-entrypoint
 
 ENV WINEDEBUG=-all
 # A wine prefix takes ~40 s to create, so it's built once here, in /opt, as dino,
@@ -64,6 +64,8 @@ RUN install -d -o dino -g dino /opt/wine-prefix \
 
 # Starts as root only to pick the user: the owner of the working directory
 # (see scripts/docker-entrypoint.sh), so files in a mounted project stay yours.
+# The group marks a start without --user: --user 0 starts in group 0.
+USER root:dino-entrypoint
 WORKDIR /work
 ENTRYPOINT ["dino-entrypoint"]
 CMD ["dino", "doctor"]
