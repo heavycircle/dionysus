@@ -2,6 +2,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Io = std.Io;
+const signals = @import("signals.zig");
 
 const Ctx = @This();
 
@@ -11,9 +12,13 @@ arena: std.mem.Allocator,
 env: *std.process.Environ.Map,
 out: *Io.Writer,
 err: *Io.Writer,
+/// The signal that interrupted a child: commands stop instead of going on
+/// to the next target, and exit 128 + this.
+interrupted: ?u8 = null,
 
-/// Returned after a message has already been shown to the user.
-pub const Error = error{Reported};
+/// Returned after a message has already been shown to the user. Usage is a
+/// mistake on the command line (exit 2), Reported any other failure (exit 1).
+pub const Error = error{ Reported, Usage };
 
 pub fn print(ctx: *Ctx, comptime fmt: []const u8, args: anytype) void {
     ctx.out.print(fmt, args) catch {};
@@ -39,6 +44,11 @@ pub fn errorMessage(ctx: *Ctx, comptime fmt: []const u8, args: anytype) void {
 pub fn fail(ctx: *Ctx, comptime fmt: []const u8, args: anytype) Error {
     ctx.errorMessage(fmt, args);
     return error.Reported;
+}
+
+pub fn usage(ctx: *Ctx, comptime fmt: []const u8, args: anytype) Error {
+    ctx.errorMessage(fmt, args);
+    return error.Usage;
 }
 
 pub fn sprint(ctx: *Ctx, comptime format: []const u8, args: anytype) []u8 {
@@ -87,16 +97,26 @@ pub const ExecOptions = struct {
 
 /// Runs a child with inherited stdio and returns its exit status,
 /// using the shell convention of 128 + signal for signalled children.
+/// dino waits for it even when interrupted (see signals.zig).
 pub fn exec(ctx: *Ctx, argv: []const []const u8, options: ExecOptions) Error!u8 {
     ctx.out.flush() catch {};
     ctx.err.flush() catch {};
+    var guard: signals.Guard = .install();
+    defer guard.restore();
     var child = std.process.spawn(ctx.io, .{
         .argv = argv,
         .cwd = if (options.cwd) |p| .{ .path = p } else .inherit,
         .environ_map = options.env,
     }) catch |e| return ctx.fail("unable to start {s}: {t}", .{ argv[0], e });
+    guard.forwardTo(child.id.?);
     const term = child.wait(ctx.io) catch |e| return ctx.fail("waiting for {s}: {t}", .{ argv[0], e });
+    if (guard.received()) |sig| ctx.interrupted = sig;
     return exitCode(term);
+}
+
+/// The exit code for a command a signal interrupted, if one did.
+pub fn interruptedCode(ctx: *Ctx) ?u8 {
+    return if (ctx.interrupted) |sig| 128 +| sig else null;
 }
 
 pub const Captured = struct {

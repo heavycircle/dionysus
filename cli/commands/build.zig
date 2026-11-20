@@ -34,6 +34,8 @@ pub const Options = struct {
     project: []const u8 = ".",
     targets: []const Target = &.{},
     mode: cmake.Mode = .release,
+    /// --debug or --release was given, not just defaulted.
+    mode_given: bool = false,
     run: cmake.RunOptions = .{},
     extra: []const []const u8 = &.{},
 };
@@ -60,15 +62,16 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (try parseCommon(ctx, &args, arg, &opts)) {
             continue;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else {
             names.append(ctx.arena, arg) catch @panic("OOM");
         }
     }
-    if (all and names.items.len != 0) return ctx.fail("--all cannot be combined with explicit targets", .{});
+    if (all and names.items.len != 0) return ctx.usage("--all cannot be combined with explicit targets", .{});
     opts.targets = if (all) &targets.known else try resolveTargets(ctx, names.items);
 
     const results = try buildTargets(ctx, opts);
+    if (ctx.interruptedCode()) |code| return code;
     var failed: usize = 0;
     for (results) |r| {
         if (!r.ok) failed += 1;
@@ -85,13 +88,15 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
 pub fn parseCommon(ctx: *Ctx, args: *Args, arg: []const u8, opts: *Options) Ctx.Error!bool {
     if (std.mem.eql(u8, arg, "--debug")) {
         opts.mode = .debug;
+        opts.mode_given = true;
     } else if (std.mem.eql(u8, arg, "--release")) {
         opts.mode = .release;
+        opts.mode_given = true;
     } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--verbose")) {
         opts.run.verbose = true;
     } else if (try args.value(ctx, arg, &.{ "-j", "--jobs" })) |v| {
         const jobs = std.fmt.parseInt(u32, v, 10) catch 0;
-        if (jobs == 0) return ctx.fail("invalid job count '{s}'", .{v});
+        if (jobs == 0) return ctx.usage("invalid job count '{s}'", .{v});
         opts.run.jobs = jobs;
     } else if (try args.value(ctx, arg, &.{"-C"})) |v| {
         opts.project = v;
@@ -107,31 +112,35 @@ pub fn resolveTargets(ctx: *Ctx, names: []const []const u8) Ctx.Error![]const Ta
             return ctx.fail("no default target for this host; pass one explicitly (see `dino targets`)", .{});
         return ctx.arena.dupe(Target, &.{host}) catch @panic("OOM");
     }
-    const list = ctx.arena.alloc(Target, names.len) catch @panic("OOM");
-    for (names, list) |name, *t| {
-        t.* = targets.resolve(name) catch
-            return ctx.fail("unknown target '{s}' (see `dino targets`)", .{name});
+    var list: std.ArrayList(Target) = .empty;
+    next: for (names) |name| {
+        const t = targets.resolve(name) catch
+            return ctx.usage("unknown target '{s}' (see `dino targets`)", .{name});
+        for (list.items) |seen| {
+            if (std.mem.eql(u8, seen.name, t.name)) continue :next;
+        }
+        list.append(ctx.arena, t) catch @panic("OOM");
     }
-    return list;
+    return list.items;
 }
 
-/// Builds each target in turn, continuing past failures so `--all` reports everything.
+/// Builds each target in turn, continuing past failures so `--all` reports
+/// everything, but not past an interruption: then only the targets started.
 pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
     const project = try setup(ctx, opts);
 
     const results = ctx.arena.alloc(Result, opts.targets.len) catch @panic("OOM");
-    var exported = false;
-    for (opts.targets, results) |target, *result| {
+    for (opts.targets, results, 0..) |target, *result, i| {
+        if (ctx.interrupted != null) return results[0..i];
         const cfg = config(ctx, opts, project, target);
         result.* = .{ .cfg = cfg, .ok = false };
         ctx.step("{s} ({s}, {t})", .{ target.name, target.triple, opts.mode });
 
         if (cmake.needsConfigure(ctx, cfg) and !try cmake.configure(ctx, cfg, opts.run)) continue;
-        // Before compiling: editors need the compile database most when the code doesn't build.
-        if (!exported) {
-            exported = true;
-            exportCompileCommands(ctx, cfg, opts.project);
-        }
+        // Before compiling: editors need the compile database most when the code
+        // doesn't build. Only the first target's, even if it fails to configure:
+        // the editor shouldn't switch to another target's view.
+        if (i == 0) exportCompileCommands(ctx, cfg, opts.project);
         if (!try cmake.build(ctx, cfg, opts.run)) continue;
 
         result.executables = try cmake.executables(ctx, cfg);

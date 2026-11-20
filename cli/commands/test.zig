@@ -34,16 +34,6 @@ pub const usage =
     \\
 ;
 
-/// valgrind can't see the allocator inside a static binary, so --memcheck
-/// builds the tests against dynamic glibc and runs each one under valgrind.
-const memcheck_target: Target = .{
-    .name = "memcheck",
-    .triple = "x86_64-linux-gnu",
-    .description = "x86_64 Linux, dynamically linked, for valgrind",
-    .arch = .x86_64,
-    .os = .linux,
-};
-
 pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     var args: Args = .{ .items = raw };
     var opts: build.Options = .{};
@@ -67,18 +57,18 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (try build.parseCommon(ctx, &args, arg, &opts)) {
             continue;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else {
             names.append(ctx.arena, arg) catch @panic("OOM");
         }
     }
 
     if (memcheck) {
-        if (all or names.items.len != 0) return ctx.fail("--memcheck runs on the host only; it takes no targets", .{});
-        if (targets.runnerFor(memcheck_target) != .native) return ctx.fail("--memcheck needs an x86_64 Linux host", .{});
+        if (all or names.items.len != 0) return ctx.usage("--memcheck runs on the host only; it takes no targets", .{});
+        if (targets.runnerFor(targets.memcheck) != .native) return ctx.fail("--memcheck needs an x86_64 Linux host", .{});
         const valgrind = ctx.findProgram("valgrind") orelse
             return ctx.fail("--memcheck needs valgrind; install it (or use the dino Docker image)", .{});
-        opts.targets = &.{memcheck_target};
+        opts.targets = &.{targets.memcheck};
         // Symbols for valgrind's stack traces; the counter would only duplicate valgrind.
         opts.mode = .debug;
         opts.extra = std.mem.concat(ctx.arena, []const u8, &.{ &.{
@@ -87,7 +77,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
             "-DDINO_NO_LEAK_CHECK=ON",
         }, opts.extra }) catch @panic("OOM");
     } else {
-        if (all and names.items.len != 0) return ctx.fail("--all cannot be combined with explicit targets", .{});
+        if (all and names.items.len != 0) return ctx.usage("--all cannot be combined with explicit targets", .{});
         opts.targets = if (all) &targets.known else try build.resolveTargets(ctx, names.items);
         for (opts.targets) |t| try requireRunner(ctx, t);
     }
@@ -97,12 +87,14 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     var failed: usize = 0;
     for (results, passed) |r, *ok| {
         ok.* = r.ok;
+        if (ctx.interrupted != null) break;
         if (r.ok) {
             ctx.step("testing {s}", .{r.cfg.target.name});
             ok.* = try ctest(ctx, r.cfg.build_dir, r.cfg.target, opts, filter, ctest_args);
         }
         if (!ok.*) failed += 1;
     }
+    if (ctx.interruptedCode()) |code| return code;
     if (results.len > 1) {
         ctx.print("\n", .{});
         ctx.step("summary: {d} passed, {d} failed", .{ results.len - failed, failed });

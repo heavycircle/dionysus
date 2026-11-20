@@ -10,8 +10,8 @@ dino clean                    # remove build/
 ```
 
 `build`, `run`, `test` and `clean` work on the project in the current directory, or in the
-directory given with `-C <dir>`. `dino init` takes the directory as an argument instead:
-`dino init myapp`.
+directory given with `-C <dir>`. `dino init` takes the directory as an argument, `dino init myapp`,
+and with `-C <dir>` it works from `<dir>`: `dino init -C ~/src myapp` creates `~/src/myapp`.
 
 ## Targets
 
@@ -82,12 +82,20 @@ dino run -- --verbose input.txt   # arguments for the program go after --
 ```
 
 - **Runners:** foreign Linux binaries run under qemu-user (`qemu-aarch64-static` is preferred if
-  installed) and Windows binaries under wine. `dino doctor` shows which runners it found.
+  installed) and Windows binaries under wine. `dino doctor` shows which runners it found. An x86_64
+  host runs i386 binaries directly; an aarch64 host runs arm binaries directly only if its CPU can
+  run 32-bit ARM code (many newer ones, and Apple silicon, can't), and uses `qemu-arm` otherwise.
 - **Exit code:** `dino run` exits with the program's exit code.
+- **Signals:** dino waits for the program to exit. Ctrl-C and Ctrl-\\ at the terminal reach the
+  program directly, once; `SIGTERM`, `SIGHUP` and a `SIGINT` sent to dino with `kill` are passed
+  on to it. On Windows, Ctrl-C and Ctrl-Break reach the program and dino ignores them. The same
+  holds while `dino build` and `dino test` run CMake and CTest, and once interrupted they stop
+  instead of going on to the next target.
 - **wine output:** wine's own `fixme:` chatter is silenced unless you set `WINEDEBUG` yourself.
 - **Several executables:** pick one with `--exe <name>`. Test executables (from `dino_test()`) are
   never picked automatically, only by name.
-- **Skipping the build:** `--no-build` runs what's already in `build/<target>/`.
+- **Skipping the build:** `--no-build` runs what's already in `build/<target>/`, whichever mode
+  was built last. With `--debug` or `--release` as well, it fails if that isn't the mode there.
 
 The binaries in `build/` are ordinary files, so you can also copy them to the machine they're for
 and run them there.
@@ -97,6 +105,7 @@ and run them there.
 | Option                 | Commands                | Effect                                                          |
 | ---------------------- | ----------------------- | --------------------------------------------------------------- |
 | `-C <dir>`             | build, run, test, clean | use `<dir>` as the project directory                            |
+| `-C <dir>`             | init                    | work from `<dir>`; the directory argument is relative to it     |
 | `--debug`, `--release` | build, run, test        | choose the build mode (release is the default)                  |
 | `-j <n>`, `--jobs <n>` | build, run, test        | parallel jobs (default: number of CPUs)                         |
 | `-v`, `--verbose`      | build, run, test        | show the CMake commands and the full compiler output            |
@@ -105,12 +114,28 @@ and run them there.
 | `-- <args>`            | run                     | passed to the program                                           |
 | `-- <args>`            | test                    | passed to `ctest`                                               |
 
+## Exit codes
+
+| Code    | Meaning                                                                                    |
+| ------- | ------------------------------------------------------------------------------------------ |
+| 0       | success                                                                                    |
+| 1       | something failed: configuring, compiling, a test, a missing tool                           |
+| 2       | a mistake on the command line: unknown command, option or target, a missing or empty value |
+| 128 + n | interrupted by signal n while CMake or CTest ran: 130 for Ctrl-C, 143 for `SIGTERM`        |
+
+Once the program has started, `dino run` exits with the program's own code instead, so there a 1
+or 2 means whatever the program means by it.
+
 ## When things are rebuilt
 
 - **Incremental:** `dino build` runs CMake's own incremental build, so only changed files are
   recompiled.
 - **Reconfiguring:** a target is reconfigured when its settings change: the build mode, the SDK
-  version, `DINO_LIBRARY_PATH`, or arguments after `--`.
+  version, `DINO_LIBRARY_PATH`, or arguments after `--`. Settings given after `--` stay in the
+  CMake cache for later builds.
+- **Starting over:** when the SDK changes (a new dino, or another `DINO_SDK_PATH`), or the last
+  configure failed, the target's CMake cache is deleted and it is configured from scratch, since
+  CMake reads the toolchain only once. Settings from earlier `--` arguments are dropped with it.
 - **`CFLAGS`:** CMake reads it from the environment only the first time a target is configured.
   After changing it, run `dino clean` first.
 

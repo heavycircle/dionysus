@@ -81,10 +81,12 @@ fn unpack(ctx: *Ctx, dir: []const u8) Ctx.Error!void {
         return ctx.fail("writing SDK marker in {s}: {t}", .{ tmp, e });
 
     if (ctx.exists(ctx.join(&.{ dir, marker }))) return;
-    // A directory without the marker is a leftover from a crashed older dino.
-    if (ctx.exists(dir)) cwd.deleteTree(ctx.io, dir) catch {};
+    // Never delete what's there: another dino may have renamed its complete
+    // SDK into place since the check above. A rename onto it fails, and then
+    // its marker is there.
     Io.Dir.rename(cwd, tmp, cwd, dir, ctx.io) catch |e| {
         if (ctx.exists(ctx.join(&.{ dir, marker }))) return;
+        if (ctx.exists(dir)) return ctx.fail("{s} is not a complete SDK (an older dino may have been interrupted); remove it and try again", .{dir});
         return ctx.fail("installing SDK to {s}: {t}", .{ dir, e });
     };
 }

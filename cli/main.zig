@@ -19,6 +19,20 @@ const commands = [_]Command{
     command("clean", "Remove build directories", @import("commands/clean.zig")),
 };
 
+const help_usage =
+    \\Usage: dino help [command]
+    \\
+    \\Show the commands, or how to use one. `dino <command> --help` does the same.
+    \\
+;
+
+const version_usage =
+    \\Usage: dino version
+    \\
+    \\Print the dino version.
+    \\
+;
+
 fn command(comptime name: []const u8, comptime summary: []const u8, comptime module: type) Command {
     return .{ .name = name, .summary = summary, .usage = module.usage, .run = module.main };
 }
@@ -71,6 +85,7 @@ pub fn main(init: std.process.Init) !u8 {
 
     return dispatch(&ctx, args[1..]) catch |err| switch (err) {
         error.Reported => 1,
+        error.Usage => 2,
     };
 }
 
@@ -82,8 +97,15 @@ fn dispatch(ctx: *Ctx, args: []const []const u8) Ctx.Error!u8 {
     const name = args[0];
     if (std.mem.eql(u8, name, "help") or std.mem.eql(u8, name, "-h") or std.mem.eql(u8, name, "--help")) {
         if (args.len > 1) {
-            const c = find(args[1]) orelse return ctx.fail("unknown command '{s}'", .{args[1]});
-            ctx.print("{s}", .{c.usage});
+            const text = if (std.mem.eql(u8, args[1], "help"))
+                help_usage
+            else if (std.mem.eql(u8, args[1], "version"))
+                version_usage
+            else if (find(args[1])) |c|
+                c.usage
+            else
+                return ctx.usage("unknown command '{s}'", .{args[1]});
+            ctx.print("{s}", .{text});
         } else {
             ctx.print("{s}", .{usage});
         }

@@ -10,7 +10,9 @@ pub const usage =
     \\Usage: dino init [directory] [options]
     \\
     \\Create a new dino project in <directory> (default: the current directory).
-    \\Existing files are never overwritten.
+    \\Existing files are never overwritten. The project is named after the
+    \\directory, which can't be a name CMake or dino already uses (all, clean,
+    \\help, install, package, test, test_main, dino_*).
     \\
     \\Creates:
     \\    CMakeLists.txt         Builds every .c file under src/ and links the SDK
@@ -25,6 +27,7 @@ pub const usage =
     \\
     \\Options:
     \\    --no-configure      Only write the files; don't run CMake
+    \\    -C <dir>            Work from <dir>: <directory> is relative to it
     \\    -h, --help          Show this message
     \\
 ;
@@ -86,6 +89,7 @@ const gitignore_template =
 pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     var args: Args = .{ .items = raw };
     var dir: ?[]const u8 = null;
+    var base: ?[]const u8 = null;
     var configure = true;
     while (args.next()) |arg| {
         if (Args.isHelp(arg)) {
@@ -93,21 +97,28 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
             return 0;
         } else if (std.mem.eql(u8, arg, "--no-configure")) {
             configure = false;
+        } else if (try args.value(ctx, arg, &.{"-C"})) |v| {
+            base = v;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else if (dir != null) {
-            return ctx.fail("`dino init` takes a single directory", .{});
+            return ctx.usage("`dino init` takes a single directory", .{});
         } else {
             dir = arg;
         }
     }
-    const root = dir orelse ".";
+    const root = if (base) |b| ctx.join(&.{ b, dir orelse "." }) else dir orelse ".";
     const cwd = Io.Dir.cwd();
+    // Named before anything is created, so a refused name leaves nothing behind.
+    const here = cwd.realPathFileAlloc(ctx.io, ".", ctx.arena) catch |e|
+        return ctx.fail("resolving the current directory: {t}", .{e});
+    const abs = std.fs.path.resolve(ctx.arena, &.{ here, root }) catch @panic("OOM");
+    const name = projectName(ctx.arena, std.fs.path.basename(abs));
+    if (isReserved(name)) {
+        return ctx.usage("'{s}' can't be a project name: CMake or dino already has a target by that name; use a directory with another name", .{name});
+    }
     for ([_][]const u8{ "src", "tests" }) |sub| cwd.createDirPath(ctx.io, ctx.join(&.{ root, sub })) catch |e|
         return ctx.fail("creating {s}: {t}", .{ root, e });
-    const abs = cwd.realPathFileAlloc(ctx.io, root, ctx.arena) catch |e|
-        return ctx.fail("resolving {s}: {t}", .{ root, e });
-    const name = projectName(ctx.arena, std.fs.path.basename(abs));
 
     const files = [_]struct { path: []const u8, data: []const u8 }{
         .{ .path = "CMakeLists.txt", .data = ctx.sprint(cmake_template, .{name}) },
@@ -131,7 +142,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     const status: u8 = if (configure) try configureHost(ctx, root) else 0;
 
     ctx.print("\nNext:\n", .{});
-    if (dir) |d| ctx.print("    cd {s}\n", .{d});
+    if (!std.mem.eql(u8, root, ".")) ctx.print("    cd {s}\n", .{root});
     ctx.print("    dino build        # build for this machine\n", .{});
     ctx.print("    dino run          # build and run\n", .{});
     ctx.print("    dino build --all  # build for every target\n", .{});
@@ -170,6 +181,31 @@ fn projectName(arena: std.mem.Allocator, base: []const u8) []const u8 {
         if (!std.ascii.isAlphanumeric(c.*) and c.* != '_' and c.* != '-') c.* = '_';
     }
     return name;
+}
+
+/// Targets CMake defines itself (see policy CMP0037), the test target the
+/// generated CMakeLists.txt adds, and the SDK's dino_ namespace.
+const reserved = [_][]const u8{
+    "all",        "clean",          "help",       "install",       "test",
+    "package",    "package_source", "edit_cache", "rebuild_cache", "ALL_BUILD",
+    "ZERO_CHECK", "RUN_TESTS",      "INSTALL",    "PACKAGE",       "list_install_components",
+    "test_main",
+};
+
+fn isReserved(name: []const u8) bool {
+    if (std.mem.startsWith(u8, name, "dino_")) return true;
+    for (reserved) |r| {
+        if (std.mem.eql(u8, name, r)) return true;
+    }
+    return false;
+}
+
+test isReserved {
+    try std.testing.expect(isReserved("test"));
+    try std.testing.expect(isReserved("dino_core"));
+    try std.testing.expect(isReserved("ZERO_CHECK"));
+    try std.testing.expect(!isReserved("testing"));
+    try std.testing.expect(!isReserved("dino"));
 }
 
 test projectName {
