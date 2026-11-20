@@ -84,6 +84,10 @@ dino run -- --verbose input.txt   # arguments for the program go after --
 - **Runners:** foreign Linux binaries run under qemu-user (`qemu-aarch64-static` is preferred if
   installed) and Windows binaries under wine. `dino doctor` shows which runners it found.
 - **Exit code:** `dino run` exits with the program's exit code.
+- **Signals:** dino waits for the program to exit. Ctrl-C and Ctrl-\\ at the terminal reach the
+  program directly, once; `SIGTERM`, `SIGHUP` and a `SIGINT` sent to dino with `kill` are passed
+  on to it. On Windows, Ctrl-C and Ctrl-Break reach the program and dino ignores them. The same
+  holds while `dino build` and `dino test` run CMake and CTest.
 - **wine output:** wine's own `fixme:` chatter is silenced unless you set `WINEDEBUG` yourself.
 - **Several executables:** pick one with `--exe <name>`. Test executables (from `dino_test()`) are
   never picked automatically, only by name.

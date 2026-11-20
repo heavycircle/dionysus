@@ -2,6 +2,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Io = std.Io;
+const signals = @import("signals.zig");
 
 const Ctx = @This();
 
@@ -87,14 +88,18 @@ pub const ExecOptions = struct {
 
 /// Runs a child with inherited stdio and returns its exit status,
 /// using the shell convention of 128 + signal for signalled children.
+/// dino waits for it even when interrupted (see signals.zig).
 pub fn exec(ctx: *Ctx, argv: []const []const u8, options: ExecOptions) Error!u8 {
     ctx.out.flush() catch {};
     ctx.err.flush() catch {};
+    var guard: signals.Guard = .install();
+    defer guard.restore();
     var child = std.process.spawn(ctx.io, .{
         .argv = argv,
         .cwd = if (options.cwd) |p| .{ .path = p } else .inherit,
         .environ_map = options.env,
     }) catch |e| return ctx.fail("unable to start {s}: {t}", .{ argv[0], e });
+    guard.forwardTo(child.id.?);
     const term = child.wait(ctx.io) catch |e| return ctx.fail("waiting for {s}: {t}", .{ argv[0], e });
     return exitCode(term);
 }
