@@ -14,8 +14,8 @@ to configure, the file is left as it was.
 
 It isn't CMake's own file. CMake writes every entry as `zig cc -target ...`, which clang tools can't
 parse: they would fall back to the host's own headers. `dino` rewrites it into plain clang commands
-that name the target's real musl or MinGW headers, so the editor sees exactly what the build
-compiles.
+that name the target's real musl or MinGW headers, and for C++ files libc++'s, so the editor sees
+exactly what the build compiles.
 
 It's machine-specific (it holds absolute paths), so the generated `.gitignore` leaves it out of
 version control.
