@@ -14,6 +14,13 @@ A process the child started in the background, holding stdout, stderr or stdin o
 `DINO_TIMEOUT`, with the output read so far and the child's own `exit_code`, where it used to
 return `0` once the background process let go.
 
+### Linux children no longer inherit your descriptors
+
+A descriptor the program opened without close-on-exec (with `open`, `dup` or `socket` rather than
+the SDK) reached every child on Linux, though the docs said children get only stdin, stdout and
+stderr, as on Windows. It is closed in the child now. A program that handed a child a descriptor
+this way passes it as stdin, stdout or stderr instead.
+
 ## To 0.6
 
 0.6 is the last release before 1.0 allowed to break the API. The API review

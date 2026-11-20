@@ -191,6 +191,24 @@ UTEST(process, working_directory)
     EXPECT_STREQ(expected, out);
 }
 
+#ifndef _WIN32
+// Windows passes a child only the handles it lists; Linux children likewise get
+// nothing but stdin, stdout and stderr, even of descriptors the program opened
+// without close-on-exec.
+UTEST(process, child_gets_only_the_standard_streams)
+{
+    int fd = dup(1);
+    ASSERT_GE(fd, 3);
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "[ -e /proc/self/fd/%d ] && echo inherited || echo closed", fd);
+    char *const argv[] = SHELL(cmd);
+    char        out[64];
+    EXPECT_EQ(0, run(argv, NULL, out, sizeof(out)));
+    EXPECT_STREQ("closed\n", out);
+    close(fd);
+}
+#endif
+
 UTEST(process, environment_replaces_the_parents)
 {
 #ifdef _WIN32
