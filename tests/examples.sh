@@ -23,9 +23,8 @@ targets=("$@")
 # pass fails the run so this list can't go stale.
 declare -A known_failures=()
 
-# Billions of loop iterations are fine natively but take minutes under emulation.
 # Libraries have nothing to run; their tests still run.
-declare -A build_only=([thread_example]=1 [org_library]=1)
+declare -A build_only=([org_library]=1)
 
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
