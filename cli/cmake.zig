@@ -31,7 +31,7 @@ pub const Config = struct {
     extra: []const []const u8 = &.{},
 };
 
-const stamp_file = ".dino-stamp";
+pub const stamp_file = ".dino-stamp";
 
 /// The `-D` settings that define a dino build. Anything that changes these
 /// requires a fresh configure.
@@ -77,10 +77,21 @@ pub fn stamp(ctx: *Ctx, cfg: Config) []const u8 {
     return ctx.sprint("{x:0>16}\n", .{hasher.final()});
 }
 
+/// The stamp file holds the stamp, then the SDK the build dir was configured
+/// against. It is empty while a configure runs, and stays empty if it fails.
+const Recorded = struct { stamp: []const u8, sdk: []const u8 };
+
+fn recorded(ctx: *Ctx, cfg: Config) Recorded {
+    const bytes = Io.Dir.cwd().readFileAlloc(ctx.io, ctx.join(&.{ cfg.build_dir, stamp_file }), ctx.arena, .limited(64 << 10)) catch "";
+    var lines = std.mem.splitScalar(u8, bytes, '\n');
+    const first = lines.first();
+    return .{ .stamp = first, .sdk = lines.next() orelse "" };
+}
+
 pub fn needsConfigure(ctx: *Ctx, cfg: Config) bool {
     if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }))) return true;
-    const previous = Io.Dir.cwd().readFileAlloc(ctx.io, ctx.join(&.{ cfg.build_dir, stamp_file }), ctx.arena, .limited(64)) catch return true;
-    return !std.mem.eql(u8, previous, stamp(ctx, cfg));
+    const s = stamp(ctx, cfg);
+    return !std.mem.eql(u8, recorded(ctx, cfg).stamp, s[0 .. s.len - 1]);
 }
 
 pub const RunOptions = struct {
@@ -97,6 +108,22 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     cwd.writeFile(ctx.io, .{ .sub_path = ctx.join(&.{ query_dir, "codemodel-v2" }), .data = "" }) catch |e|
         return ctx.fail("writing CMake file API query: {t}", .{e});
 
+    // CMake reads the toolchain file only on the first configure, so a cache
+    // made with another SDK keeps its compiler and flags. A failed configure
+    // may have left the cache half-written, so it starts over too.
+    const stamp_path = ctx.join(&.{ cfg.build_dir, stamp_file });
+    if (!std.mem.eql(u8, recorded(ctx, cfg).sdk, cfg.sdk)) {
+        cwd.deleteFile(ctx.io, ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" })) catch |e| switch (e) {
+            error.FileNotFound => {},
+            else => return ctx.fail("removing the CMake cache in {s}: {t}", .{ cfg.build_dir, e }),
+        };
+        cwd.deleteTree(ctx.io, ctx.join(&.{ cfg.build_dir, "CMakeFiles" })) catch |e|
+            return ctx.fail("removing {s}/CMakeFiles: {t}", .{ cfg.build_dir, e });
+    }
+    // Empty, it still marks the directory as dino's for `dino clean`.
+    cwd.writeFile(ctx.io, .{ .sub_path = stamp_path, .data = "" }) catch |e|
+        return ctx.fail("writing {s}: {t}", .{ stamp_path, e });
+
     var argv: std.ArrayList([]const u8) = .empty;
     argv.appendSlice(ctx.arena, &.{ "cmake", "-S", cfg.source_dir, "-B", cfg.build_dir }) catch @panic("OOM");
     if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }))) {
@@ -108,8 +135,8 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     if (opts.verbose) ctx.print("$ {s}\n", .{commandLine(ctx, argv.items)});
     if (try ctx.exec(argv.items, .{}) != 0) return false;
 
-    cwd.writeFile(ctx.io, .{ .sub_path = ctx.join(&.{ cfg.build_dir, stamp_file }), .data = stamp(ctx, cfg) }) catch |e|
-        return ctx.fail("writing {s}: {t}", .{ stamp_file, e });
+    cwd.writeFile(ctx.io, .{ .sub_path = stamp_path, .data = ctx.sprint("{s}{s}\n", .{ stamp(ctx, cfg), cfg.sdk }) }) catch |e|
+        return ctx.fail("writing {s}: {t}", .{ stamp_path, e });
     return true;
 }
 

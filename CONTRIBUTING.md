@@ -130,6 +130,7 @@ tests/sdk.sh               runs sdk/tests with `dino test`
 tests/warnings.sh          checks the portability warnings against tests/fixtures/raw_calls
 tests/docs.sh              checks docs links and builds and runs the C programs in docs/
 tests/headers.sh           checks every public header compiles alone as C and C++ and stays namespaced
+tests/cli.sh               checks the dino command line end to end
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
 scripts/lintcommit.sh      checks commit messages
@@ -258,6 +259,10 @@ exactly as its `expected-warning` comment says, in four language modes, and then
 with `DINO_NO_PLATFORM_WARNINGS` set, where nothing may warn. `--memcheck` repeats the check
 against glibc's headers.
 
+`tests/cli.sh [cases...]` checks `dino` itself end to end: configure caching, `dino run`,
+`dino init` and the command line. Each `case_<name>` function is one check on a fresh project for
+the host target; name cases to run only those. Unit tests in `cli/` cover what doesn't need CMake.
+
 ### CI
 
 `.github/workflows/ci.yml` runs on every PR and on pushes to `main` and `release-*`:
@@ -266,7 +271,7 @@ against glibc's headers.
 | --- | --- |
 | `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
 | `unit` | `zig build test` |
-| `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh` and `tests/docs.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
+| `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh` and `tests/docs.sh`; the x86_64 job also runs the SDK tests under valgrind, the warnings against glibc (`--memcheck`) and `tests/cli.sh` |
 
 Run the same checks locally before asking for review:
 
@@ -282,6 +287,7 @@ docker build -t dionysus . && docker run --rm -e CFLAGS="-Wall -Wextra -Werror" 
 docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/sdk.sh --all
 docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/warnings.sh
 docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/docs.sh
+docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/cli.sh
 ```
 
 The linters are pinned through [uv](https://docs.astral.sh/uv/) so everyone formats with the same
