@@ -9,7 +9,8 @@ and the [portability warnings](portability-warnings.md) through **clangd**, usin
 `dino init` writes it, and every `dino build`, `run` and `test` refreshes it before compiling, so it
 exists even while the code doesn't build. It describes the **first target** of the command, so
 `dino build win64` switches the editor to the Windows view of the code, `#ifdef _WIN32` branches and
-MinGW headers included, and `dino build` switches it back to the host.
+MinGW headers included, and `dino build` switches it back to the host. If the first target fails
+to configure, the file is left as it was.
 
 It isn't CMake's own file. CMake writes every entry as `zig cc -target ...`, which clang tools can't
 parse: they would fall back to the host's own headers. `dino` rewrites it into plain clang commands
