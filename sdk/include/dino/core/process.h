@@ -68,7 +68,10 @@ typedef struct
  * removes them).
  *
  * The child inherits only its stdin, stdout and stderr, never other handles or
- * sockets of the parent.
+ * sockets of the parent, even ones opened without the SDK and without
+ * close-on-exec. On Linux those are closed in the child by listing
+ * /proc/self/fd: one another thread opens during the spawn can still reach it,
+ * and without /proc they are inherited.
  *
  * Reading only stdout while the child also fills a stderr pipe can deadlock
  * once that pipe's 64 KB are full; read both, or redirect one to

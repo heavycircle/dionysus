@@ -11,7 +11,9 @@ that matter are handled for you:
 - **Exit codes** come back the same way: the code the program exited with, `128 + signal` if a signal
   ended it (Linux), and `DINO_EXIT_KILLED` (137) after `dino_process_kill` on both platforms.
 - **Inheritance:** the child gets only its stdin, stdout and stderr, never the parent's other files,
-  sockets or pipes.
+  sockets or pipes. That includes descriptors you opened yourself without close-on-exec: on Linux
+  the SDK closes them in the child by listing `/proc/self/fd`. Two gaps remain there: one another
+  thread opens during the spawn can still get through, and without `/proc` they're inherited.
 
 The program you run is still platform-specific. There's no `/bin/sh` on Windows, so the examples
 pick the shell per platform.
