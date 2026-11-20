@@ -8,7 +8,8 @@
 #
 #   docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples [targets...]
 #
-# With no targets, every target is tested. CFLAGS from the environment reaches
+# With no targets, every target is tested. The SDK comes from this checkout
+# (DINO_SDK_PATH overrides it). CFLAGS from the environment reaches
 # every compile (CI sets -Wall -Wextra -Werror). Examples are copied to a
 # scratch directory, so the source tree is never written.
 set -uo pipefail
@@ -29,6 +30,9 @@ declare -A build_only=([thread_example]=1 [org_library]=1)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 export DINO_HOME=${DINO_HOME:-$work/home}
+# The checkout's SDK, not the one built into dino, which may be older.
+DINO_SDK_PATH=${DINO_SDK_PATH:-$(cd "$(dirname "$0")/../sdk" && pwd)}
+export DINO_SDK_PATH
 cp -r "$src"/*/ "$work"/
 export DINO_LIBRARY_PATH=$work/org_library
 
