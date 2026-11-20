@@ -111,12 +111,16 @@ pub fn resolveTargets(ctx: *Ctx, names: []const []const u8) Ctx.Error![]const Ta
             return ctx.fail("no default target for this host; pass one explicitly (see `dino targets`)", .{});
         return ctx.arena.dupe(Target, &.{host}) catch @panic("OOM");
     }
-    const list = ctx.arena.alloc(Target, names.len) catch @panic("OOM");
-    for (names, list) |name, *t| {
-        t.* = targets.resolve(name) catch
+    var list: std.ArrayList(Target) = .empty;
+    next: for (names) |name| {
+        const t = targets.resolve(name) catch
             return ctx.usage("unknown target '{s}' (see `dino targets`)", .{name});
+        for (list.items) |seen| {
+            if (std.mem.eql(u8, seen.name, t.name)) continue :next;
+        }
+        list.append(ctx.arena, t) catch @panic("OOM");
     }
-    return list;
+    return list.items;
 }
 
 /// Builds each target in turn, continuing past failures so `--all` reports everything.

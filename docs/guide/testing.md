@@ -122,7 +122,8 @@ and use of uninitialized memory:
    by utest_run_kv_delete (tests/test_kv.c:42)
 ```
 
-It needs an x86_64 Linux host with valgrind installed. The Docker image has it.
+It needs an x86_64 Linux host with valgrind installed. The Docker image has it. `dino clean memcheck`
+removes `build/memcheck/`.
 
 ## In CI
 

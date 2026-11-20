@@ -29,6 +29,16 @@ pub const known = [_]Target{
     .{ .name = "x86_64", .triple = "x86_64-linux-musl", .description = "AMD64", .arch = .x86_64, .os = .linux },
 };
 
+/// valgrind can't see the allocator inside a static binary, so --memcheck
+/// builds the tests against dynamic glibc and runs each one under valgrind.
+pub const memcheck: Target = .{
+    .name = "memcheck",
+    .triple = "x86_64-linux-gnu",
+    .description = "x86_64 Linux, dynamically linked, for valgrind",
+    .arch = .x86_64,
+    .os = .linux,
+};
+
 pub const ResolveError = error{UnknownTarget};
 
 /// Accepts a known short name or, as an escape hatch, any `arch-os[-abi]` triple zig understands.

@@ -34,16 +34,6 @@ pub const usage =
     \\
 ;
 
-/// valgrind can't see the allocator inside a static binary, so --memcheck
-/// builds the tests against dynamic glibc and runs each one under valgrind.
-const memcheck_target: Target = .{
-    .name = "memcheck",
-    .triple = "x86_64-linux-gnu",
-    .description = "x86_64 Linux, dynamically linked, for valgrind",
-    .arch = .x86_64,
-    .os = .linux,
-};
-
 pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     var args: Args = .{ .items = raw };
     var opts: build.Options = .{};
@@ -75,10 +65,10 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
 
     if (memcheck) {
         if (all or names.items.len != 0) return ctx.usage("--memcheck runs on the host only; it takes no targets", .{});
-        if (targets.runnerFor(memcheck_target) != .native) return ctx.fail("--memcheck needs an x86_64 Linux host", .{});
+        if (targets.runnerFor(targets.memcheck) != .native) return ctx.fail("--memcheck needs an x86_64 Linux host", .{});
         const valgrind = ctx.findProgram("valgrind") orelse
             return ctx.fail("--memcheck needs valgrind; install it (or use the dino Docker image)", .{});
-        opts.targets = &.{memcheck_target};
+        opts.targets = &.{targets.memcheck};
         // Symbols for valgrind's stack traces; the counter would only duplicate valgrind.
         opts.mode = .debug;
         opts.extra = std.mem.concat(ctx.arena, []const u8, &.{ &.{
