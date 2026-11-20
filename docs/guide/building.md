@@ -10,8 +10,8 @@ dino clean                    # remove build/
 ```
 
 `build`, `run`, `test` and `clean` work on the project in the current directory, or in the
-directory given with `-C <dir>`. `dino init` takes the directory as an argument instead:
-`dino init myapp`.
+directory given with `-C <dir>`. `dino init` takes the directory as an argument, `dino init myapp`,
+and with `-C <dir>` it works from `<dir>`: `dino init -C ~/src myapp` creates `~/src/myapp`.
 
 ## Targets
 
@@ -102,6 +102,7 @@ and run them there.
 | Option                 | Commands                | Effect                                                          |
 | ---------------------- | ----------------------- | --------------------------------------------------------------- |
 | `-C <dir>`             | build, run, test, clean | use `<dir>` as the project directory                            |
+| `-C <dir>`             | init                    | work from `<dir>`; the directory argument is relative to it     |
 | `--debug`, `--release` | build, run, test        | choose the build mode (release is the default)                  |
 | `-j <n>`, `--jobs <n>` | build, run, test        | parallel jobs (default: number of CPUs)                         |
 | `-v`, `--verbose`      | build, run, test        | show the CMake commands and the full compiler output            |
