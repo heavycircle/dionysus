@@ -3,11 +3,15 @@
 # working directory (normally the mounted project), so files dino writes there
 # belong to the host user rather than to the image's `dino` user (UID 1000):
 #
-#   owner is UID 1000, or --user was given   run as is
-#   owner is root                            run as root (rootless Docker and
-#                                            Docker Desktop map the host user to
-#                                            root inside the container)
-#   any other owner                          give `dino` that UID and GID, run as it
+#   --user was given (--user 0 too)   run as that user
+#   owner is UID 1000                 run as dino
+#   owner is root                     run as root (rootless Docker and Docker
+#                                     Desktop map the host user to root inside
+#                                     the container)
+#   any other owner                   give `dino` that UID and GID, run as it
+#
+# The image starts as root in the group dino-entrypoint (the Dockerfile's
+# USER); --user 0 starts in group 0, which is how it's told apart.
 #
 # `dino-entrypoint --own-wine-prefix` only sets up the caller's wine prefix; the
 # Dockerfile uses it to give `dino` one at build time.
@@ -54,23 +58,38 @@ if [ "$(id -u)" != 0 ]; then
     exec "$@"
 fi
 
+# By number: --user 0:<gid> may name a group with no name.
+if [ "$(id -g)" != "$(getent group dino-entrypoint | cut -d: -f3)" ]; then
+    export HOME=/root
+    own_wine_prefix
+    exec "$@"
+fi
+
 uid=$(stat -c %u .)
 gid=$(stat -c %g .)
 
 if [ "$uid" = 0 ]; then
     export HOME=/root
     own_wine_prefix
-    exec "$@"
+    exec setpriv --reuid=0 --regid=0 --init-groups "$@"
 fi
 
-if [ "$uid" != "$(id -u dino)" ]; then
+image_uid=$(id -u dino)
+if [ "$uid" != "$image_uid" ]; then
     # -o: the host UID/GID may already belong to an account in the image.
-    # /home/dino is a few KB: its wine prefix links into /opt, and chown -R
-    # doesn't follow links.
     groupmod -o -g "$gid" dino
-    usermod -o -u "$uid" -g "$gid" dino
-    chown -R dino:dino /home/dino
+    # Not usermod -u: it re-owns everything under the home directory, mounts
+    # in it (a zig cache, say) included, and fails on read-only ones.
+    sed -i "s/^dino:\([^:]*\):[0-9]*:[0-9]*:/dino:\1:$uid:$gid:/" /etc/passwd
+    # Re-own only what the image made: files still owned by its UID, on the
+    # image's own filesystem. -xdev keeps find out of mounts, but it still
+    # lists each mount point, so those are told apart by device.
+    home_dev=$(stat -c %d /home/dino)
+    find /home/dino -xdev -user "$image_uid" -printf '%D %p\n' | while read -r dev path; do
+        if [ "$dev" = "$home_dev" ]; then chown -h "$uid:$gid" "$path"; fi
+    done
 fi
 
+# Again as dino, to set up its wine prefix like any other non-root user's.
 export HOME=/home/dino USER=dino LOGNAME=dino
-exec setpriv --reuid=dino --regid=dino --init-groups "$@"
+exec setpriv --reuid=dino --regid=dino --init-groups dino-entrypoint "$@"
