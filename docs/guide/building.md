@@ -9,8 +9,9 @@ dino run arm64 -- --port 80   # build, then run under qemu with arguments
 dino clean                    # remove build/
 ```
 
-Every command works on the project in the current directory, or in the directory given with
-`-C <dir>`.
+`build`, `run`, `test` and `clean` work on the project in the current directory, or in the
+directory given with `-C <dir>`. `dino init` takes the directory as an argument instead:
+`dino init myapp`.
 
 ## Targets
 
@@ -93,16 +94,16 @@ and run them there.
 
 ## Options
 
-| Option                 | Commands         | Effect                                                          |
-| ---------------------- | ---------------- | --------------------------------------------------------------- |
-| `-C <dir>`             | all              | use `<dir>` as the project directory                            |
-| `--debug`, `--release` | build, run, test | choose the build mode (release is the default)                  |
-| `-j <n>`, `--jobs <n>` | build, run, test | parallel jobs (default: number of CPUs)                         |
-| `-v`, `--verbose`      | build, run, test | show the CMake commands and the full compiler output            |
-| `--all`                | build, test      | every named target                                              |
-| `-- <args>`            | build            | passed to CMake's configure step, e.g. `-- -DENABLE_LOGGING=ON` |
-| `-- <args>`            | run              | passed to the program                                           |
-| `-- <args>`            | test             | passed to `ctest`                                               |
+| Option                 | Commands                | Effect                                                          |
+| ---------------------- | ----------------------- | --------------------------------------------------------------- |
+| `-C <dir>`             | build, run, test, clean | use `<dir>` as the project directory                            |
+| `--debug`, `--release` | build, run, test        | choose the build mode (release is the default)                  |
+| `-j <n>`, `--jobs <n>` | build, run, test        | parallel jobs (default: number of CPUs)                         |
+| `-v`, `--verbose`      | build, run, test        | show the CMake commands and the full compiler output            |
+| `--all`                | build, test             | every named target                                              |
+| `-- <args>`            | build                   | passed to CMake's configure step, e.g. `-- -DENABLE_LOGGING=ON` |
+| `-- <args>`            | run                     | passed to the program                                           |
+| `-- <args>`            | test                    | passed to `ctest`                                               |
 
 ## When things are rebuilt
 
