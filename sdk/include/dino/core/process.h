@@ -106,10 +106,11 @@ int dino_process_wait(dino_process_t process, int *exit_code);
 
 /**
  * End a process immediately (SIGKILL / TerminateProcess). It can't clean up.
- * Still wait for it afterwards.
+ * Still wait for it afterwards. A process that already exited is left as it
+ * was, keeping its own exit code.
  *
  * @param  process  Handle from dino_process_spawn, not yet waited for.
- * @return 0 on success, -1 on error.
+ * @return 0 on success (including when it had already exited), -1 on error.
  */
 int dino_process_kill(dino_process_t process);
 
