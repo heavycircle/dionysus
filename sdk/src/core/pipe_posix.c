@@ -11,6 +11,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <poll.h>
 #include <pthread.h>
 #include <signal.h>
@@ -79,6 +80,43 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
     }
     pthread_sigmask(SIG_SETMASK, &old, NULL);
     return n < 0 ? -1 : (int)n;
+}
+
+// After POLLOUT a pipe has room for at least PIPE_BUF bytes, so a write that
+// size can't block.
+int dino__pipe_write_timeout(
+    dino_pipe_t pipe, const void *buf, int len, int timeout_ms, int *written)
+{
+    *written = 0;
+    if (pipe == DINO_INVALID_PIPE || len < 0)
+        return -1;
+
+    struct pollfd pfd = { TO_FD(pipe), POLLOUT, 0 };
+    uint64_t      deadline
+        = dino_time_monotonic_ns() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0) * 1000000;
+    int rc;
+    for (;;)
+    {
+        int wait = timeout_ms;
+        if (timeout_ms > 0)
+        {
+            uint64_t now = dino_time_monotonic_ns();
+            wait         = now >= deadline ? 0 : (int)((deadline - now + 999999) / 1000000);
+        }
+        rc = poll(&pfd, 1, wait);
+        if (rc >= 0 || errno != EINTR)
+            break;
+    }
+    if (rc == 0)
+        return DINO_TIMEOUT;
+    if (rc < 0 || (pfd.revents & POLLNVAL))
+        return -1;
+    // With no reader left (POLLERR) the write fails with EPIPE.
+    int n = dino_pipe_write(pipe, buf, len < PIPE_BUF ? len : PIPE_BUF);
+    if (n < 0)
+        return -1;
+    *written = n;
+    return 0;
 }
 
 int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)

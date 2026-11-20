@@ -154,6 +154,40 @@ static wchar_t *batch_command_line(char *const argv[], wchar_t **application)
 }
 
 // "A=1\0B=2\0\0" in UTF-16.
+// A program path with a separator but no root (./tool, bin\tool) is looked up
+// in the child's working directory, as on Linux; CreateProcessW alone would
+// look in the parent's. The match becomes lpApplicationName, so the child's
+// argv[0] stays as given.
+static int is_relative_path(const char *path)
+{
+    if (!strpbrk(path, "/\\") || path[0] == '/' || path[0] == '\\')
+        return 0;
+    return !(path[0] && path[1] == ':');
+}
+
+static wchar_t *find_in(const wchar_t *dir, const char *program)
+{
+    wchar_t *name = widen(program, -1);
+    if (!name)
+        return NULL;
+    for (wchar_t *c = name; *c; c++)
+        if (*c == L'/')
+            *c = L'\\';
+    wchar_t *found = NULL;
+    DWORD    len   = SearchPathW(dir, name, L".exe", 0, NULL, NULL);
+    if (len)
+    {
+        found = malloc(len * sizeof(wchar_t));
+        if (found && SearchPathW(dir, name, L".exe", len, found, NULL) == 0)
+        {
+            free(found);
+            found = NULL;
+        }
+    }
+    free(name);
+    return found;
+}
+
 static wchar_t *environment_block(char *const env[])
 {
     struct buf b = { 0 };
@@ -228,21 +262,27 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
         pipes = &unused;
     }
     pipes->in = pipes->out = pipes->err = DINO_INVALID_PIPE;
-    if (!argv || !argv[0])
+    dino_stdio_t modes[3];
+    if (!argv || !argv[0] || !dino__process_modes(opts, modes))
         return -1;
 
-    dino_stdio_t modes[3];
-    HANDLE       std[3] = { NULL, NULL, NULL };
-    wchar_t     *app    = NULL;
-    wchar_t     *cmd    = is_batch(argv[0]) ? batch_command_line(argv, &app) : command_line(argv);
-    wchar_t     *cwd    = opts && opts->cwd ? widen(opts->cwd, -1) : NULL;
-    wchar_t     *env    = opts && opts->env ? environment_block(opts->env) : NULL;
+    HANDLE   std[3] = { NULL, NULL, NULL };
+    wchar_t *app    = NULL;
+    wchar_t *cmd    = is_batch(argv[0]) ? batch_command_line(argv, &app) : command_line(argv);
+    wchar_t *cwd    = opts && opts->cwd ? widen(opts->cwd, -1) : NULL;
+    wchar_t *env    = opts && opts->env ? environment_block(opts->env) : NULL;
     LPPROC_THREAD_ATTRIBUTE_LIST attrs   = NULL;
     int                          started = 0;
 
-    dino__process_modes(opts, modes);
     if (!cmd || (opts && opts->cwd && !cwd) || (opts && opts->env && !env))
         goto done;
+    // A batch file's app is cmd.exe, which already finds it from the new cwd.
+    if (!app && cwd && is_relative_path(argv[0]))
+    {
+        app = find_in(cwd, argv[0]);
+        if (!app)
+            goto done;
+    }
     for (int i = 0; i < 3; i++)
     {
         std[i] = child_handle(i, modes[i], pipes);
@@ -318,7 +358,11 @@ int dino_process_kill(dino_process_t process)
 {
     if (process == DINO_INVALID_PROCESS)
         return -1;
-    return TerminateProcess((HANDLE)process, DINO_EXIT_KILLED) ? 0 : -1;
+    if (TerminateProcess((HANDLE)process, DINO_EXIT_KILLED))
+        return 0;
+    // Fails with access denied once the process has exited. Nothing is left to
+    // kill, which Linux reports as success.
+    return WaitForSingleObject((HANDLE)process, 0) == WAIT_OBJECT_0 ? 0 : -1;
 }
 
 uint64_t dino_process_id(dino_process_t process)

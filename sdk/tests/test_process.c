@@ -191,6 +191,56 @@ UTEST(process, working_directory)
     EXPECT_STREQ(expected, out);
 }
 
+#ifndef _WIN32
+// Windows passes a child only the handles it lists; Linux children likewise get
+// nothing but stdin, stdout and stderr, even of descriptors the program opened
+// without close-on-exec.
+UTEST(process, child_gets_only_the_standard_streams)
+{
+    int fd = dup(1);
+    ASSERT_GE(fd, 3);
+    char cmd[128];
+    snprintf(cmd, sizeof(cmd), "[ -e /proc/self/fd/%d ] && echo inherited || echo closed", fd);
+    char *const argv[] = SHELL(cmd);
+    char        out[64];
+    EXPECT_EQ(0, run(argv, NULL, out, sizeof(out)));
+    EXPECT_STREQ("closed\n", out);
+    close(fd);
+}
+#endif
+
+// A program path with a separator is found from the child's working
+// directory, not the parent's. On Windows .exe is added, as for bare names.
+UTEST(process, relative_program_is_found_from_cwd)
+{
+    dino_process_spawn_opts_t opts = { 0 };
+#ifdef _WIN32
+    // Run as "<its directory>\test_process" from that directory's parent.
+    char parent[1024], prog[1024];
+    snprintf(parent, sizeof(parent), "%s", self_path);
+    char *file = strrchr(parent, '\\');
+    ASSERT_TRUE(file != NULL);
+    *file++   = '\0';
+    char *dir = strrchr(parent, '\\');
+    ASSERT_TRUE(dir != NULL);
+    *dir++ = '\0';
+    snprintf(prog, sizeof(prog), "%s/%s", dir, file);
+    char *ext = strrchr(prog, '.');
+    if (ext)
+        *ext = '\0';
+    char *const argv[]   = { prog, "--child-echo", "ok", NULL };
+    opts.cwd             = parent;
+    const char *expected = "[ok]\n";
+#else
+    char *const argv[]   = { "./sh", "-c", "echo ok", NULL };
+    opts.cwd             = "/bin";
+    const char *expected = "ok\n";
+#endif
+    char out[256];
+    EXPECT_EQ(0, run(argv, &opts, out, sizeof(out)));
+    EXPECT_STREQ(expected, out);
+}
+
 UTEST(process, environment_replaces_the_parents)
 {
 #ifdef _WIN32
@@ -278,6 +328,23 @@ UTEST(process, kill_ends_a_running_child)
 }
 
 #ifndef _WIN32
+// Nothing is left to kill, which isn't an error; the exit code stands.
+UTEST(process, kill_after_the_child_exited_succeeds)
+{
+#ifdef _WIN32
+    char *const argv[] = { self_path, "--child-echo", NULL };
+#else
+    char *const argv[] = SHELL("exit 0");
+#endif
+    dino_process_t p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    dino_sleep_ms(1500);
+    EXPECT_EQ(0, dino_process_kill(p));
+    int code = -1;
+    ASSERT_EQ(0, dino_process_wait(p, &code));
+    EXPECT_EQ(0, code);
+}
+
 UTEST(process, signal_is_reported_as_128_plus_its_number)
 {
     char *const argv[] = SHELL("kill -TERM $$");
@@ -325,6 +392,19 @@ UTEST(process, invalid_arguments_are_rejected)
     dino_process_spawn_opts_t opts   = { 0 };
     opts.stdout_mode                 = DINO_STDIO_PIPE;
     EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
+
+    // Stdio modes outside the enum, on every stream.
+    dino_process_pipes_t pipes;
+    for (int stream = 0; stream < 3; stream++)
+    {
+        dino_stdio_t bad[] = { (dino_stdio_t)3, (dino_stdio_t)-1 };
+        for (int i = 0; i < 2; i++)
+        {
+            dino_process_spawn_opts_t o                                                    = { 0 };
+            *(stream == 0 ? &o.stdin_mode : stream == 1 ? &o.stdout_mode : &o.stderr_mode) = bad[i];
+            EXPECT_EQ(-1, dino_process_spawn(&p, argv, &o, &pipes));
+        }
+    }
 
     EXPECT_EQ(-1, dino_process_wait(DINO_INVALID_PROCESS, NULL));
     EXPECT_EQ(-1, dino_process_kill(DINO_INVALID_PROCESS));
@@ -484,6 +564,58 @@ UTEST(process, run_kills_after_the_timeout)
     dino_process_result_free(&r);
 }
 
+// The child exits at once, but a background process it started holds stdout
+// open for seconds: run stops reading at its timeout.
+UTEST(process, run_stops_reading_at_the_timeout_when_a_grandchild_holds_the_output)
+{
+#ifdef _WIN32
+    char *const argv[] = { self_path, "--child-start-linger", NULL };
+    // A process can take most of a second to start under wine.
+    int timeout = 1500;
+#else
+    char *const argv[]  = SHELL("sleep 3 & echo hi");
+    int         timeout = 300;
+#endif
+    dino_process_run_opts_t opts = { 0 };
+    opts.timeout_ms              = timeout;
+    dino_process_result_t r;
+    uint64_t              start = dino_time_monotonic_ns();
+    EXPECT_EQ(DINO_TIMEOUT, dino_process_run(argv, &opts, &r));
+    EXPECT_LT((dino_time_monotonic_ns() - start) / 1000000, (uint64_t)timeout + 1500);
+    EXPECT_EQ(0, r.exit_code);
+    strip_cr(r.out);
+    EXPECT_STREQ("hi\n", r.out);
+    dino_process_result_free(&r);
+}
+
+#ifndef _WIN32
+// The same for the input: a background process holds stdin without reading,
+// so the writer would block once the pipe is full.
+UTEST(process, run_stops_writing_at_the_timeout_when_a_grandchild_holds_the_input)
+{
+    // Through fd 3: sh gives a background job /dev/null as stdin before its own
+    // redirections apply.
+    char *const argv[] = SHELL("exec 3<&0; sleep 3 <&3 3<&- >/dev/null 2>&1 & exit 0");
+    enum
+    {
+        SIZE = 1 << 20
+    };
+    char *input = calloc(1, SIZE);
+    ASSERT_TRUE(input != NULL);
+    dino_process_run_opts_t opts = { 0 };
+    opts.input                   = input;
+    opts.input_len               = SIZE;
+    opts.timeout_ms              = 300;
+    dino_process_result_t r;
+    uint64_t              start = dino_time_monotonic_ns();
+    EXPECT_EQ(DINO_TIMEOUT, dino_process_run(argv, &opts, &r));
+    EXPECT_LT((dino_time_monotonic_ns() - start) / 1000000, 2000u);
+    EXPECT_EQ(0, r.exit_code);
+    dino_process_result_free(&r);
+    free(input);
+}
+#endif
+
 UTEST(process, run_reports_a_missing_program)
 {
     char *const           argv[] = { "dino-test-no-such-program", NULL };
@@ -553,6 +685,21 @@ static int child_main(const char *mode)
         dino_sleep_ms(60000);
         return 0;
     }
+    if (strcmp(mode, "--child-start-linger") == 0)
+    {
+        // The grandchild inherits this process's stdout and outlives it.
+        char *const    argv[] = { self_path, "--child-linger", NULL };
+        dino_process_t p;
+        if (dino_process_spawn(&p, argv, NULL, NULL) != 0)
+            return 1;
+        puts("hi");
+        return 0;
+    }
+    if (strcmp(mode, "--child-linger") == 0)
+    {
+        dino_sleep_ms(6000);
+        return 0;
+    }
     return 2;
 }
 #endif
@@ -560,9 +707,9 @@ static int child_main(const char *mode)
 int main(int argc, const char *const argv[])
 {
 #ifdef _WIN32
+    GetModuleFileNameA(NULL, self_path, sizeof(self_path));
     if (argc > 1 && strncmp(argv[1], "--child-", 8) == 0)
         return child_main(argv[1]);
-    GetModuleFileNameA(NULL, self_path, sizeof(self_path));
 #endif
     return utest_main(argc, argv);
 }
