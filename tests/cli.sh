@@ -243,6 +243,27 @@ case_run_forwards_sigterm() {
     [[ $code == 7 ]] && grep -qx 'got 1' out
 }
 
+# Interrupted while building one target, dino stops instead of going on to
+# the next, and exits 128 + the signal.
+case_interrupted_build_stops() {
+    project interrupted
+    echo 'if(ZIG_TARGET MATCHES x86_64)
+    message(STATUS "configuring slowly")
+    execute_process(COMMAND sleep 5)
+endif()' >>CMakeLists.txt
+    dino build -v x86_64 i386 >out 2>&1 &
+    local pid=$!
+    for _ in $(seq 100); do
+        grep -q 'configuring slowly' out && break
+        sleep 0.1
+    done
+    kill -TERM "$pid"
+    wait "$pid"
+    local code=$?
+    cat out
+    [[ $code == 143 ]] && ! grep -q '^==> i386' out
+}
+
 # Ctrl-C at a terminal reaches the program once (from the terminal, not again
 # from dino), and dino exits with the program's status.
 # script runs the command through $SHELL; bash execs it, dash would stay

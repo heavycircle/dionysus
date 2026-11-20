@@ -71,6 +71,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     opts.targets = if (all) &targets.known else try resolveTargets(ctx, names.items);
 
     const results = try buildTargets(ctx, opts);
+    if (ctx.interruptedCode()) |code| return code;
     var failed: usize = 0;
     for (results) |r| {
         if (!r.ok) failed += 1;
@@ -123,12 +124,14 @@ pub fn resolveTargets(ctx: *Ctx, names: []const []const u8) Ctx.Error![]const Ta
     return list.items;
 }
 
-/// Builds each target in turn, continuing past failures so `--all` reports everything.
+/// Builds each target in turn, continuing past failures so `--all` reports
+/// everything, but not past an interruption: then only the targets started.
 pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
     const project = try setup(ctx, opts);
 
     const results = ctx.arena.alloc(Result, opts.targets.len) catch @panic("OOM");
     for (opts.targets, results, 0..) |target, *result, i| {
+        if (ctx.interrupted != null) return results[0..i];
         const cfg = config(ctx, opts, project, target);
         result.* = .{ .cfg = cfg, .ok = false };
         ctx.step("{s} ({s}, {t})", .{ target.name, target.triple, opts.mode });

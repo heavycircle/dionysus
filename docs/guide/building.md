@@ -89,7 +89,8 @@ dino run -- --verbose input.txt   # arguments for the program go after --
 - **Signals:** dino waits for the program to exit. Ctrl-C and Ctrl-\\ at the terminal reach the
   program directly, once; `SIGTERM`, `SIGHUP` and a `SIGINT` sent to dino with `kill` are passed
   on to it. On Windows, Ctrl-C and Ctrl-Break reach the program and dino ignores them. The same
-  holds while `dino build` and `dino test` run CMake and CTest.
+  holds while `dino build` and `dino test` run CMake and CTest, and once interrupted they stop
+  instead of going on to the next target.
 - **wine output:** wine's own `fixme:` chatter is silenced unless you set `WINEDEBUG` yourself.
 - **Several executables:** pick one with `--exe <name>`. Test executables (from `dino_test()`) are
   never picked automatically, only by name.
@@ -115,11 +116,12 @@ and run them there.
 
 ## Exit codes
 
-| Code | Meaning                                                                                    |
-| ---- | ------------------------------------------------------------------------------------------ |
-| 0    | success                                                                                    |
-| 1    | something failed: configuring, compiling, a test, a missing tool                           |
-| 2    | a mistake on the command line: unknown command, option or target, a missing or empty value |
+| Code    | Meaning                                                                                    |
+| ------- | ------------------------------------------------------------------------------------------ |
+| 0       | success                                                                                    |
+| 1       | something failed: configuring, compiling, a test, a missing tool                           |
+| 2       | a mistake on the command line: unknown command, option or target, a missing or empty value |
+| 128 + n | interrupted by signal n while CMake or CTest ran: 130 for Ctrl-C, 143 for `SIGTERM`        |
 
 Once the program has started, `dino run` exits with the program's own code instead, so there a 1
 or 2 means whatever the program means by it.

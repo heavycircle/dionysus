@@ -12,6 +12,9 @@ arena: std.mem.Allocator,
 env: *std.process.Environ.Map,
 out: *Io.Writer,
 err: *Io.Writer,
+/// The signal that interrupted a child: commands stop instead of going on
+/// to the next target, and exit 128 + this.
+interrupted: ?u8 = null,
 
 /// Returned after a message has already been shown to the user. Usage is a
 /// mistake on the command line (exit 2), Reported any other failure (exit 1).
@@ -107,7 +110,13 @@ pub fn exec(ctx: *Ctx, argv: []const []const u8, options: ExecOptions) Error!u8 
     }) catch |e| return ctx.fail("unable to start {s}: {t}", .{ argv[0], e });
     guard.forwardTo(child.id.?);
     const term = child.wait(ctx.io) catch |e| return ctx.fail("waiting for {s}: {t}", .{ argv[0], e });
+    if (guard.received()) |sig| ctx.interrupted = sig;
     return exitCode(term);
+}
+
+/// The exit code for a command a signal interrupted, if one did.
+pub fn interruptedCode(ctx: *Ctx) ?u8 {
+    return if (ctx.interrupted) |sig| 128 +| sig else null;
 }
 
 pub const Captured = struct {
