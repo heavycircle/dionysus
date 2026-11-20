@@ -209,6 +209,38 @@ UTEST(process, child_gets_only_the_standard_streams)
 }
 #endif
 
+// A program path with a separator is found from the child's working
+// directory, not the parent's. On Windows .exe is added, as for bare names.
+UTEST(process, relative_program_is_found_from_cwd)
+{
+    dino_process_spawn_opts_t opts = { 0 };
+#ifdef _WIN32
+    // Run as "<its directory>\test_process" from that directory's parent.
+    char parent[1024], prog[1024];
+    snprintf(parent, sizeof(parent), "%s", self_path);
+    char *file = strrchr(parent, '\\');
+    ASSERT_TRUE(file != NULL);
+    *file++   = '\0';
+    char *dir = strrchr(parent, '\\');
+    ASSERT_TRUE(dir != NULL);
+    *dir++ = '\0';
+    snprintf(prog, sizeof(prog), "%s/%s", dir, file);
+    char *ext = strrchr(prog, '.');
+    if (ext)
+        *ext = '\0';
+    char *const argv[]   = { prog, "--child-echo", "ok", NULL };
+    opts.cwd             = parent;
+    const char *expected = "[ok]\n";
+#else
+    char *const argv[]   = { "./sh", "-c", "echo ok", NULL };
+    opts.cwd             = "/bin";
+    const char *expected = "ok\n";
+#endif
+    char out[256];
+    EXPECT_EQ(0, run(argv, &opts, out, sizeof(out)));
+    EXPECT_STREQ(expected, out);
+}
+
 UTEST(process, environment_replaces_the_parents)
 {
 #ifdef _WIN32

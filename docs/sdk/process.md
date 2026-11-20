@@ -103,7 +103,8 @@ dino_process_wait(child, &code);
 | `dino_process_id(p)`                              | Its OS process ID, for logs.                                                                           | the ID                              |
 
 - **`argv[0]`:** a path, or a bare name looked up on `PATH`. Windows also adds `.exe` and looks in a
-  few system directories first.
+  few system directories first. A relative path such as `./tool` or `bin/tool` is found from `cwd`
+  when that is set, on both platforms (Windows adds `.exe` to it too).
 - **Batch files:** a `.bat` or `.cmd` file runs under `cmd.exe`, which reads `&`, `|`, `<`, `>` and
   `^` in its command line as commands of its own. The SDK quotes every argument so they stay literal,
   and refuses (returns `-1` for) an argument containing `"`, `%` or a line break, which quoting can't
