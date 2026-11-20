@@ -110,7 +110,11 @@ and run them there.
 - **Incremental:** `dino build` runs CMake's own incremental build, so only changed files are
   recompiled.
 - **Reconfiguring:** a target is reconfigured when its settings change: the build mode, the SDK
-  version, `DINO_LIBRARY_PATH`, or arguments after `--`.
+  version, `DINO_LIBRARY_PATH`, or arguments after `--`. Settings given after `--` stay in the
+  CMake cache for later builds.
+- **Starting over:** when the SDK changes (a new dino, or another `DINO_SDK_PATH`), or the last
+  configure failed, the target's CMake cache is deleted and it is configured from scratch, since
+  CMake reads the toolchain only once. Settings from earlier `--` arguments are dropped with it.
 - **`CFLAGS`:** CMake reads it from the environment only the first time a target is configured.
   After changing it, run `dino clean` first.
 

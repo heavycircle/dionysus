@@ -2,6 +2,7 @@ const std = @import("std");
 const Io = std.Io;
 const Ctx = @import("../Ctx.zig");
 const Args = @import("../Args.zig");
+const cmake = @import("../cmake.zig");
 const targets = @import("../targets.zig");
 
 pub const usage =
@@ -48,7 +49,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     for (names.items) |name| {
         const dir = ctx.join(&.{ build_root, name });
         // Only directories carrying dino's stamp are ours to delete.
-        if (!ctx.exists(ctx.join(&.{ dir, ".dino-stamp" }))) continue;
+        if (!ctx.exists(ctx.join(&.{ dir, cmake.stamp_file }))) continue;
         cwd.deleteTree(ctx.io, dir) catch |e| return ctx.fail("removing {s}: {t}", .{ dir, e });
         ctx.print("    removed  {s}\n", .{dir});
         removed += 1;
