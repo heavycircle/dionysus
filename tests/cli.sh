@@ -96,6 +96,20 @@ case_help() {
     done
 }
 
+# A target named twice, even by its triple, is built once.
+case_duplicate_targets() {
+    project duplicates
+    [[ $(dino build x86_64 x86_64-linux-musl x86_64 | grep -c '^==> x86_64 ') == 1 ]]
+}
+
+# `dino clean memcheck` removes the build/memcheck of `dino test --memcheck`.
+case_clean_memcheck() {
+    project clean_memcheck
+    dino test --memcheck >/dev/null || return 1
+    dino clean memcheck >/dev/null || return 1
+    [[ ! -e build/memcheck ]]
+}
+
 # Names CMake or dino already use are refused before anything is written.
 case_init_reserved_names() {
     local name

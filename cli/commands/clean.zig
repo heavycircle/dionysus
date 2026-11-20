@@ -26,7 +26,10 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (std.mem.startsWith(u8, arg, "-")) {
             return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else {
-            const t = targets.resolve(arg) catch return ctx.usage("unknown target '{s}'", .{arg});
+            const t = if (std.mem.eql(u8, arg, targets.memcheck.name))
+                targets.memcheck
+            else
+                targets.resolve(arg) catch return ctx.usage("unknown target '{s}'", .{arg});
             names.append(ctx.arena, t.name) catch @panic("OOM");
         }
     }
