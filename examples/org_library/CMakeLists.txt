@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(OrgLibrary C)
 
 # Every dino project that has this directory on DINO_LIBRARY_PATH gets the

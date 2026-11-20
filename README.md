@@ -63,7 +63,7 @@ install -m755 dino-<version>-x86_64-linux/dino ~/.local/bin/
 dino doctor                               # checks for zig, cmake, a generator, qemu and wine
 ```
 
-`dino` is a single static executable with the SDK inside it. Building projects with it requires [Zig 0.17.1](https://ziglang.org/download/) and CMake 3.15+ on your `PATH`. `qemu-user` and `wine` are only needed to _run_ foreign targets.
+`dino` is a single static executable with the SDK inside it. Building projects with it requires [Zig 0.17.1](https://ziglang.org/download/) and CMake 3.20+ on your `PATH`. `qemu-user` and `wine` are only needed to _run_ foreign targets.
 
 To build `dino` from source instead:
 

@@ -27,10 +27,9 @@ function(dino_zig_tool name)
         file(WRITE "${tool}" "@zig ${name} %*\r\n")
     else()
         set(tool "${dir}/${name}")
-        # file(COPY) is the only pre-3.19 way to set the executable bit.
-        file(WRITE "${dir}/src/${name}" "#!/bin/sh\nexec zig ${name} \"$@\"\n")
-        file(COPY "${dir}/src/${name}" DESTINATION "${dir}"
-            FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
+        file(WRITE "${tool}" "#!/bin/sh\nexec zig ${name} \"$@\"\n")
+        file(CHMOD "${tool}"
+            PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
                 WORLD_READ WORLD_EXECUTE)
     endif()
     string(TOUPPER "${name}" var)

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(DinoNetworkExample C)
 
 add_executable(network_example main.c)

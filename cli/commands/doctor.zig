@@ -16,7 +16,7 @@ pub const usage =
     \\
 ;
 
-const min_cmake: std.SemanticVersion = .{ .major = 3, .minor = 15, .patch = 0 };
+const min_cmake: std.SemanticVersion = .{ .major = 3, .minor = 20, .patch = 0 };
 
 pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     for (raw) |arg| {
@@ -38,10 +38,10 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     if (ctx.findProgram("cmake")) |cmake| {
         const line = firstLine(try versionOf(ctx, &.{ cmake, "--version" }));
         const ok = cmakeVersionOk(line);
-        report(ctx, ok, "cmake", if (ok) ctx.sprint("{s} ({s})", .{ line, cmake }) else ctx.sprint("{s}; 3.15 or newer is required", .{line}));
+        report(ctx, ok, "cmake", if (ok) ctx.sprint("{s} ({s})", .{ line, cmake }) else ctx.sprint("{s}; {d}.{d} or newer is required", .{ line, min_cmake.major, min_cmake.minor }));
         if (!ok) problems += 1;
     } else {
-        report(ctx, false, "cmake", "not found; install CMake 3.15 or newer");
+        report(ctx, false, "cmake", ctx.sprint("not found; install CMake {d}.{d} or newer", .{ min_cmake.major, min_cmake.minor }));
         problems += 1;
     }
     if (ctx.findProgram("ninja")) |ninja| {
@@ -120,7 +120,8 @@ fn cmakeVersionOk(line: []const u8) bool {
 test cmakeVersionOk {
     try std.testing.expect(cmakeVersionOk("cmake version 3.31.6"));
     try std.testing.expect(cmakeVersionOk("cmake version 4.0.0-rc1"));
-    try std.testing.expect(cmakeVersionOk("cmake version 3.15.0"));
+    try std.testing.expect(cmakeVersionOk("cmake version 3.20.0"));
+    try std.testing.expect(!cmakeVersionOk("cmake version 3.19.8"));
     try std.testing.expect(!cmakeVersionOk("cmake version 3.10.2"));
     try std.testing.expect(!cmakeVersionOk("something else"));
 }
