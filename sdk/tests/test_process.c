@@ -328,6 +328,23 @@ UTEST(process, kill_ends_a_running_child)
 }
 
 #ifndef _WIN32
+// Nothing is left to kill, which isn't an error; the exit code stands.
+UTEST(process, kill_after_the_child_exited_succeeds)
+{
+#ifdef _WIN32
+    char *const argv[] = { self_path, "--child-echo", NULL };
+#else
+    char *const argv[] = SHELL("exit 0");
+#endif
+    dino_process_t p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    dino_sleep_ms(1500);
+    EXPECT_EQ(0, dino_process_kill(p));
+    int code = -1;
+    ASSERT_EQ(0, dino_process_wait(p, &code));
+    EXPECT_EQ(0, code);
+}
+
 UTEST(process, signal_is_reported_as_128_plus_its_number)
 {
     char *const argv[] = SHELL("kill -TERM $$");

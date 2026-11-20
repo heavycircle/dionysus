@@ -99,7 +99,7 @@ dino_process_wait(child, &code);
 | `dino_process_spawn(&p, argv, opts, &pipes)`      | Start `argv[0]` with arguments. `opts` and `pipes` may be `NULL`.                                      | `0`, `-1` if it couldn't be started |
 | `dino_process_wait(p, &code)`                     | Wait for it to end, store how it ended, release it.                                                    | `0`, `-1`                           |
 | `dino_process_wait_timeout(p, timeout_ms, &code)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid. | `0`, `DINO_TIMEOUT`, `-1`           |
-| `dino_process_kill(p)`                            | End it now (`SIGKILL` / `TerminateProcess`). Still wait for it afterwards.                             | `0`, `-1`                           |
+| `dino_process_kill(p)`                            | End it now (`SIGKILL` / `TerminateProcess`); `0` if it already exited. Still wait for it afterwards.   | `0`, `-1`                           |
 | `dino_process_id(p)`                              | Its OS process ID, for logs.                                                                           | the ID                              |
 
 - **`argv[0]`:** a path, or a bare name looked up on `PATH`. Windows also adds `.exe` and looks in a

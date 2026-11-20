@@ -355,7 +355,11 @@ int dino_process_kill(dino_process_t process)
 {
     if (process == DINO_INVALID_PROCESS)
         return -1;
-    return TerminateProcess((HANDLE)process, DINO_EXIT_KILLED) ? 0 : -1;
+    if (TerminateProcess((HANDLE)process, DINO_EXIT_KILLED))
+        return 0;
+    // Fails with access denied once the process has exited. Nothing is left to
+    // kill, which Linux reports as success.
+    return WaitForSingleObject((HANDLE)process, 0) == WAIT_OBJECT_0 ? 0 : -1;
 }
 
 uint64_t dino_process_id(dino_process_t process)
