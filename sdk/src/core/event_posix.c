@@ -20,7 +20,11 @@ struct dino_event_loop
     struct dino__event_timers timers; // first: see event_internal.h
     int                       epfd;
     int                       wakefd; // its epoll data.ptr is &wakefd, which no userdata can equal
-    atomic_int                user_wake; // the wakefd was signalled by dino_event_wake, not a timer
+    // Pipe read ends sit in an epoll set of their own, nested in epfd (with
+    // data.ptr &pipe_epfd). A bare EPOLLHUP means a pipe's writers are gone, so
+    // a read returns 0 (READ); on a socket it is HANGUP and nothing more.
+    int        pipe_epfd;
+    atomic_int user_wake; // the wakefd was signalled by dino_event_wake, not a timer
     // Processes' pidfds sit in an epoll set of their own, nested in epfd (with
     // data.ptr &proc_epfd), so their data.ptr can point at a proc_item without
     // being mistaken for a socket's userdata. proc_lock covers the list and
@@ -54,15 +58,19 @@ dino_event_loop_t dino_event_loop_create(void)
     loop->epfd              = epoll_create1(EPOLL_CLOEXEC);
     loop->wakefd            = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     loop->proc_epfd         = epoll_create1(EPOLL_CLOEXEC);
-    struct epoll_event wake = { 0 }, procs = { 0 };
+    loop->pipe_epfd         = epoll_create1(EPOLL_CLOEXEC);
+    struct epoll_event wake = { 0 }, procs = { 0 }, pipes = { 0 };
     wake.events    = EPOLLIN;
     wake.data.ptr  = &loop->wakefd;
     procs.events   = EPOLLIN;
     procs.data.ptr = &loop->proc_epfd;
-    if (loop->epfd < 0 || loop->wakefd < 0 || loop->proc_epfd < 0
+    pipes.events   = EPOLLIN;
+    pipes.data.ptr = &loop->pipe_epfd;
+    if (loop->epfd < 0 || loop->wakefd < 0 || loop->proc_epfd < 0 || loop->pipe_epfd < 0
         || loop->proc_lock == DINO_INVALID_MUTEX
         || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->wakefd, &wake) != 0
-        || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->proc_epfd, &procs) != 0)
+        || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->proc_epfd, &procs) != 0
+        || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->pipe_epfd, &pipes) != 0)
     {
         if (loop->epfd >= 0)
             close(loop->epfd);
@@ -70,6 +78,8 @@ dino_event_loop_t dino_event_loop_create(void)
             close(loop->wakefd);
         if (loop->proc_epfd >= 0)
             close(loop->proc_epfd);
+        if (loop->pipe_epfd >= 0)
+            close(loop->pipe_epfd);
         dino_mutex_destroy(loop->proc_lock);
         dino__event_timers_destroy(&loop->timers);
         free(loop);
@@ -92,6 +102,7 @@ void dino_event_loop_destroy(dino_event_loop_t handle)
     close(loop->epfd);
     close(loop->wakefd);
     close(loop->proc_epfd);
+    close(loop->pipe_epfd);
     dino_mutex_destroy(loop->proc_lock);
     dino__event_timers_destroy(&loop->timers);
     free(loop);
@@ -99,11 +110,8 @@ void dino_event_loop_destroy(dino_event_loop_t handle)
 
 // EPOLLRDHUP: a peer that only shut down its sending side still reports
 // HANGUP, as AFD's DISCONNECT does on Windows.
-static int ctl(
-    dino_event_loop_t handle, int op, dino_socket_t sock, uint32_t events, void *userdata)
+static int ctl(int epfd, int op, int fd, uint32_t events, void *userdata)
 {
-    if (!dino__event_ctl_args_valid(handle, sock, events))
-        return -1;
     struct epoll_event ev = { 0 };
     ev.events             = EPOLLRDHUP;
     if (events & DINO_EVENT_READ)
@@ -113,40 +121,50 @@ static int ctl(
     if (events & DINO_EVENT_ONESHOT)
         ev.events |= EPOLLONESHOT;
     ev.data.ptr = userdata;
-    return epoll_ctl(((struct dino_event_loop *)handle)->epfd, op, (int)sock, &ev) == 0 ? 0 : -1;
+    return epoll_ctl(epfd, op, fd, &ev) == 0 ? 0 : -1;
+}
+
+// Linux before 2.6.9 required a non-NULL event even for DEL.
+static int ctl_del(int epfd, int fd)
+{
+    struct epoll_event ev = { 0 };
+    return epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev) == 0 ? 0 : -1;
+}
+
+static int socket_ctl(
+    dino_event_loop_t loop, int op, dino_socket_t sock, uint32_t events, void *userdata)
+{
+    if (!dino__event_ctl_args_valid(loop, sock, events))
+        return -1;
+    return ctl(((struct dino_event_loop *)loop)->epfd, op, (int)sock, events, userdata);
 }
 
 int dino_event_add_socket(
     dino_event_loop_t loop, dino_socket_t sock, uint32_t events, void *userdata)
 {
-    return ctl(loop, EPOLL_CTL_ADD, sock, events, userdata);
+    return socket_ctl(loop, EPOLL_CTL_ADD, sock, events, userdata);
 }
 
 int dino_event_mod_socket(
     dino_event_loop_t loop, dino_socket_t sock, uint32_t events, void *userdata)
 {
-    return ctl(loop, EPOLL_CTL_MOD, sock, events, userdata);
+    return socket_ctl(loop, EPOLL_CTL_MOD, sock, events, userdata);
 }
 
 int dino_event_del_socket(dino_event_loop_t loop, dino_socket_t sock)
 {
     if (!dino__event_ctl_args_valid(loop, sock, 0))
         return -1;
-    // Linux before 2.6.9 required a non-NULL event even for DEL.
-    struct epoll_event ev = { 0 };
-    return epoll_ctl(((struct dino_event_loop *)loop)->epfd, EPOLL_CTL_DEL, (int)sock, &ev) == 0
-        ? 0
-        : -1;
+    return ctl_del(((struct dino_event_loop *)loop)->epfd, (int)sock);
 }
 
-// A pipe is just another descriptor to epoll; all that differs is what may be
-// asked for.
 static int pipe_ctl(
     dino_event_loop_t loop, int op, dino_pipe_t pipe, uint32_t events, void *userdata)
 {
     if (!dino__event_pipe_args_valid(loop, events) || dino__pipe_is_read_end(pipe) != 1)
         return -1;
-    return ctl(loop, op, (dino_socket_t)dino__pipe_to_os(pipe), events, userdata);
+    return ctl(((struct dino_event_loop *)loop)->pipe_epfd, op, (int)dino__pipe_to_os(pipe), events,
+        userdata);
 }
 
 int dino_event_add_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata)
@@ -161,12 +179,14 @@ int dino_event_mod_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t event
 
 int dino_event_del_pipe(dino_event_loop_t loop, dino_pipe_t pipe)
 {
-    if (pipe == DINO_INVALID_PIPE)
+    if (loop == DINO_INVALID_EVENT_LOOP || pipe == DINO_INVALID_PIPE)
         return -1;
-    return dino_event_del_socket(loop, (dino_socket_t)dino__pipe_to_os(pipe));
+    return ctl_del(((struct dino_event_loop *)loop)->pipe_epfd, (int)dino__pipe_to_os(pipe));
 }
 
-static uint32_t from_epoll(uint32_t ev)
+// epoll reports EPOLLIN and EPOLLOUT only when they were asked for, so this
+// only has to keep EPOLLHUP from adding READ to a socket.
+static uint32_t from_epoll(uint32_t ev, int is_pipe)
 {
     uint32_t events = 0;
     if (ev & EPOLLIN)
@@ -178,10 +198,22 @@ static uint32_t from_epoll(uint32_t ev)
     // A pipe whose writers are gone reports EPOLLHUP alone, but a read won't
     // block there (it returns 0): that's READ, as on Windows.
     if (ev & EPOLLHUP)
-        events |= DINO_EVENT_READ | DINO_EVENT_HANGUP;
+        events |= is_pipe ? DINO_EVENT_READ | DINO_EVENT_HANGUP : DINO_EVENT_HANGUP;
     if (ev & EPOLLRDHUP)
         events |= DINO_EVENT_HANGUP;
     return events;
+}
+
+static int collect_pipes(struct dino_event_loop *loop, dino_event_t *out, int max)
+{
+    struct epoll_event evs[BATCH];
+    int                got = epoll_wait(loop->pipe_epfd, evs, max < BATCH ? max : BATCH, 0);
+    for (int i = 0; i < got; i++)
+    {
+        out[i].events   = from_epoll(evs[i].events, 1);
+        out[i].userdata = evs[i].data.ptr;
+    }
+    return got < 0 ? 0 : got;
 }
 
 // Each pidfd is EPOLLONESHOT: an exit is reported once, and the item stays
@@ -269,22 +301,34 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
 
     struct epoll_event evs[BATCH];
-    int                cap = max < BATCH ? max : BATCH;
+    int                timers_first = dino__event_timers_turn(&loop->timers);
     uint64_t           deadline
         = dino_time_monotonic_ns() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0) * 1000000;
     for (;;)
     {
+        int n    = timers_first ? dino__event_timers_collect(&loop->timers, out, max) : 0;
         int left = dino__event_remaining_ms(timeout_ms, deadline);
-        int got = epoll_wait(loop->epfd, evs, cap, dino__event_timers_timeout(&loop->timers, left));
-        if (got < 0 && errno != EINTR)
-            return -1;
+        int cap  = max - n < BATCH ? max - n : BATCH;
+        int got  = 0;
+        if (cap > 0)
+        {
+            int wait = n > 0 ? 0 : dino__event_timers_timeout(&loop->timers, left);
+            got      = epoll_wait(loop->epfd, evs, cap, wait);
+            if (got < 0 && errno != EINTR)
+                return -1;
+        }
 
-        int n = 0, procs_ready = 0;
+        int procs_ready = 0, pipes_ready = 0;
         for (int i = 0; i < got; i++)
         {
             if (evs[i].data.ptr == &loop->proc_epfd)
             {
                 procs_ready = 1;
+                continue;
+            }
+            if (evs[i].data.ptr == &loop->pipe_epfd)
+            {
+                pipes_ready = 1;
                 continue;
             }
             if (evs[i].data.ptr == &loop->wakefd)
@@ -300,12 +344,14 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
                 }
                 continue;
             }
-            out[n].events   = from_epoll(evs[i].events);
+            out[n].events   = from_epoll(evs[i].events, 0);
             out[n].userdata = evs[i].data.ptr;
             n++;
         }
         if (procs_ready && n < max)
             n += collect_exits(loop, out + n, max - n);
+        if (pipes_ready && n < max)
+            n += collect_pipes(loop, out + n, max - n);
         n += dino__event_timers_collect(&loop->timers, out + n, max - n);
         // Nothing to report after a timer interrupt, EINTR or a wake meant for
         // someone else: wait again for what is left of the timeout.

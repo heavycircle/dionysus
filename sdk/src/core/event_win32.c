@@ -654,18 +654,24 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
     if (n > 0)
         return n;
 
+    int timers_first = dino__event_timers_turn(&loop->timers);
     for (;;)
     {
+        n = timers_first ? dino__event_timers_collect(&loop->timers, out, max) : 0;
         int              left = dino__event_remaining_ms(timeout_ms, deadline);
-        int              wait = dino__event_timers_timeout(&loop->timers, left);
+        int              cap  = max - n < BATCH ? max - n : BATCH;
         OVERLAPPED_ENTRY e[BATCH];
         ULONG            got = 0;
-        if (!GetQueuedCompletionStatusEx(loop->port, e, (ULONG)(max < BATCH ? max : BATCH), &got,
-                wait < 0 ? INFINITE : (DWORD)wait, FALSE))
+        if (cap > 0)
         {
-            if (GetLastError() != WAIT_TIMEOUT)
-                return -1;
-            got = 0;
+            int wait = n > 0 ? 0 : dino__event_timers_timeout(&loop->timers, left);
+            if (!GetQueuedCompletionStatusEx(
+                    loop->port, e, (ULONG)cap, &got, wait < 0 ? INFINITE : (DWORD)wait, FALSE))
+            {
+                if (GetLastError() != WAIT_TIMEOUT)
+                    return -1;
+                got = 0;
+            }
         }
 
         AcquireSRWLockExclusive(&loop->lock);

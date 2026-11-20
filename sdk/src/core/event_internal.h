@@ -37,7 +37,8 @@ struct dino__event_timers
     dino_mutex_t               lock;
     struct dino__event_timer **heap;
     size_t                     len, cap;
-    struct dino__event_timer  *all; // every timer, fired one-shots included
+    struct dino__event_timer  *all;          // every timer, fired one-shots included
+    int                        timers_first; // flips every wait: see dino__event_timers_turn
 };
 
 int  dino__event_timers_init(struct dino__event_timers *t);
@@ -46,6 +47,11 @@ void dino__event_timers_destroy(struct dino__event_timers *t);
 // timeout_ms (-1 for none) shortened to the next deadline, rounded up so the
 // timer is due when the wait returns.
 int dino__event_timers_timeout(struct dino__event_timers *t, int timeout_ms);
+
+// Whether this wait collects due timers before the kernel queue. Waits take
+// turns, so a socket that stays ready can't starve the timers, nor a timer
+// that is always due the sockets, even with max 1.
+int dino__event_timers_turn(struct dino__event_timers *t);
 
 // Writes up to max due timers to out and reschedules the repeating ones.
 int dino__event_timers_collect(struct dino__event_timers *t, dino_event_t *out, int max);

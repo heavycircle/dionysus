@@ -21,7 +21,8 @@ extern "C"
  * Readiness is level-triggered: a socket that is still readable is reported
  * again by the next wait. DINO_EVENT_ONESHOT reports it once and then disarms
  * it until dino_event_mod_socket, so that one event goes to one thread when
- * several threads wait on the same loop.
+ * several threads wait on the same loop. Without it, one ready socket wakes
+ * every waiting thread on Linux and one of them on Windows.
  *
  * Every function may be called from any thread, including while another thread
  * is blocked in dino_event_wait, except dino_event_loop_destroy.
@@ -73,6 +74,10 @@ void dino_event_loop_destroy(dino_event_loop_t loop);
  * Start watching a socket. A socket can be in a loop once; remove it with
  * dino_event_del_socket before closing it.
  *
+ * READ and WRITE are reported only when asked for. Add a socket once it is
+ * connected, connecting or listening: before that Linux reports HANGUP at
+ * once and Windows reports nothing.
+ *
  * @param  loop      Loop to add to.
  * @param  sock      Socket to watch.
  * @param  events    DINO_EVENT_READ and/or DINO_EVENT_WRITE, optionally with
@@ -93,7 +98,8 @@ int dino_event_mod_socket(
     dino_event_loop_t loop, dino_socket_t sock, uint32_t events, void *userdata);
 
 /**
- * Stop watching a socket. No event for it is reported after this returns.
+ * Stop watching a socket. No wait that starts after this returns reports it;
+ * a wait already running in another thread may still return one event for it.
  *
  * @return 0 on success, -1 on error (including when sock isn't added).
  */
@@ -130,7 +136,8 @@ int dino_event_add_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t event
 int dino_event_mod_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata);
 
 /**
- * Stop watching a pipe. No event for it is reported after this returns.
+ * Stop watching a pipe. No wait that starts after this returns reports it, as
+ * for dino_event_del_socket.
  *
  * @return 0 on success, -1 on error (including when pipe isn't added).
  */
@@ -152,7 +159,8 @@ int dino_event_del_pipe(dino_event_loop_t loop, dino_pipe_t pipe);
 int dino_event_add_process(dino_event_loop_t loop, dino_process_t process, void *userdata);
 
 /**
- * Stop watching a process. Its exit is not reported after this returns.
+ * Stop watching a process. No wait that starts after this returns reports its
+ * exit, as for dino_event_del_socket.
  *
  * @return 0 on success, -1 on error (including when process isn't added).
  */
@@ -164,7 +172,9 @@ int dino_event_del_process(dino_event_loop_t loop, dino_process_t process);
  * @param  loop        Loop to wait on.
  * @param  out         Receives up to max ready items.
  * @param  max         Size of out; must be at least 1. Items that don't fit
- *                     stay ready for the next wait.
+ *                     stay ready for the next wait. When due timers and
+ *                     other items don't all fit, waits take turns at which
+ *                     fills out first, so neither starves the other.
  * @param  timeout_ms  Milliseconds to wait; -1 to wait forever; 0 to check.
  * @return Number of items written to out, 0 when the time ran out, -1 on error.
  */
@@ -199,7 +209,8 @@ dino_event_timer_t dino_event_timer_add(
     dino_event_loop_t loop, uint32_t delay_ms, uint32_t interval_ms, void *userdata);
 
 /**
- * Delete a timer, fired or not. It is not reported after this returns.
+ * Delete a timer, fired or not. No wait that starts after this returns
+ * reports it, as for dino_event_del_socket.
  *
  * @param  loop   Loop it was added to.
  * @param  timer  Timer from dino_event_timer_add.
