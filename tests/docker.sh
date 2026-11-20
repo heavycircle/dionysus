@@ -83,6 +83,19 @@ check_home_mount() {
 check_home_mount home-mount /home/dino/.cache/zig 5555
 check_home_mount home-mount-ro /home/dino/reference:ro 1000
 
+# --user 0 runs as root, even though /work belongs to another UID.
+mkdir -p "$work/user-root"
+docker run --rm -v "$work/user-root:/p" --entrypoint chown "$image" 4321:4321 /p
+for spec in 0 root 0:0; do
+    ids=$(docker run --rm --user "$spec" -v "$work/user-root:/work" "$image" sh -c 'echo "$(id -u):$(id -g)"')
+    if [[ $ids == 0:0 ]]; then
+        echo "ok      --user $spec: runs as root"
+    else
+        echo "FAILED: --user $spec: runs as $ids, expected 0:0"
+        failed=1
+    fi
+done
+
 # Nothing mounted: /work belongs to dino, so the image behaves as before.
 user=$(docker run --rm "$image" id -un)
 if [[ $user == dino ]]; then
