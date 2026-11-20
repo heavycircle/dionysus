@@ -3,6 +3,10 @@
 // sdk/CMakeLists.txt). libc is linked statically, so its own allocations
 // (strdup, fopen, ...) go through these wrappers too. A test fails if anything
 // is still allocated when the process exits. DINO_LEAK_CHECK=0 disables it.
+
+// Compiled with the test's own flags, which may ask for strict ISO C.
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

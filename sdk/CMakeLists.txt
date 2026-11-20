@@ -47,6 +47,11 @@ foreach(module ${DINO_PLATFORM_MODULES})
     target_sources(dino_core PRIVATE "src/core/${module}_${DINO_PLATFORM}.c")
 endforeach()
 
+# The POSIX halves need more than ISO C declares (clock_gettime, pthread mutex
+# types, pipe2, accept4, gettid, ...), also when the project builds with
+# -std=c11 or CMAKE_C_EXTENSIONS OFF.
+target_compile_definitions(dino_core PRIVATE _GNU_SOURCE)
+
 configure_file(cmake/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/include/dino/version.h" @ONLY)
 target_include_directories(dino_core PUBLIC include "${CMAKE_CURRENT_BINARY_DIR}/include")
 
@@ -79,6 +84,7 @@ add_library(dino_util STATIC
     src/util/logging.c
 )
 target_link_libraries(dino_util PUBLIC dino_core)
+target_compile_definitions(dino_util PRIVATE _GNU_SOURCE)
 
 # Used by dino_test() (cmake/Dino.cmake). testing/utest.h is sheredom/utest.h at
 # fc4715da3b3e3bfa936cf69850f2cfe969ed85b7, unmodified (public domain).
