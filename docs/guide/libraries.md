@@ -249,7 +249,7 @@ or build a derived image that has them baked in, so CI and developers share exac
 libraries:
 
 ```dockerfile
-FROM ghcr.io/heavycircle/dionysus:0.6.0
+FROM ghcr.io/heavycircle/dionysus:0.6.1
 COPY acme-dino /opt/acme
 ENV DINO_LIBRARY_PATH=/opt/acme/acme_log:/opt/acme/acme_proto
 ```
