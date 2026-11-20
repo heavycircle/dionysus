@@ -82,7 +82,9 @@ dino run -- --verbose input.txt   # arguments for the program go after --
 ```
 
 - **Runners:** foreign Linux binaries run under qemu-user (`qemu-aarch64-static` is preferred if
-  installed) and Windows binaries under wine. `dino doctor` shows which runners it found.
+  installed) and Windows binaries under wine. `dino doctor` shows which runners it found. An x86_64
+  host runs i386 binaries directly; an aarch64 host runs arm binaries directly only if its CPU can
+  run 32-bit ARM code (many newer ones, and Apple silicon, can't), and uses `qemu-arm` otherwise.
 - **Exit code:** `dino run` exits with the program's exit code.
 - **Signals:** dino waits for the program to exit. Ctrl-C and Ctrl-\\ at the terminal reach the
   program directly, once; `SIGTERM`, `SIGHUP` and a `SIGINT` sent to dino with `kill` are passed
