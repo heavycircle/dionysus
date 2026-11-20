@@ -175,6 +175,55 @@ int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
     return timed_out && err == ERROR_OPERATION_ABORTED ? DINO_TIMEOUT : -1;
 }
 
+// As dino_pipe_wait does for reads: an overlapped write, cancelled when the
+// time runs out. A cancelled write may still have sent part of buf.
+int dino__pipe_write_timeout(
+    dino_pipe_t pipe, const void *buf, int len, int timeout_ms, int *written)
+{
+    struct dino_pipe *p = (struct dino_pipe *)pipe;
+    *written            = 0;
+    if (!p || p->read_end || len < 0)
+        return -1;
+    if (len == 0)
+        return 0;
+    if (!p->overlapped)
+    {
+        int n = dino_pipe_write(pipe, buf, len);
+        if (n < 0)
+            return -1;
+        *written = n;
+        return 0;
+    }
+
+    HANDLE event = CreateEventW(NULL, TRUE, FALSE, NULL);
+    if (!event)
+        return -1;
+    OVERLAPPED ov   = { 0 };
+    ov.hEvent       = (HANDLE)((ULONG_PTR)event | 1);
+    int   timed_out = 0;
+    DWORD n         = 0;
+    BOOL  ok        = WriteFile(p->handle, buf, (DWORD)len, NULL, &ov);
+    if (ok || GetLastError() == ERROR_IO_PENDING)
+    {
+        if (!ok
+            && WaitForSingleObject(event, timeout_ms < 0 ? INFINITE : (DWORD)timeout_ms)
+                == WAIT_TIMEOUT)
+        {
+            timed_out = 1;
+            CancelIoEx(p->handle, &ov);
+        }
+        // Also waits out a cancelled write, which reads from buf until it's done.
+        ok = GetOverlappedResult(p->handle, &ov, &n, TRUE);
+    }
+    DWORD err = GetLastError();
+    CloseHandle(event);
+
+    *written = (int)n;
+    if (ok || n > 0)
+        return 0;
+    return timed_out && err == ERROR_OPERATION_ABORTED ? DINO_TIMEOUT : -1;
+}
+
 int dino_pipe_close(dino_pipe_t pipe)
 {
     struct dino_pipe *p = (struct dino_pipe *)pipe;
