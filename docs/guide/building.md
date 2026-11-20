@@ -110,6 +110,17 @@ and run them there.
 | `-- <args>`            | run                     | passed to the program                                           |
 | `-- <args>`            | test                    | passed to `ctest`                                               |
 
+## Exit codes
+
+| Code | Meaning                                                                                    |
+| ---- | ------------------------------------------------------------------------------------------ |
+| 0    | success                                                                                    |
+| 1    | something failed: configuring, compiling, a test, a missing tool                           |
+| 2    | a mistake on the command line: unknown command, option or target, a missing or empty value |
+
+Once the program has started, `dino run` exits with the program's own code instead, so there a 1
+or 2 means whatever the program means by it.
+
 ## When things are rebuilt
 
 - **Incremental:** `dino build` runs CMake's own incremental build, so only changed files are

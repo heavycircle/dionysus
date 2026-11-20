@@ -94,9 +94,9 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (std.mem.eql(u8, arg, "--no-configure")) {
             configure = false;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else if (dir != null) {
-            return ctx.fail("`dino init` takes a single directory", .{});
+            return ctx.usage("`dino init` takes a single directory", .{});
         } else {
             dir = arg;
         }

@@ -62,12 +62,12 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (try parseCommon(ctx, &args, arg, &opts)) {
             continue;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else {
             names.append(ctx.arena, arg) catch @panic("OOM");
         }
     }
-    if (all and names.items.len != 0) return ctx.fail("--all cannot be combined with explicit targets", .{});
+    if (all and names.items.len != 0) return ctx.usage("--all cannot be combined with explicit targets", .{});
     opts.targets = if (all) &targets.known else try resolveTargets(ctx, names.items);
 
     const results = try buildTargets(ctx, opts);
@@ -95,7 +95,7 @@ pub fn parseCommon(ctx: *Ctx, args: *Args, arg: []const u8, opts: *Options) Ctx.
         opts.run.verbose = true;
     } else if (try args.value(ctx, arg, &.{ "-j", "--jobs" })) |v| {
         const jobs = std.fmt.parseInt(u32, v, 10) catch 0;
-        if (jobs == 0) return ctx.fail("invalid job count '{s}'", .{v});
+        if (jobs == 0) return ctx.usage("invalid job count '{s}'", .{v});
         opts.run.jobs = jobs;
     } else if (try args.value(ctx, arg, &.{"-C"})) |v| {
         opts.project = v;
@@ -114,7 +114,7 @@ pub fn resolveTargets(ctx: *Ctx, names: []const []const u8) Ctx.Error![]const Ta
     const list = ctx.arena.alloc(Target, names.len) catch @panic("OOM");
     for (names, list) |name, *t| {
         t.* = targets.resolve(name) catch
-            return ctx.fail("unknown target '{s}' (see `dino targets`)", .{name});
+            return ctx.usage("unknown target '{s}' (see `dino targets`)", .{name});
     }
     return list;
 }

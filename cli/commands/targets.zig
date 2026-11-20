@@ -17,7 +17,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
             ctx.print("{s}", .{usage});
             return 0;
         }
-        return ctx.fail("unknown argument '{s}'\n\n{s}", .{ arg, usage });
+        return ctx.usage("unknown argument '{s}'\n\n{s}", .{ arg, usage });
     }
     const host = targets.host();
     ctx.print("  {s:<8} {s:<26} {s:<14} {s}\n", .{ "NAME", "ZIG TARGET", "RUNS VIA", "DESCRIPTION" });

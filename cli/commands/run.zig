@@ -44,9 +44,9 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (try build.parseCommon(ctx, &args, arg, &opts)) {
             continue;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else if (target_name != null) {
-            return ctx.fail("`dino run` takes a single target", .{});
+            return ctx.usage("`dino run` takes a single target", .{});
         } else {
             target_name = arg;
         }

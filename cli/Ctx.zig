@@ -13,8 +13,9 @@ env: *std.process.Environ.Map,
 out: *Io.Writer,
 err: *Io.Writer,
 
-/// Returned after a message has already been shown to the user.
-pub const Error = error{Reported};
+/// Returned after a message has already been shown to the user. Usage is a
+/// mistake on the command line (exit 2), Reported any other failure (exit 1).
+pub const Error = error{ Reported, Usage };
 
 pub fn print(ctx: *Ctx, comptime fmt: []const u8, args: anytype) void {
     ctx.out.print(fmt, args) catch {};
@@ -40,6 +41,11 @@ pub fn errorMessage(ctx: *Ctx, comptime fmt: []const u8, args: anytype) void {
 pub fn fail(ctx: *Ctx, comptime fmt: []const u8, args: anytype) Error {
     ctx.errorMessage(fmt, args);
     return error.Reported;
+}
+
+pub fn usage(ctx: *Ctx, comptime fmt: []const u8, args: anytype) Error {
+    ctx.errorMessage(fmt, args);
+    return error.Usage;
 }
 
 pub fn sprint(ctx: *Ctx, comptime format: []const u8, args: anytype) []u8 {

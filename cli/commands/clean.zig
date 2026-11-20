@@ -24,9 +24,9 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (try args.value(ctx, arg, &.{"-C"})) |v| {
             project = v;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else {
-            const t = targets.resolve(arg) catch return ctx.fail("unknown target '{s}'", .{arg});
+            const t = targets.resolve(arg) catch return ctx.usage("unknown target '{s}'", .{arg});
             names.append(ctx.arena, t.name) catch @panic("OOM");
         }
     }

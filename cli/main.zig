@@ -71,6 +71,7 @@ pub fn main(init: std.process.Init) !u8 {
 
     return dispatch(&ctx, args[1..]) catch |err| switch (err) {
         error.Reported => 1,
+        error.Usage => 2,
     };
 }
 
@@ -82,7 +83,7 @@ fn dispatch(ctx: *Ctx, args: []const []const u8) Ctx.Error!u8 {
     const name = args[0];
     if (std.mem.eql(u8, name, "help") or std.mem.eql(u8, name, "-h") or std.mem.eql(u8, name, "--help")) {
         if (args.len > 1) {
-            const c = find(args[1]) orelse return ctx.fail("unknown command '{s}'", .{args[1]});
+            const c = find(args[1]) orelse return ctx.usage("unknown command '{s}'", .{args[1]});
             ctx.print("{s}", .{c.usage});
         } else {
             ctx.print("{s}", .{usage});

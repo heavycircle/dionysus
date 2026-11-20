@@ -19,19 +19,25 @@ pub fn rest(a: *Args) []const []const u8 {
     return a.items[a.index..];
 }
 
-/// Value of a flag given as `--flag value`, `--flag=value`, or `-jN` for short flags.
+/// Value of a flag given as `--flag value`, `--flag=value`, or `-jN` for short
+/// flags. An empty value is a usage error.
 pub fn value(a: *Args, ctx: *Ctx, arg: []const u8, comptime names: []const []const u8) Ctx.Error!?[]const u8 {
     inline for (names) |name| {
-        if (std.mem.eql(u8, arg, name)) {
-            return a.next() orelse ctx.fail("{s} requires a value", .{name});
-        }
-        if (std.mem.startsWith(u8, arg, name)) {
-            const tail = arg[name.len..];
-            if (name.len == 2) return if (tail.len != 0 and tail[0] == '=') tail[1..] else tail;
-            if (tail.len != 0 and tail[0] == '=') return tail[1..];
+        if (match(a, arg, name)) |found| {
+            if (found.len == 0) return ctx.usage("{s} requires a value", .{name});
+            return found;
         }
     }
     return null;
+}
+
+/// null: `arg` isn't this flag; "" when its value is missing or empty.
+fn match(a: *Args, arg: []const u8, comptime name: []const u8) ?[]const u8 {
+    if (std.mem.eql(u8, arg, name)) return a.next() orelse "";
+    if (!std.mem.startsWith(u8, arg, name)) return null;
+    const tail = arg[name.len..];
+    if (tail.len != 0 and tail[0] == '=') return tail[1..];
+    return if (name.len == 2) tail else null;
 }
 
 pub fn isHelp(arg: []const u8) bool {
@@ -48,4 +54,10 @@ test "flag values" {
     try std.testing.expectEqualStrings("3", (try a.value(&ctx, a.next().?, names)).?);
     try std.testing.expectEqualStrings("dir", (try a.value(&ctx, a.next().?, &.{"-C"})).?);
     try std.testing.expect((try a.value(&ctx, a.next().?, names)) == null);
+
+    var empty: Args = .{ .items = &.{ "-C", "", "-C=", "--jobs=", "-C" } };
+    try std.testing.expectEqualStrings("", match(&empty, empty.next().?, "-C").?);
+    try std.testing.expectEqualStrings("", match(&empty, empty.next().?, "-C").?);
+    try std.testing.expectEqualStrings("", match(&empty, empty.next().?, "--jobs").?);
+    try std.testing.expectEqualStrings("", match(&empty, empty.next().?, "-C").?);
 }

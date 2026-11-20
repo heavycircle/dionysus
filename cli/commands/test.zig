@@ -67,14 +67,14 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (try build.parseCommon(ctx, &args, arg, &opts)) {
             continue;
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            return ctx.fail("unknown option '{s}'\n\n{s}", .{ arg, usage });
+            return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else {
             names.append(ctx.arena, arg) catch @panic("OOM");
         }
     }
 
     if (memcheck) {
-        if (all or names.items.len != 0) return ctx.fail("--memcheck runs on the host only; it takes no targets", .{});
+        if (all or names.items.len != 0) return ctx.usage("--memcheck runs on the host only; it takes no targets", .{});
         if (targets.runnerFor(memcheck_target) != .native) return ctx.fail("--memcheck needs an x86_64 Linux host", .{});
         const valgrind = ctx.findProgram("valgrind") orelse
             return ctx.fail("--memcheck needs valgrind; install it (or use the dino Docker image)", .{});
@@ -87,7 +87,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
             "-DDINO_NO_LEAK_CHECK=ON",
         }, opts.extra }) catch @panic("OOM");
     } else {
-        if (all and names.items.len != 0) return ctx.fail("--all cannot be combined with explicit targets", .{});
+        if (all and names.items.len != 0) return ctx.usage("--all cannot be combined with explicit targets", .{});
         opts.targets = if (all) &targets.known else try build.resolveTargets(ctx, names.items);
         for (opts.targets) |t| try requireRunner(ctx, t);
     }
