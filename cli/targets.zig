@@ -80,7 +80,25 @@ pub const Runner = union(enum) {
 };
 
 pub fn runnerFor(t: Target) Runner {
-    return runnerOn(t, builtin.os.tag, builtin.cpu.arch);
+    return runnerOn(t, builtin.os.tag, builtin.cpu.arch, runsAarch32());
+}
+
+var aarch32: ?bool = null;
+
+/// Whether this aarch64 Linux machine runs 32-bit ARM binaries: many newer
+/// cores (and Apple silicon) can't. arm64 kernels refuse the PER_LINUX32
+/// personality exactly when no core can, so try it and switch back.
+fn runsAarch32() bool {
+    if (builtin.os.tag != .linux or builtin.cpu.arch != .aarch64) return false;
+    if (aarch32) |cached| return cached;
+    const linux = std.os.linux;
+    const per_linux32 = 0x0008;
+    const query = 0xffffffff;
+    const old = linux.syscall1(.personality, query);
+    const ok = linux.errno(linux.syscall1(.personality, per_linux32)) == .SUCCESS;
+    _ = linux.syscall1(.personality, old);
+    aarch32 = ok;
+    return ok;
 }
 
 /// The installed program that runs `t`'s binaries on this host (qemu or wine),
@@ -93,12 +111,12 @@ pub fn emulator(ctx: *Ctx, t: Target) ?[]const u8 {
     };
 }
 
-fn runnerOn(t: Target, host_os: Os, host_arch: Arch) Runner {
+fn runnerOn(t: Target, host_os: Os, host_arch: Arch, host_aarch32: bool) Runner {
     if (t.os == host_os) {
         if (t.arch == host_arch) return .native;
         // 64-bit x86 kernels run 32-bit binaries directly.
         if (host_arch == .x86_64 and t.arch == .x86) return .native;
-        if (host_arch == .aarch64 and t.arch == .arm and host_os == .linux) return .native;
+        if (host_arch == .aarch64 and t.arch == .arm and host_os == .linux and host_aarch32) return .native;
         if (t.os == .linux) return .{ .qemu = qemuName(t.arch) orelse return .unsupported };
         return .unsupported;
     }
@@ -147,7 +165,7 @@ test "host target" {
 test "runner selection" {
     const r = struct {
         fn of(name: []const u8, os: Os, arch: Arch) Runner {
-            return runnerOn(resolve(name) catch unreachable, os, arch);
+            return runnerOn(resolve(name) catch unreachable, os, arch, true);
         }
     };
     try std.testing.expectEqual(Runner.native, r.of("x86_64", .linux, .x86_64));
@@ -158,4 +176,5 @@ test "runner selection" {
     try std.testing.expectEqual(Runner.native, r.of("win32", .windows, .x86_64));
     try std.testing.expectEqual(Runner.unsupported, r.of("x86_64", .macos, .aarch64));
     try std.testing.expectEqual(Runner.native, r.of("arm", .linux, .aarch64));
+    try std.testing.expectEqualStrings("qemu-arm", runnerOn(try resolve("arm"), .linux, .aarch64, false).qemu);
 }
