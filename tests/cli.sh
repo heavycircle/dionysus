@@ -72,6 +72,22 @@ case_no_build_checks_mode() {
     dino run --no-build >/dev/null
 }
 
+# Command-line mistakes exit 2, other failures 1.
+case_usage_errors() {
+    mkdir -p "$work/empty" && cd "$work/empty" || return 1
+    local cmd code
+    for cmd in 'frob' 'help frob' 'build --bogus' 'build -C ""' 'build -C=' 'build nosuchtarget' \
+        'build --all x86_64' 'build -j 0' 'run x86_64 arm' 'test --memcheck arm' 'clean -C ""' \
+        'init a b' 'targets x' 'doctor x' 'run --exe'; do
+        eval "dino $cmd" >/dev/null 2>&1
+        code=$?
+        [[ $code == 2 ]] || { echo "dino $cmd: exit $code"; return 1; }
+    done
+    dino build >/dev/null 2>&1
+    code=$?
+    [[ $code == 1 ]] || { echo "dino build without a project: exit $code"; return 1; }
+}
+
 # A program that exits 7 after its first SIGINT or SIGTERM, and reports how
 # many arrived.
 signal_program() {
