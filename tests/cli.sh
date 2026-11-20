@@ -110,6 +110,28 @@ case_clean_memcheck() {
     [[ ! -e build/memcheck ]]
 }
 
+# C++ entries in compile_commands.json name libc++'s headers.
+case_compdb_cxx() {
+    project compdb_cxx
+    sed -i 's/^project(compdb_cxx C)$/project(compdb_cxx C CXX)/' CMakeLists.txt
+    echo 'dino_executable(cxx_app src/app.cpp)' >>CMakeLists.txt
+    printf '#include <vector>\nint main() { return std::vector<int>{0}[0]; }\n' >src/app.cpp
+    dino build >/dev/null || return 1
+    grep -q 'libcxx/include' compile_commands.json || return 1
+    [[ $(grep -c 'libcxx/include' compile_commands.json) == 1 ]]
+}
+
+# The compile database comes from the first target only, even when that one
+# fails to configure.
+case_compdb_first_target() {
+    project compdb_first
+    echo 'if(ZIG_TARGET MATCHES powerpc)
+    message(FATAL_ERROR "no ppc")
+endif()' >>CMakeLists.txt
+    dino build ppc x86_64 >/dev/null 2>&1 && return 1
+    [[ ! -e compile_commands.json ]]
+}
+
 # Names CMake or dino already use are refused before anything is written.
 case_init_reserved_names() {
     local name

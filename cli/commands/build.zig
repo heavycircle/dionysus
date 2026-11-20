@@ -128,18 +128,16 @@ pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
     const project = try setup(ctx, opts);
 
     const results = ctx.arena.alloc(Result, opts.targets.len) catch @panic("OOM");
-    var exported = false;
-    for (opts.targets, results) |target, *result| {
+    for (opts.targets, results, 0..) |target, *result, i| {
         const cfg = config(ctx, opts, project, target);
         result.* = .{ .cfg = cfg, .ok = false };
         ctx.step("{s} ({s}, {t})", .{ target.name, target.triple, opts.mode });
 
         if (cmake.needsConfigure(ctx, cfg) and !try cmake.configure(ctx, cfg, opts.run)) continue;
-        // Before compiling: editors need the compile database most when the code doesn't build.
-        if (!exported) {
-            exported = true;
-            exportCompileCommands(ctx, cfg, opts.project);
-        }
+        // Before compiling: editors need the compile database most when the code
+        // doesn't build. Only the first target's, even if it fails to configure:
+        // the editor shouldn't switch to another target's view.
+        if (i == 0) exportCompileCommands(ctx, cfg, opts.project);
         if (!try cmake.build(ctx, cfg, opts.run)) continue;
 
         result.executables = try cmake.executables(ctx, cfg);
