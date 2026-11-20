@@ -53,10 +53,14 @@ fn rewriteFile(ctx: *Ctx, src: []const u8, target: []const u8) RewriteError![]co
         return error.UnreadableDatabase;
     if (entries.len == 0) return bytes;
 
-    const probe = try probeZig(ctx, target, entries[0].file);
+    // C and C++ need their own probe: only `zig c++` adds libc++'s headers.
+    var probes: std.EnumArray(Driver, ?Probe) = .initFill(null);
     const out = try ctx.arena.alloc(OutEntry, entries.len);
     for (entries, out) |entry, *o| {
         const args = entry.arguments orelse try splitCommand(ctx.arena, entry.command orelse return error.UnexpectedEntry);
+        const driver = try driverOf(args);
+        const probe = probes.get(driver) orelse try probeZig(ctx, target, driver, entry.file);
+        probes.set(driver, probe);
         o.* = .{
             .directory = entry.directory,
             .file = entry.file,
@@ -67,10 +71,10 @@ fn rewriteFile(ctx: *Ctx, src: []const u8, target: []const u8) RewriteError![]co
     return std.json.Stringify.valueAlloc(ctx.arena, out, .{ .whitespace = .indent_2, .emit_null_optional_fields = false });
 }
 
-fn probeZig(ctx: *Ctx, target: []const u8, file: []const u8) RewriteError!Probe {
+fn probeZig(ctx: *Ctx, target: []const u8, driver: Driver, file: []const u8) RewriteError!Probe {
     // -### prints the clang -cc1 line zig would run, without compiling. Any
-    // existing source file will do as input.
-    const result = ctx.capture(&.{ "zig", "cc", "-target", target, "-###", "-c", file, "-o", "probe.o" }) catch
+    // existing source file in the language will do as input.
+    const result = ctx.capture(&.{ "zig", @tagName(driver), "-target", target, "-###", "-c", file, "-o", "probe.o" }) catch
         return error.ProbeFailed;
     if (result.code != 0) return error.ProbeFailed;
     return parseProbe(ctx.arena, result.stderr) catch error.ProbeFailed;
@@ -102,15 +106,21 @@ pub fn parseProbe(arena: std.mem.Allocator, stderr: []const u8) !Probe {
     return .{ .triple = triple orelse return error.NoTriple, .flags = flags.items };
 }
 
-/// `zig cc -target T <rest>` becomes `clang --target=<triple> <probe flags> <rest>`.
-pub fn rewriteArgs(arena: std.mem.Allocator, args: []const []const u8, probe: Probe) ![]const []const u8 {
+/// The zig subcommand an entry compiles with, named as on the command line.
+const Driver = enum { cc, @"c++" };
+
+fn driverOf(args: []const []const u8) error{UnexpectedEntry}!Driver {
     if (args.len < 2 or !isZig(args[0])) return error.UnexpectedEntry;
-    const driver = if (std.mem.eql(u8, args[1], "cc"))
-        "clang"
-    else if (std.mem.eql(u8, args[1], "c++"))
-        "clang++"
-    else
-        return error.UnexpectedEntry;
+    return std.meta.stringToEnum(Driver, args[1]) orelse error.UnexpectedEntry;
+}
+
+/// `zig cc -target T <rest>` becomes `clang --target=<triple> <probe flags> <rest>`,
+/// and `zig c++` becomes `clang++`.
+pub fn rewriteArgs(arena: std.mem.Allocator, args: []const []const u8, probe: Probe) ![]const []const u8 {
+    const driver: []const u8 = switch (try driverOf(args)) {
+        .cc => "clang",
+        .@"c++" => "clang++",
+    };
 
     var out: std.ArrayList([]const u8) = .empty;
     try out.appendSlice(arena, &.{ driver, try std.fmt.allocPrint(arena, "--target={s}", .{probe.triple}) });
@@ -220,5 +230,7 @@ test rewriteArgs {
     const expected = [_][]const u8{ "clang", "--target=x86_64-unknown-linux-musl", "-nostdlibinc", "-isystem", "/libc", "-O0", "-c", "a.c" };
     try std.testing.expectEqual(expected.len, got.len);
     for (expected, got) |e, g| try std.testing.expectEqualStrings(e, g);
+    try std.testing.expectEqualStrings("clang++", (try rewriteArgs(a, &.{ "zig", "c++", "-c", "a.cpp" }, probe))[0]);
     try std.testing.expectError(error.UnexpectedEntry, rewriteArgs(a, &.{ "gcc", "-c", "a.c" }, probe));
+    try std.testing.expectError(error.UnexpectedEntry, rewriteArgs(a, &.{ "zig", "ar", "a.o" }, probe));
 }
