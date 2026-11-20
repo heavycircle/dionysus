@@ -1,7 +1,8 @@
 # Publishes a release for every vX.Y.Z tag pushed by scripts/release.sh:
 # - a GitHub Release with dino archives for each supported platform,
 #   SHA256SUMS, and notes generated from the commits in the release (cliff.toml)
-# - the Docker image as ghcr.io/<repo>:X.Y.Z and :X.Y
+# - the Docker image as ghcr.io/<repo>:X.Y.Z, and as :X.Y if it's the newest
+#   X.Y.Z (re-running v0.5.0 after v0.5.1 leaves :0.5 alone)
 # - if it's the newest version, the moving `stable` git tag and the :stable and
 #   :latest images. A patch for an older line (v0.1.3 after v0.2.0) leaves them alone.
 #
@@ -29,6 +30,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       newest: ${{ steps.version.outputs.newest }}
+      newest_in_series: ${{ steps.version.outputs.newest_in_series }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -45,9 +47,11 @@ jobs:
             exit 1
           fi
           newest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n 1)
+          series=$(git tag --list "v${version%.*}.[0-9]*" | sort -V | tail -n 1)
           echo "version=$version" >>"$GITHUB_OUTPUT"
           echo "newest=$([[ $newest == "$TAG" ]] && echo true || echo false)" >>"$GITHUB_OUTPUT"
-          echo "$TAG: version $version, newest release: $newest"
+          echo "newest_in_series=$([[ $series == "$TAG" ]] && echo true || echo false)" >>"$GITHUB_OUTPUT"
+          echo "$TAG: version $version, newest release: $newest, newest ${version%.*}.x: $series"
 
       - uses: ./.github/actions/setup-zig
 
@@ -101,9 +105,11 @@ jobs:
         env:
           VERSION: ${{ needs.release.outputs.version }}
           NEWEST: ${{ needs.release.outputs.newest }}
+          NEWEST_IN_SERIES: ${{ needs.release.outputs.newest_in_series }}
         run: |
           image=ghcr.io/${GITHUB_REPOSITORY,,}
-          tags="$image:$VERSION,$image:${VERSION%.*}"
+          tags="$image:$VERSION"
+          [[ $NEWEST_IN_SERIES == true ]] && tags="$tags,$image:${VERSION%.*}"
           [[ $NEWEST == true ]] && tags="$tags,$image:stable,$image:latest"
           echo "tags=$tags" >>"$GITHUB_OUTPUT"
 
