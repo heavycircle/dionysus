@@ -11,8 +11,16 @@ types='build|chore|ci|docs|feat|fix|perf|refactor|revert|test'
 conventional="^($types)(\([a-z0-9_./-]+\))?!?: [^ A-Z].*[^.]\$"
 release='^release: v[0-9]+\.[0-9]+\.[0-9]+$'
 
+# Read first: a failed git log inside the loop's process substitution would be
+# ignored, and a range git can't resolve would pass with nothing checked.
+log=$(git log --no-merges --format='%h %s' "$range") || {
+    echo "lintcommit: git log failed for '$range'" >&2
+    exit 2
+}
+
 failed=0
 while read -r sha subject; do
+    [[ -n $sha ]] || continue # an empty range is one empty line
     problem=
     if ((${#subject} > 72)); then
         problem="longer than 72 characters"
@@ -23,7 +31,7 @@ while read -r sha subject; do
         echo "$sha \"$subject\": $problem"
         failed=1
     fi
-done < <(git log --no-merges --format='%h %s' "$range")
+done <<<"$log"
 
 if ((failed)); then
     echo
