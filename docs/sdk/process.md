@@ -57,12 +57,17 @@ everything it writes to stdout and stderr, and waits for it to exit.
 - **No deadlocks:** it reads both outputs and writes the input at the same time, so a child that
   fills one pipe while the parent is busy with another can't deadlock.
 - **Options:** `dino_process_run_opts_t` has `cwd`, `env`, `input`/`input_len` (`NULL`: stdin is empty) and
-  `timeout_ms` (`0`: no limit; otherwise the child is killed after that long).
+  `timeout_ms` (`0`: no limit; otherwise it gives up after that long, killing the child if it's
+  still running).
 - **Results:** `dino_process_result_t` has `out`/`out_len`, `err`/`err_len` (both NUL-terminated) and
   `exit_code`.
 - **Return value:** `0` when the child ran to the end, `DINO_TIMEOUT` when it was killed for taking
   too long (`result` still holds what it wrote first), or `-1` if it couldn't be started. Call
   `dino_process_result_free` in every case.
+- **Background processes:** a process the child started that keeps stdout, stderr or stdin open
+  keeps `dino_process_run` waiting after the child exits. With a timeout it stops at the deadline
+  and returns `DINO_TIMEOUT`, with what was read so far and the child's own `exit_code`. Without
+  one it waits as long as they stay open, as a shell's `$(...)` does.
 
 ## Talking to a running program: `dino_process_spawn`
 

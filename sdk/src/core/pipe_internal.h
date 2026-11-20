@@ -15,6 +15,12 @@ intptr_t dino__pipe_to_os(dino_pipe_t pipe);
 // from dino_pipe_create.
 int dino__pipe_create_for_child(dino_pipe_t *parent_end, dino_pipe_t *child_end, int parent_reads);
 
+// dino_pipe_write that gives up after timeout_ms (-1: never): 0 with the bytes
+// sent in *written (possibly fewer than len), DINO_TIMEOUT with nothing sent,
+// -1 on error. Lets dino_process_run stop feeding a child at its deadline.
+int dino__pipe_write_timeout(
+    dino_pipe_t pipe, const void *buf, int len, int timeout_ms, int *written);
+
 // 1 for a read end, 0 for a write end, -1 on error.
 int dino__pipe_is_read_end(dino_pipe_t pipe);
 

@@ -140,7 +140,8 @@ typedef struct
     /** Bytes for the child's stdin, then end of file. NULL: stdin is null. */
     const void *input;
     size_t      input_len;
-    /** Kill the child after this many milliseconds; 0 waits forever. */
+    /** Give up after this many milliseconds, killing the child if it is still
+     *  running; 0 waits forever. */
     int timeout_ms;
 } dino_process_run_opts_t;
 
@@ -151,7 +152,7 @@ typedef struct
     size_t out_len;
     char  *err; /**< Everything written to stderr, NUL-terminated. */
     size_t err_len;
-    int    exit_code; /**< As from dino_process_wait; DINO_EXIT_KILLED on timeout. */
+    int    exit_code; /**< As from dino_process_wait; DINO_EXIT_KILLED if killed. */
 } dino_process_result_t;
 
 /**
@@ -159,15 +160,18 @@ typedef struct
  *
  * Both outputs are read, and the input written, at the same time, so a child
  * that fills one pipe while the parent waits on another can't deadlock. It
- * returns once the child has exited and both outputs are closed (a grandchild
- * that keeps them open keeps it waiting, up to the timeout).
+ * returns once the child has exited and both outputs are closed. A process the
+ * child started that keeps the pipes open keeps it waiting, up to the timeout:
+ * then it stops reading and writing and returns DINO_TIMEOUT with the child's
+ * own exit code.
  *
  * @param  argv    Program and arguments, as for dino_process_spawn.
  * @param  opts    Options, or NULL for the defaults.
  * @param  result  Receives the output and exit code, even on DINO_TIMEOUT
  *                 (what was written before the kill). Free it either way.
- * @return 0 when the child ran to the end, DINO_TIMEOUT when it was killed
- *         after opts->timeout_ms, -1 if it couldn't be started or on error.
+ * @return 0 when the child ran to the end, DINO_TIMEOUT when opts->timeout_ms
+ *         ran out (the child was killed, or something it started still held
+ *         the pipes), -1 if it couldn't be started or on error.
  */
 int dino_process_run(
     char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result);

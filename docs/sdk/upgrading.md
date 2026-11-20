@@ -3,6 +3,17 @@
 What changed in the SDK between versions, and how to update code that uses it. The compiler finds
 almost everything here: a removed or renamed name fails to build, and the error points at the line.
 
+## To 0.6.1
+
+Fixes only; nothing fails to build. These change what a program sees at run time.
+
+### `dino_process_run` keeps to its timeout
+
+A process the child started in the background, holding stdout, stderr or stdin open, kept
+`dino_process_run` waiting long past `timeout_ms`. It now stops at the deadline and returns
+`DINO_TIMEOUT`, with the output read so far and the child's own `exit_code`, where it used to
+return `0` once the background process let go.
+
 ## To 0.6
 
 0.6 is the last release before 1.0 allowed to break the API. The API review
