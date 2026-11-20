@@ -58,8 +58,81 @@ case_clean_failed() {
 # `dino run` finds an executable built outside the build directory.
 case_run_output_outside_build() {
     project run_outside
+    # shellcheck disable=SC2016 # for CMake to expand
     sed -i '/^dino_executable/i set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/bin)' CMakeLists.txt
     dino run | grep -qx 'Hello from run_outside!'
+}
+
+# A program that exits 7 after its first SIGINT or SIGTERM, and reports how
+# many arrived.
+signal_program() {
+    cat >src/main.c <<'C'
+#include <signal.h>
+#include <stdio.h>
+#include <unistd.h>
+
+static volatile sig_atomic_t got;
+
+static void on_signal(int sig)
+{
+    (void)sig;
+    got++;
+}
+
+int main(void)
+{
+    signal(SIGINT, on_signal);
+    signal(SIGTERM, on_signal);
+    puts("ready");
+    fflush(stdout);
+    while (!got)
+        pause();
+    usleep(300000); // a second delivery would arrive meanwhile
+    printf("got %d\n", (int)got);
+    return 7;
+}
+C
+    dino build >/dev/null
+}
+
+wait_for_ready() {
+    for _ in $(seq 100); do
+        grep -q ready "$1" 2>/dev/null && return 0
+        sleep 0.1
+    done
+    return 1
+}
+
+# SIGTERM sent to `dino run` reaches the program, and dino waits for it and
+# exits with its status.
+case_run_forwards_sigterm() {
+    project run_sigterm
+    signal_program || return 1
+    dino run --no-build >out &
+    local pid=$!
+    wait_for_ready out || return 1
+    kill -TERM "$pid"
+    timeout 10 tail --pid="$pid" -f /dev/null || { pkill run_sigterm; return 1; }
+    wait "$pid"
+    local code=$?
+    cat out
+    [[ $code == 7 ]] && grep -qx 'got 1' out
+}
+
+# Ctrl-C at a terminal reaches the program once (from the terminal, not again
+# from dino), and dino exits with the program's status.
+# script runs the command through $SHELL; bash execs it, dash would stay
+# in between and die of the Ctrl-C itself.
+case_run_ctrl_c() {
+    project run_ctrl_c
+    signal_program || return 1
+    # Ctrl-C is typed once the program has written to out.
+    # shellcheck disable=SC2094
+    { wait_for_ready out && printf '\003' && sleep 2; } |
+        SHELL=/bin/bash timeout 20 script -qefc 'dino run --no-build' /dev/null >out
+    local code=$?
+    cat out
+    [[ $code == 7 ]] && grep -q 'got 1' out
 }
 
 cases=("$@")
