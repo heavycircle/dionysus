@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Run clang-tidy (.clang-tidy, warnings as errors) on every SDK source under
-# two compile databases, x86_64 and win64: shared files under both, each
-# *_posix.c / *_win32.c under its own. Uses dino's rewritten
+# Run clang-tidy (.clang-tidy, warnings as errors) on every SDK source, and
+# sdk/testing/leakcheck.c, under two compile databases, x86_64 and win64:
+# shared files under both, each *_posix.c / *_win32.c under its own, and
+# leakcheck.c (Linux tests only) under x86_64. Uses dino's rewritten
 # compile_commands.json, so the real musl/MinGW headers are used.
 #
 #   scripts/tidy.sh                                         # clang-tidy from PATH
@@ -32,10 +33,11 @@ for target in x86_64 win64; do
         echo "tidy: no compile database for $target" >&2
         exit 1
     }
-    for src in sdk/src/*/*.c; do
-        # Each platform half is only in its own target's database.
+    for src in sdk/src/*/*.c sdk/testing/*.c; do
+        # Each platform half is only in its own target's database, and the
+        # leak checker is only linked into tests on Linux.
         case "$target:$src" in
-        x86_64:*_win32.c | win64:*_posix.c) continue ;;
+        x86_64:*_win32.c | win64:*_posix.c | win64:sdk/testing/*) continue ;;
         esac
         if ! "${tidy[@]}" --quiet --warnings-as-errors="*" -p "$db" "$PWD/$src"; then
             echo "tidy: $src ($target) has findings" >&2

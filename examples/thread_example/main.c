@@ -3,6 +3,8 @@
 #include <dino/core/thread.h>
 
 #define NUM_THREADS 4
+// Small enough to finish in seconds under qemu, so CI runs it on every target.
+#define COUNT 10000000
 
 static int counter(void *arg)
 {
@@ -10,7 +12,7 @@ static int counter(void *arg)
     printf("  [Thread %d] Starting ....\n", id);
 
     int sum = 0;
-    for (volatile int i = 0; i < 1000000000; ++i)
+    for (volatile int i = 0; i < COUNT; ++i)
         sum += 1;
 
     printf("  [Thread %d] Counted to %d\n", id, sum);
@@ -43,5 +45,10 @@ int main(void)
         total += sum;
     }
     printf("Total: %lld\n", total);
+    if (total != (long long)NUM_THREADS * COUNT)
+    {
+        fprintf(stderr, "FATAL: expected %lld\n", (long long)NUM_THREADS * COUNT);
+        return 1;
+    }
     return 0;
 }
