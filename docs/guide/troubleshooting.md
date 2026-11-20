@@ -103,6 +103,17 @@ start in a new prefix takes a while as it builds one. The Docker image avoids bo
 
 `--no-build` needs an existing build for that target.
 
+**`build/x86_64 holds a Release build, not Debug; run without --no-build to build it`**
+
+`build/<target>/` holds one build mode at a time, whichever was built last. Drop `--no-build`, or
+the `--debug`/`--release` that asks for the other mode.
+
+**`'test' can't be a project name: CMake or dino already has a target by that name`**
+
+`dino init` names the project after its directory, and CMake and dino already define targets named
+`all`, `clean`, `help`, `install`, `package`, `test`, `test_main` and `dino_*`. Use a directory with
+another name.
+
 **A program that works on Linux fails under wine, or the other way round**
 
 Look for platform calls that only work on one side: the [portability warnings](portability-warnings.md)
