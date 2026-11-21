@@ -10,7 +10,7 @@ body = """
 ### {{ group | striptags | trim }}
 {% for commit in commits %}
 - {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
-{{ commit.message | split(pat="\n") | first | trim | upper_first }}\
+{{ commit.message | split(pat="\n") | first | trim }}\
 {% if commit.breaking %} **(breaking)**{% endif %} ({{ commit.id | truncate(length=9, end="") }})
 {%- endfor %}
 {% endfor %}
