@@ -11,7 +11,9 @@ extern "C"
  *
  *   - Before main(), any of stdin, stdout and stderr that are closed are
  *     pointed at /dev/null (dino_fs_init()). Linked into every program that
- *     links dino_core, unless built with -DDINO_NO_AUTO_RUNTIME=ON.
+ *     links dino_core, unless built with -DDINO_NO_AUTO_RUNTIME=ON. It runs
+ *     before the program's own constructors and C++ static initializers; only
+ *     a constructor with a priority of 101 or lower can run earlier.
  *   - Subsystems that can fail start on first use and report failure from that
  *     call: dino_socket_create() runs dino_net_init().
  *
