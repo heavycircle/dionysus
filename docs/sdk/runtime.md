@@ -7,7 +7,7 @@ line of `main()`:
 
 - **Before `main()`** (Linux): any of stdin, stdout and stderr that are closed get pointed at
   `/dev/null` (see [`dino_fs_init`](fs.md#stdio-for-programs-the-kernel-starts)). This is linked
-  into every program that links `dino_core`.
+  into every program that links `dino_core`. It runs before the program's own constructors and the initializers of C++ globals, so files they open can't become descriptors 0-2 either. Only a constructor you give a priority of 101 or lower (`__attribute__((constructor(101)))`) can run before it.
 - **On first use**, subsystems that can fail start and report failure from that call. The first
   `dino_socket_create()` runs `dino_net_init()` (`WSAStartup` on Windows) and returns
   `DINO_INVALID_SOCKET` if it fails.

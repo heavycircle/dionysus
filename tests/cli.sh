@@ -268,6 +268,40 @@ C
     dino test --timeout 1 >out 2>&1 || { cat out; return 1; }
 }
 
+# Started with stdin, stdout and stderr closed, a program's first files must
+# not become descriptors 0-2, not even the ones its own constructors open: the
+# SDK's setup runs before them. Without the setup they do.
+case_closed_stdio() {
+    project closed_stdio
+    cat >src/main.c <<'C'
+#include <fcntl.h>
+#include <stdio.h>
+
+static int g_early = -1;
+
+__attribute__((constructor)) static void open_early(void)
+{
+    g_early = open("early.txt", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+}
+
+int main(void)
+{
+    FILE *result = fopen("result.txt", "w");
+    if (!result)
+        return 1;
+    fprintf(result, "%d %d\n", g_early, fileno(result));
+    return fclose(result) == 0 ? 0 : 1;
+}
+C
+    dino build >out 2>&1 || { cat out; return 1; }
+    build/x86_64/closed_stdio 0<&- 1>&- 2>&- || return 1
+    [[ $(cat result.txt) == '3 4' ]] || { echo "with the setup: $(cat result.txt)"; return 1; }
+
+    dino build -- -DDINO_NO_AUTO_RUNTIME=ON >out 2>&1 || { cat out; return 1; }
+    build/x86_64/closed_stdio 0<&- 1>&- 2>&- || return 1
+    [[ $(cat result.txt) == '0 1' ]] || { echo "without the setup: $(cat result.txt)"; return 1; }
+}
+
 # Memory from every allocator entry point is counted: a block that is freed
 # leaves the count at zero, and one that isn't is reported.
 case_leak_check_allocators() {
