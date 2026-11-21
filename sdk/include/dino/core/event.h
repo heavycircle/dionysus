@@ -213,8 +213,9 @@ dino_event_timer_t dino_event_timer_add(
  * reports it, as for dino_event_del_socket.
  *
  * @param  loop   Loop it was added to.
- * @param  timer  Timer from dino_event_timer_add.
- * @return 0 on success, -1 on error.
+ * @param  timer  Timer from dino_event_timer_add, not yet deleted: deleting
+ *                one twice is undefined.
+ * @return 0 on success, -1 on error, including a timer of another loop.
  */
 int dino_event_timer_del(dino_event_loop_t loop, dino_event_timer_t timer);
 

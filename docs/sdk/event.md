@@ -156,6 +156,7 @@ there, is an error), except the create functions, which return a handle or its i
 - **Several threads on one loop:** add sockets with `DINO_EVENT_ONESHOT`, so one event goes to one
   thread, and rearm each with `dino_event_mod_socket` once that thread has handled it. Without
   `ONESHOT`, one ready socket wakes every waiting thread on Linux but only one on Windows.
+  On Windows a socket or pipe that was reported is watched again only when a thread next calls `dino_event_wait`; a thread already blocked in a wait doesn't pick it up. If the thread that got the event never waits again, nobody is told about that item again.
 - **Deleting while another thread waits:** after a `del` (or `dino_event_timer_del`) returns, no wait
   that starts later reports the item. A wait already running in another thread may still return
   one last event for it, so a thread that frees an item's userdata must make sure no other thread
@@ -167,6 +168,7 @@ there, is an error), except the create functions, which return a handle or its i
   waited for a while) fires once and skips the periods it missed.
 - **Freeing:** a fired one-shot timer stays allocated until `dino_event_timer_del` or the loop is
   destroyed.
+- **Delete each timer once, through its own loop.** `dino_event_timer_del` with another loop returns `-1` and leaves the timer alone. Deleting a timer twice is undefined: the first delete frees it.
 - **Busy loops:** when timers and sockets are both ready and don't all fit in `out`, waits take
   turns at filling it first. A socket that stays readable delays a timer by one wait at most, and a
   timer that's due at every wait still leaves room for I/O, even with `max` of 1.
@@ -186,7 +188,8 @@ there, is an error), except the create functions, which return a handle or its i
 
 ## Pitfalls
 
-- **Delete before closing.** Remove a socket or pipe from the loop (`del`) before closing it.
+- **Delete before closing.** Remove a socket or pipe from the loop (`del`) before closing it. A socket closed while still in a loop is dropped from it without an event, on both platforms, and a later `del` for it usually returns `-1`. On Windows the loop only notices the close during a wait, and never for a `ONESHOT` socket that already fired: until then a new socket that happens to get the same handle value can't be added. A pipe closed while in a loop may still be reported on Windows, as an error and with its old userdata, so never free the userdata of something you haven't deleted.
+- **A failed `mod` changes nothing.** The item keeps the events and userdata it had.
 - **Non-blocking sockets.** Make sockets non-blocking (`dino_socket_set_nonblocking`) when one event
   may not cover everything you'll read or accept: keep calling until it returns `-1`, as
   `examples/event_example` does for `accept`.
