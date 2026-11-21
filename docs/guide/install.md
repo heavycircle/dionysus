@@ -28,7 +28,7 @@ Windows hosts aren't tested yet; Linux is the supported host.
 | Tool                                 | Version       | Why                                                                                     |
 | ------------------------------------ | ------------- | --------------------------------------------------------------------------------------- |
 | [Zig](https://ziglang.org/download/) | 0.17.1        | its bundled clang, musl and MinGW-w64 are the compiler and C libraries for every target |
-| [CMake](https://cmake.org/download/) | 3.15 or newer | projects are ordinary CMake projects                                                    |
+| [CMake](https://cmake.org/download/) | 3.20 or newer | projects are ordinary CMake projects                                                    |
 | [Ninja](https://ninja-build.org/)    | any           | optional on Linux (`make` works too, more slowly); required on Windows                  |
 
 Zig ships as an archive: unpack it anywhere and add the directory to `PATH`. Most distributions
@@ -95,7 +95,7 @@ All required tools found.
 ```
 
 - **Required** must all be `ok`, or `dino doctor` exits non-zero. A missing generator means
-  neither `ninja` nor `make` is on `PATH`, and CMake older than 3.15 is reported as a problem.
+  neither `ninja` nor `make` is on `PATH`, and CMake older than 3.20 is reported as a problem.
 - **sdk** is where `dino` unpacked its built-in SDK, once per version, under `$DINO_HOME` (by
   default `~/.cache/dino`). Set `DINO_SDK_PATH` to build against another SDK checkout instead.
 - **Libraries** lists your [organization libraries](libraries.md), and any broken entry counts as a

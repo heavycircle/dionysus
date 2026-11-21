@@ -57,7 +57,7 @@ module.
 run anything before `main()`. Set it before `project()`:
 
 ```cmake
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 set(DINO_NO_AUTO_RUNTIME ON)
 project(app C)
 ```

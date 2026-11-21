@@ -1,6 +1,3 @@
-// gettid.
-#define _GNU_SOURCE
-
 #include <dino/core/thread.h>
 
 #include <pthread.h>

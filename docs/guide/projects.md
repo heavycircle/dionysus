@@ -70,7 +70,7 @@ A large project can give each part its own `CMakeLists.txt`:
 
 ```cmake
 # CMakeLists.txt
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(app C)
 add_subdirectory(lib/storage)
 dino_executable(app src/main.c)
@@ -124,7 +124,23 @@ else()
 endif()
 ```
 
-In C, `_WIN32` is defined for both Windows targets and `__linux__` for the Linux ones.
+In C, `_WIN32` is defined for both Windows targets and `__linux__` for the Linux ones. In CMake,
+`CMAKE_SYSTEM_NAME` is `Windows` or `Linux`, and `CMAKE_SYSTEM_PROCESSOR` is the architecture as
+`uname -m` prints it: `x86_64`, `i686`, `arm`, `aarch64` or `powerpc`.
+
+## Compiler flags and the SDK
+
+The SDK is compiled as part of the project, with the project's `CFLAGS` and CMake settings.
+
+- **Language standard:** any C standard works, strict ISO C included (`CFLAGS=-std=c11`, or
+  `CMAKE_C_STANDARD 11` with `CMAKE_C_EXTENSIONS OFF`). The SDK asks for the POSIX declarations it
+  needs itself. Set before `project()`, `CMAKE_C_STANDARD` applies to the SDK too; set after it,
+  only to the project's own targets, since `project()` is where dino adds the SDK.
+- **Warnings:** the project's warning flags don't apply to the SDK's own sources, which build with
+  `-Wall -Wextra` of their own and never fail the build, so `CFLAGS="-Wconversion -Werror"` checks
+  the project's code without tripping over the SDK's. The SDK's headers are compiled with the
+  project's flags, and are checked to be warning-free with `-Wpedantic`, `-Wconversion`, `-Wshadow`,
+  `-Wcast-qual` and `-Wstrict-prototypes`.
 
 ## SDK options
 
@@ -132,7 +148,7 @@ These change how the SDK is built, so they must be set **before `project()`**, w
 adds the SDK. They can also be passed as `dino build -- -D<OPTION>=ON`.
 
 ```cmake
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 set(DINO_NO_PLATFORM_WARNINGS ON)
 project(app C)
 ```

@@ -36,7 +36,7 @@ uses for a target is refused before anything is written: `all`, `clean`, `help`,
 The generated `CMakeLists.txt`:
 
 ```cmake
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.20)
 project(hello C)
 
 file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.c)

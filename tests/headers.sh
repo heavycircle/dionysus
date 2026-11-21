@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Check every public SDK header (sdk/include/dino/**.h):
 #   - it compiles on its own, as C11 and as C++11, warning-free with
-#     -Wpedantic, for 64- and 32-bit Linux and Windows
+#     -Wpedantic and -Wconversion (projects' warning flags apply to the
+#     headers, unlike the SDK's sources), for 64- and 32-bit Linux and Windows
 #   - it has extern "C" guards, so C++ code links against the C functions
 #   - everything it adds is in the SDK's namespace: macros start with DINO_,
 #     and functions, types and enum constants with dino_ or DINO_
@@ -19,7 +20,7 @@ trap 'rm -rf "$work"' EXIT
 
 targets=(x86_64-linux-musl x86-linux-musl x86_64-windows-gnu x86-windows-gnu)
 # A real compile: zig's driver can't cache the missing object of -fsyntax-only.
-cflags=(-Wall -Wextra -Wpedantic -Werror -c -o "$work/tu.o" -I "$inc")
+cflags=(-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wcast-qual -Wstrict-prototypes -Werror -c -o "$work/tu.o" -I "$inc")
 failed=0
 
 fail() {
