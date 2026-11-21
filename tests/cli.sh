@@ -236,6 +236,39 @@ case_sdk_warnings() {
     grep -q -- '-Wno-everything -Wall -Wextra -Werror .*mutex_posix\.c' out
 }
 
+# A C++ project whose tests are tests/test_*.cpp.
+cxx_project() {
+    project "$1"
+    sed -i "s/^project($1 C)\$/project($1 C CXX)/; s/test_\\*\\.c)/test_*.cpp)/" CMakeLists.txt
+    rm tests/test_main.c
+}
+
+# Memory a C++ global frees in its destructor isn't reported, since the
+# report runs after static destructors; a real leak still is.
+case_leak_check_cxx_global() {
+    cxx_project leak_cxx
+    cat >tests/test_main.cpp <<'CPP'
+#include <cstdlib>
+#include <string>
+#include <vector>
+#include <utest.h>
+
+static std::vector<std::string> g_names{"long enough to need a heap allocation, not SSO"};
+
+UTEST(cxx, global)
+{
+    ASSERT_EQ(g_names.size(), 1u);
+    if (std::getenv("LEAK"))
+        (void)new std::string(g_names[0]);
+}
+
+UTEST_MAIN()
+CPP
+    dino test >out 2>&1 || { cat out; return 1; }
+    LEAK=1 dino test >out 2>&1 && return 1
+    grep -q 'dino leak check: .* still live at exit' out
+}
+
 # A program that exits 7 after its first SIGINT or SIGTERM, and reports how
 # many arrived.
 signal_program() {

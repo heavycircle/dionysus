@@ -72,7 +72,11 @@ int __wrap_posix_memalign(void **out, size_t alignment, size_t size)
     return rc;
 }
 
-static void report(void)
+// musl's exit() runs the atexit list first, C++ static destructors included,
+// then destructors like this one, lowest priority last: anything freed by the
+// program's own cleanup is freed by now. An atexit handler would run before
+// the destructors of C++ globals constructed after it.
+__attribute__((destructor(101))) static void report(void)
 {
     const char *setting = getenv("DINO_LEAK_CHECK");
     if (setting && strcmp(setting, "0") == 0)
@@ -89,9 +93,3 @@ static void report(void)
         fprintf(stderr, "dino leak check: %ld more frees than allocations\n", -live);
 }
 
-// atexit handlers run in reverse order, so registering first means checking
-// last, after the program's own cleanup handlers.
-__attribute__((constructor)) static void install(void)
-{
-    atexit(report);
-}
