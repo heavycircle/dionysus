@@ -43,6 +43,9 @@ int main(void)
 | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `int dino_file_size(const char *path, uint64_t *size)` | `0` with the size in `*size`; `-1` (and `*size` 0) if the file doesn't exist, isn't a regular file (a directory, for example), can't be examined, or for a `NULL` argument |
 
+A symbolic link reports the size of the file it points to, on Windows as on Linux. A link to a
+directory, or one whose target is gone, fails as the directory or the missing file would.
+
 ## Stdio for programs the kernel starts
 
 Programs started directly by the Linux kernel (through `call_usermodehelper`, for example as a
