@@ -236,6 +236,99 @@ case_sdk_warnings() {
     grep -q -- '-Wno-everything -Wall -Wextra -Werror .*mutex_posix\.c' out
 }
 
+# A C++ project whose tests are tests/test_*.cpp.
+cxx_project() {
+    project "$1"
+    sed -i "s/^project($1 C)\$/project($1 C CXX)/; s/test_\\*\\.c)/test_*.cpp)/" CMakeLists.txt
+    rm tests/test_main.c
+}
+
+# Memory a C++ global frees in its destructor isn't reported, since the
+# report runs after static destructors; a real leak still is.
+case_leak_check_cxx_global() {
+    cxx_project leak_cxx
+    cat >tests/test_main.cpp <<'CPP'
+#include <cstdlib>
+#include <string>
+#include <vector>
+#include <utest.h>
+
+static std::vector<std::string> g_names{"long enough to need a heap allocation, not SSO"};
+
+std::string *volatile kept;
+
+UTEST(cxx, global)
+{
+    ASSERT_EQ(g_names.size(), 1u);
+    if (std::getenv("LEAK"))
+        kept = new std::string(g_names[0]);
+}
+
+UTEST_MAIN()
+CPP
+    dino test >out 2>&1 || { cat out; return 1; }
+    LEAK=1 dino test >out 2>&1 && return 1
+    grep -q 'dino leak check: .* still live at exit' out
+}
+
+# libc keeps what setenv and friends allocate for the environment; that isn't
+# reported, a real leak in the same test is.
+case_leak_check_setenv() {
+    project leak_setenv
+    cat >tests/test_main.c <<'C'
+#include <stdlib.h>
+#include <utest.h>
+
+static char entry[] = "DINO_PUT=1";
+
+UTEST(env, kept)
+{
+    ASSERT_EQ(setenv("DINO_A", "1", 1), 0);
+    ASSERT_EQ(setenv("DINO_A", "a longer value", 1), 0);
+    ASSERT_EQ(setenv("DINO_B", "2", 0), 0);
+    ASSERT_EQ(putenv(entry), 0);
+    ASSERT_EQ(unsetenv("DINO_B"), 0);
+    if (getenv("LEAK"))
+    {
+        void *volatile p = malloc(16);
+        (void)p;
+    }
+}
+
+UTEST_MAIN()
+C
+    dino test >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'more frees' out || { cat out; return 1; }
+    LEAK=1 dino test >out 2>&1 && return 1
+    grep -q 'dino leak check: 1 allocation(s) still live at exit' out
+}
+
+# A project with only CXX enabled gets dino_test() and its leak check: the
+# check is C, built in the SDK's directory, where C is enabled.
+case_leak_check_cxx_only() {
+    project leak_cxx_only
+    sed -i 's/^project(leak_cxx_only C)$/project(leak_cxx_only CXX)/; s/\*\.c)/*.cpp)/' CMakeLists.txt
+    mv src/main.c src/main.cpp
+    cat >tests/test_main.cpp <<'CPP'
+#include <cstdlib>
+#include <utest.h>
+
+int *volatile kept;
+
+UTEST(cxx, only)
+{
+    if (std::getenv("LEAK"))
+        kept = new int(1);
+}
+
+UTEST_MAIN()
+CPP
+    rm tests/test_main.c
+    dino test >out 2>&1 || { cat out; return 1; }
+    LEAK=1 dino test >out 2>&1 && return 1
+    grep -q 'dino leak check: 1 allocation(s) still live at exit' out
+}
+
 # A program that exits 7 after its first SIGINT or SIGTERM, and reports how
 # many arrived.
 signal_program() {
