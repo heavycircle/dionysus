@@ -78,7 +78,7 @@ case_usage_errors() {
     local cmd code
     for cmd in 'frob' 'help frob' 'build --bogus' 'build -C ""' 'build -C=' 'build nosuchtarget' \
         'build --all x86_64' 'build -j 0' 'run x86_64 arm' 'test --memcheck arm' 'clean -C ""' \
-        'init a b' 'targets x' 'doctor x' 'run --exe'; do
+        'init a b' 'targets x' 'doctor x' 'run --exe' 'test --timeout 0' 'test --timeout soon'; do
         eval "dino $cmd" >/dev/null 2>&1
         code=$?
         [[ $code == 2 ]] || { echo "dino $cmd: exit $code"; return 1; }
@@ -237,6 +237,37 @@ case_sdk_warnings() {
 }
 
 # A C++ project whose tests are tests/test_*.cpp.
+# A test that outlives --timeout fails as a timeout and its output names the
+# case that was running; the test's own TIMEOUT property takes precedence.
+case_test_timeout() {
+    project test_timeout
+    cat >tests/test_main.c <<'C'
+#include <utest.h>
+
+#include <dino/core/time.h>
+
+UTEST(slow, passes_first)
+{
+    EXPECT_EQ(1, 1);
+}
+
+UTEST(slow, sleeps)
+{
+    dino_sleep_ms(3000);
+    EXPECT_EQ(1, 1);
+}
+
+UTEST_MAIN()
+C
+    dino test --timeout 1 >out 2>&1 && { cat out; return 1; }
+    grep -q 'test_main .*Timeout' out || { cat out; return 1; }
+    grep -q 'OK \] slow.passes_first' out || { cat out; return 1; }
+    [[ $(grep 'slow\.' out | tail -n 1) == *'RUN      ] slow.sleeps' ]] || { cat out; return 1; }
+
+    echo 'set_tests_properties(test_main PROPERTIES TIMEOUT 60)' >>CMakeLists.txt
+    dino test --timeout 1 >out 2>&1 || { cat out; return 1; }
+}
+
 cxx_project() {
     project "$1"
     sed -i "s/^project($1 C)\$/project($1 C CXX)/; s/test_\\*\\.c)/test_*.cpp)/" CMakeLists.txt

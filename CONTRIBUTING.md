@@ -244,6 +244,7 @@ tests/sdk.sh --all                                     # same, from a scratch co
 - Every `UTEST` needs at least one `ASSERT_*` or `EXPECT_*`; one without leaves utest's result
   parameter unused, which `-Wextra -Werror` rejects.
 - Tests run in parallel, so each file uses its own port range (`#define PORT 18100`, 18200, ...).
+- A test file that runs longer than 120 seconds is stopped and fails as `Timeout`, and its output ends with the `[ RUN ]` line of the case that hung (`dino test --timeout <seconds>` changes the limit).
 
 ### Test matrix
 
