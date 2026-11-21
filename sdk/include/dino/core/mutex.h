@@ -35,10 +35,13 @@ void dino_mutex_destroy(dino_mutex_t mutex);
 int dino_mutex_lock(dino_mutex_t mutex);
 
 /**
- * Release the mutex.
+ * Release the mutex once: a mutex locked n times is free after n unlocks.
+ *
+ * Only the thread holding the mutex can unlock it. From any other thread, or
+ * once it's no longer locked, this returns -1 and leaves the mutex as it was.
  *
  * @param mutex  Handle to unlock.
- * @return 0 on success, -1 on error.
+ * @return 0 on success, -1 if the caller doesn't hold the mutex or on error.
  */
 int dino_mutex_unlock(dino_mutex_t mutex);
 
@@ -87,7 +90,7 @@ void dino_cond_destroy(dino_cond_t cond);
  *
  * @param cond   Condition to wait on.
  * @param mutex  Mutex protecting the condition.
- * @return 0 on success, -1 on error.
+ * @return 0 on success, -1 if the caller doesn't hold the mutex or on error.
  */
 int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex);
 
@@ -102,7 +105,8 @@ int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex);
  * @param cond        Condition to wait on.
  * @param mutex       Mutex protecting the condition, locked once.
  * @param timeout_ms  Milliseconds to wait at most; -1 to wait forever.
- * @return 0 when woken, DINO_TIMEOUT when the time ran out, -1 on error.
+ * @return 0 when woken, DINO_TIMEOUT when the time ran out, -1 if the caller
+ *         doesn't hold the mutex or on error.
  */
 int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms);
 
