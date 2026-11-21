@@ -96,7 +96,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DINO_NO_LEAK_CHECK)
     target_sources(dino_testing INTERFACE $<TARGET_OBJECTS:dino_leakcheck>)
     target_link_options(dino_testing INTERFACE
         "LINKER:--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free"
-        "LINKER:--wrap=aligned_alloc,--wrap=posix_memalign")
+        "LINKER:--wrap=aligned_alloc,--wrap=posix_memalign"
+        "LINKER:--wrap=setenv,--wrap=unsetenv,--wrap=putenv,--wrap=clearenv")
 endif()
 
 # The SDK's own sources are compiled with the project's flags (CFLAGS, and
