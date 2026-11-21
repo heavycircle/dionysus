@@ -255,11 +255,13 @@ case_leak_check_cxx_global() {
 
 static std::vector<std::string> g_names{"long enough to need a heap allocation, not SSO"};
 
+std::string *volatile kept;
+
 UTEST(cxx, global)
 {
     ASSERT_EQ(g_names.size(), 1u);
     if (std::getenv("LEAK"))
-        (void)new std::string(g_names[0]);
+        kept = new std::string(g_names[0]);
 }
 
 UTEST_MAIN()
@@ -297,6 +299,32 @@ UTEST_MAIN()
 C
     dino test >out 2>&1 || { cat out; return 1; }
     ! grep -q 'more frees' out || { cat out; return 1; }
+    LEAK=1 dino test >out 2>&1 && return 1
+    grep -q 'dino leak check: 1 allocation(s) still live at exit' out
+}
+
+# A project with only CXX enabled gets dino_test() and its leak check: the
+# check is C, built in the SDK's directory, where C is enabled.
+case_leak_check_cxx_only() {
+    project leak_cxx_only
+    sed -i 's/^project(leak_cxx_only C)$/project(leak_cxx_only CXX)/; s/\*\.c)/*.cpp)/' CMakeLists.txt
+    mv src/main.c src/main.cpp
+    cat >tests/test_main.cpp <<'CPP'
+#include <cstdlib>
+#include <utest.h>
+
+int *volatile kept;
+
+UTEST(cxx, only)
+{
+    if (std::getenv("LEAK"))
+        kept = new int(1);
+}
+
+UTEST_MAIN()
+CPP
+    rm tests/test_main.c
+    dino test >out 2>&1 || { cat out; return 1; }
     LEAK=1 dino test >out 2>&1 && return 1
     grep -q 'dino leak check: 1 allocation(s) still live at exit' out
 }
