@@ -7,7 +7,7 @@ codes. On Linux this is `posix_spawn` and `waitpid`; on Windows, `CreateProcess`
 that matter are handled for you:
 
 - **Arguments** reach the child exactly as given. Windows has no argument array, only one command
-  line, so the SDK quotes each argument by the rules the child's C runtime uses to split it again.
+  line, so the SDK quotes each argument by the rules the child's C runtime uses to split it again. The exception is a Windows program that reads its command line itself; `cmd.exe` is one, as described under the function table below.
 - **Exit codes** come back the same way: the code the program exited with, `128 + signal` if a signal
   ended it (Linux), and `DINO_EXIT_KILLED` (137) after `dino_process_kill` on both platforms.
 - **Inheritance:** the child gets only its stdin, stdout and stderr, never the parent's other files,
@@ -114,6 +114,9 @@ dino_process_wait(child, &code);
   parent's own, the default), `DINO_STDIO_NULL` (`/dev/null` or `NUL`) or `DINO_STDIO_PIPE` (a new
   [pipe](pipe.md), whose parent end appears in `pipes.in`, `.out` or `.err`).
 - **Wait for every process exactly once.** On Linux an unwaited child stays a zombie.
+- **Leave `SIGCHLD` alone, and let nothing else wait for the child** (Linux). If the program ignores `SIGCHLD` (`SIG_IGN` or `SA_NOCLDWAIT`), or other code in it calls `wait()` or `waitpid(-1, ...)`, the exit status goes there. Every wait then returns `-1` although the child ran, `dino_process_run` included, and the exit code is lost. The process ID may also be reused by then, so don't `dino_process_kill` that handle afterwards.
+- **Killing ends one process, not what it started.** `dino_process_kill` and the timeout of `dino_process_run` end the process you spawned. Programs it started keep running: whatever a `sh -c` command launched without `exec`, and everything a `.bat` or `.cmd` file started, because the process you hold there is the `cmd.exe` that runs the script.
+- **`cmd.exe` and quotes:** `cmd.exe` parses its command line itself and doesn't understand the `\"` that the SDK's quoting produces. `{ "cmd.exe", "/d", "/c", command, NULL }` works as long as `command` contains no `"`; a command with a quoted path in it (`dir "C:\Program Files"`) arrives mangled. Put such a command in a `.bat` file and run that.
 - **Read every pipe you asked for.** A child that fills a 64 KB stderr pipe nobody reads blocks
   forever, while the parent waits on stdout. Read both (or use `dino_process_run`), or send the one
   you don't need to `DINO_STDIO_NULL`.
