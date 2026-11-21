@@ -133,6 +133,20 @@ case_cxx_config_flags() {
     grep -q -- '-O0 -g .*app\.cpp' out
 }
 
+# CMAKE_SYSTEM_PROCESSOR names the target's architecture as uname -m would.
+case_system_processor() {
+    project processor
+    # shellcheck disable=SC2016 # for CMake to expand
+    echo 'message(STATUS "processor: ${CMAKE_SYSTEM_PROCESSOR}")' >>CMakeLists.txt
+    local t want
+    for t in x86_64:x86_64 i386:i686 arm:arm arm64:aarch64 ppc:powerpc win32:i686 win64:x86_64; do
+        want=${t#*:}
+        t=${t%%:*}
+        dino build -v "$t" >out 2>&1 || { cat out; return 1; }
+        grep -qx -- "-- processor: $want" out || { echo "$t: $(grep 'processor:' out)"; return 1; }
+    done
+}
+
 # The compile database comes from the first target only, even when that one
 # fails to configure.
 case_compdb_first_target() {

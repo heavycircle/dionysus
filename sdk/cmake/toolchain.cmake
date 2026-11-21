@@ -11,6 +11,13 @@ else()
     set(CMAKE_SYSTEM_NAME Generic)
 endif()
 
+# Left empty when cross-compiling. The triple's architecture, as `uname -m`
+# would print it: zig's x86 is i686.
+string(REGEX REPLACE "-.*" "" CMAKE_SYSTEM_PROCESSOR "${ZIG_TARGET}")
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
+    set(CMAKE_SYSTEM_PROCESSOR i686)
+endif()
+
 # The target rides along with the compiler command rather than CMAKE_C_FLAGS,
 # so user-supplied flags can never drop it and silently build for the host.
 set(CMAKE_C_COMPILER "zig;cc;-target;${ZIG_TARGET}" CACHE STRING "C Compiler" FORCE)

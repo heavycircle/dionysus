@@ -124,7 +124,9 @@ else()
 endif()
 ```
 
-In C, `_WIN32` is defined for both Windows targets and `__linux__` for the Linux ones.
+In C, `_WIN32` is defined for both Windows targets and `__linux__` for the Linux ones. In CMake,
+`CMAKE_SYSTEM_NAME` is `Windows` or `Linux`, and `CMAKE_SYSTEM_PROCESSOR` is the architecture as
+`uname -m` prints it: `x86_64`, `i686`, `arm`, `aarch64` or `powerpc`.
 
 ## Compiler flags and the SDK
 
