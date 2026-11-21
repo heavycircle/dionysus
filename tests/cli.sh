@@ -121,6 +121,18 @@ case_compdb_cxx() {
     [[ $(grep -c 'libcxx/include' compile_commands.json) == 1 ]]
 }
 
+# C++ sources get the same per-configuration flags as C.
+case_cxx_config_flags() {
+    project cxx_flags
+    sed -i 's/^project(cxx_flags C)$/project(cxx_flags C CXX)/' CMakeLists.txt
+    echo 'dino_executable(cxx_app src/app.cpp)' >>CMakeLists.txt
+    echo 'int main() { return 0; }' >src/app.cpp
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    grep -q -- '-Oz -DNDEBUG -ffunction-sections .*app\.cpp' out || return 1
+    dino build -v --debug >out 2>&1 || { cat out; return 1; }
+    grep -q -- '-O0 -g .*app\.cpp' out
+}
+
 # The compile database comes from the first target only, even when that one
 # fails to configure.
 case_compdb_first_target() {
