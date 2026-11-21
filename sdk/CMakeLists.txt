@@ -91,15 +91,31 @@ target_link_libraries(dino_testing INTERFACE dino_util)
 add_library(dino_test_output OBJECT testing/unbuffered.c)
 target_sources(dino_testing INTERFACE $<TARGET_OBJECTS:dino_test_output>)
 # --wrap needs the static libc of the Linux targets: zig cc doesn't pass it to
-# lld-link, and the Windows CRT allocates inside a DLL anyway.
+# lld-link, and the Windows CRT allocates inside a DLL anyway. A dynamic libc
+# (DINO_DYNAMIC) allocates inside a shared object too: what it allocates isn't
+# counted and what the program then frees is.
 option(DINO_NO_LEAK_CHECK "Don't link the allocation counter into dino_test() executables" OFF)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DINO_NO_LEAK_CHECK)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DINO_DYNAMIC AND NOT DINO_NO_LEAK_CHECK)
     add_library(dino_leakcheck OBJECT testing/leakcheck.c)
     target_sources(dino_testing INTERFACE $<TARGET_OBJECTS:dino_leakcheck>)
-    target_link_options(dino_testing INTERFACE
-        "LINKER:--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free"
-        "LINKER:--wrap=aligned_alloc,--wrap=posix_memalign"
-        "LINKER:--wrap=setenv,--wrap=unsetenv,--wrap=putenv,--wrap=clearenv")
+    # Every call testing/leakcheck.c wraps, in its order.
+    set(dino_leakcheck_wraps
+        malloc calloc aligned_alloc memalign valloc realloc reallocarray free posix_memalign
+        setenv unsetenv putenv clearenv
+        atexit __cxa_atexit
+        getpwuid getpwnam getpwent setpwent endpwent getgrgid getgrnam getgrent setgrent endgrent
+        gethostbyname gethostbyname2 gethostbyaddr
+        tzset strftime
+        setlocale newlocale duplocale freelocale)
+    # musl's names for the calls that take a 64-bit time_t on a 32-bit target.
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        list(APPEND dino_leakcheck_wraps __localtime64 __localtime64_r __mktime64 __ctime64 __ctime64_r)
+    else()
+        list(APPEND dino_leakcheck_wraps localtime localtime_r mktime ctime ctime_r)
+    endif()
+    foreach(wrapped ${dino_leakcheck_wraps})
+        target_link_options(dino_testing INTERFACE "LINKER:--wrap=${wrapped}")
+    endforeach()
 endif()
 
 # The SDK's own sources are compiled with the project's flags (CFLAGS, and
