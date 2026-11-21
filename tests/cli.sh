@@ -121,6 +121,32 @@ case_compdb_cxx() {
     [[ $(grep -c 'libcxx/include' compile_commands.json) == 1 ]]
 }
 
+# C++ sources get the same per-configuration flags as C.
+case_cxx_config_flags() {
+    project cxx_flags
+    sed -i 's/^project(cxx_flags C)$/project(cxx_flags C CXX)/' CMakeLists.txt
+    echo 'dino_executable(cxx_app src/app.cpp)' >>CMakeLists.txt
+    echo 'int main() { return 0; }' >src/app.cpp
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    grep -q -- '-Oz -DNDEBUG -ffunction-sections .*app\.cpp' out || return 1
+    dino build -v --debug >out 2>&1 || { cat out; return 1; }
+    grep -q -- '-O0 -g .*app\.cpp' out
+}
+
+# CMAKE_SYSTEM_PROCESSOR names the target's architecture as uname -m would.
+case_system_processor() {
+    project processor
+    # shellcheck disable=SC2016 # for CMake to expand
+    echo 'message(STATUS "processor: ${CMAKE_SYSTEM_PROCESSOR}")' >>CMakeLists.txt
+    local t want
+    for t in x86_64:x86_64 i386:i686 arm:arm arm64:aarch64 ppc:powerpc win32:i686 win64:x86_64; do
+        want=${t#*:}
+        t=${t%%:*}
+        dino build -v "$t" >out 2>&1 || { cat out; return 1; }
+        grep -qx -- "-- processor: $want" out || { echo "$t: $(grep 'processor:' out)"; return 1; }
+    done
+}
+
 # The compile database comes from the first target only, even when that one
 # fails to configure.
 case_compdb_first_target() {
@@ -185,6 +211,29 @@ case_init_dash_c() {
     grep -q 'project(app C)' base/app/CMakeLists.txt || return 1
     dino init --no-configure -C here >/dev/null || return 1
     grep -q 'project(here C)' here/CMakeLists.txt
+}
+
+# The SDK and the test harness build under strict ISO C, whether it's asked
+# for in CFLAGS or with CMAKE_C_STANDARD before project().
+case_strict_c() {
+    project strict_c
+    CFLAGS=-std=c11 dino test >/dev/null || return 1
+    project strict_c_standard
+    sed -i '/^project/i set(CMAKE_C_STANDARD 11)\nset(CMAKE_C_EXTENSIONS OFF)' CMakeLists.txt
+    dino test -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'std=c11 .*mutex_posix\.c' out
+}
+
+# The project's warning flags and -Werror don't reach the SDK's sources, which
+# have their own set; DINO_SDK_WERROR makes that set fatal.
+case_sdk_warnings() {
+    project sdk_warnings
+    CFLAGS='-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wcast-qual -Werror' \
+        dino test -v >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'warning:' out || { grep 'warning:' out; return 1; }
+    dino clean >/dev/null
+    dino build -v -- -DDINO_SDK_WERROR=ON >out 2>&1 || { cat out; return 1; }
+    grep -q -- '-Wno-everything -Wall -Wextra -Werror .*mutex_posix\.c' out
 }
 
 # A program that exits 7 after its first SIGINT or SIGTERM, and reports how

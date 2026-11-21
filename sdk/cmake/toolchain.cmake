@@ -11,6 +11,13 @@ else()
     set(CMAKE_SYSTEM_NAME Generic)
 endif()
 
+# Left empty when cross-compiling. The triple's architecture, as `uname -m`
+# would print it: zig's x86 is i686.
+string(REGEX REPLACE "-.*" "" CMAKE_SYSTEM_PROCESSOR "${ZIG_TARGET}")
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
+    set(CMAKE_SYSTEM_PROCESSOR i686)
+endif()
+
 # The target rides along with the compiler command rather than CMAKE_C_FLAGS,
 # so user-supplied flags can never drop it and silently build for the host.
 set(CMAKE_C_COMPILER "zig;cc;-target;${ZIG_TARGET}" CACHE STRING "C Compiler" FORCE)
@@ -27,10 +34,9 @@ function(dino_zig_tool name)
         file(WRITE "${tool}" "@zig ${name} %*\r\n")
     else()
         set(tool "${dir}/${name}")
-        # file(COPY) is the only pre-3.19 way to set the executable bit.
-        file(WRITE "${dir}/src/${name}" "#!/bin/sh\nexec zig ${name} \"$@\"\n")
-        file(COPY "${dir}/src/${name}" DESTINATION "${dir}"
-            FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
+        file(WRITE "${tool}" "#!/bin/sh\nexec zig ${name} \"$@\"\n")
+        file(CHMOD "${tool}"
+            PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
                 WORLD_READ WORLD_EXECUTE)
     endif()
     string(TOUPPER "${name}" var)
