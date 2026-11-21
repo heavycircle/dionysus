@@ -198,6 +198,18 @@ case_strict_c() {
     grep -q 'std=c11 .*mutex_posix\.c' out
 }
 
+# The project's warning flags and -Werror don't reach the SDK's sources, which
+# have their own set; DINO_SDK_WERROR makes that set fatal.
+case_sdk_warnings() {
+    project sdk_warnings
+    CFLAGS='-Wall -Wextra -Wpedantic -Wconversion -Wshadow -Wcast-qual -Werror' \
+        dino test -v >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'warning:' out || { grep 'warning:' out; return 1; }
+    dino clean >/dev/null
+    dino build -v -- -DDINO_SDK_WERROR=ON >out 2>&1 || { cat out; return 1; }
+    grep -q -- '-Wno-everything -Wall -Wextra -Werror .*mutex_posix\.c' out
+}
+
 # A program that exits 7 after its first SIGINT or SIGTERM, and reports how
 # many arrived.
 signal_program() {

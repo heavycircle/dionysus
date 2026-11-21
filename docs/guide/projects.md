@@ -134,6 +134,11 @@ The SDK is compiled as part of the project, with the project's `CFLAGS` and CMak
   `CMAKE_C_STANDARD 11` with `CMAKE_C_EXTENSIONS OFF`). The SDK asks for the POSIX declarations it
   needs itself. Set before `project()`, `CMAKE_C_STANDARD` applies to the SDK too; set after it,
   only to the project's own targets, since `project()` is where dino adds the SDK.
+- **Warnings:** the project's warning flags don't apply to the SDK's own sources, which build with
+  `-Wall -Wextra` of their own and never fail the build, so `CFLAGS="-Wconversion -Werror"` checks
+  the project's code without tripping over the SDK's. The SDK's headers are compiled with the
+  project's flags, and are checked to be warning-free with `-Wpedantic`, `-Wconversion`, `-Wshadow`,
+  `-Wcast-qual` and `-Wstrict-prototypes`.
 
 ## SDK options
 

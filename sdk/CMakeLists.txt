@@ -47,11 +47,6 @@ foreach(module ${DINO_PLATFORM_MODULES})
     target_sources(dino_core PRIVATE "src/core/${module}_${DINO_PLATFORM}.c")
 endforeach()
 
-# The POSIX halves need more than ISO C declares (clock_gettime, pthread mutex
-# types, pipe2, accept4, gettid, ...), also when the project builds with
-# -std=c11 or CMAKE_C_EXTENSIONS OFF.
-target_compile_definitions(dino_core PRIVATE _GNU_SOURCE)
-
 configure_file(cmake/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/include/dino/version.h" @ONLY)
 target_include_directories(dino_core PUBLIC include "${CMAKE_CURRENT_BINARY_DIR}/include")
 
@@ -84,7 +79,6 @@ add_library(dino_util STATIC
     src/util/logging.c
 )
 target_link_libraries(dino_util PUBLIC dino_core)
-target_compile_definitions(dino_util PRIVATE _GNU_SOURCE)
 
 # Used by dino_test() (cmake/Dino.cmake). testing/utest.h is sheredom/utest.h at
 # fc4715da3b3e3bfa936cf69850f2cfe969ed85b7, unmodified (public domain).
@@ -96,8 +90,34 @@ target_link_libraries(dino_testing INTERFACE dino_util)
 # lld-link, and the Windows CRT allocates inside a DLL anyway.
 option(DINO_NO_LEAK_CHECK "Don't link the allocation counter into dino_test() executables" OFF)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DINO_NO_LEAK_CHECK)
-    target_sources(dino_testing INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/testing/leakcheck.c")
+    # An object library rather than an INTERFACE source, so it builds here with
+    # the SDK's warnings instead of with each test's.
+    add_library(dino_leakcheck OBJECT testing/leakcheck.c)
+    target_sources(dino_testing INTERFACE $<TARGET_OBJECTS:dino_leakcheck>)
     target_link_options(dino_testing INTERFACE
         "LINKER:--wrap=malloc,--wrap=calloc,--wrap=realloc,--wrap=free"
         "LINKER:--wrap=aligned_alloc,--wrap=posix_memalign")
 endif()
+
+# The SDK's own sources are compiled with the project's flags (CFLAGS, and
+# CMAKE_C_STANDARD or add_compile_options() set before project()), so they
+# don't rely on them:
+# - _GNU_SOURCE: the POSIX halves need more than ISO C declares (clock_gettime,
+#   pthread mutex types, pipe2, accept4, gettid, ...), also under -std=c11.
+# - -Wno-everything drops the warnings the project enabled, so its
+#   -Wconversion -Werror never fails on SDK code, and the SDK keeps its own
+#   -Wall -Wextra, never fatal unless DINO_SDK_WERROR is set (sdk/tests sets it,
+#   so CI fails on them).
+option(DINO_SDK_WERROR "Make warnings in the SDK's own sources errors (for SDK development)" OFF)
+set(dino_sdk_warnings -Wno-everything -Wall -Wextra)
+if(DINO_SDK_WERROR)
+    list(APPEND dino_sdk_warnings -Werror)
+else()
+    list(APPEND dino_sdk_warnings -Wno-error)
+endif()
+foreach(target dino_core dino_util dino_leakcheck)
+    if(TARGET ${target})
+        target_compile_definitions(${target} PRIVATE _GNU_SOURCE)
+        target_compile_options(${target} PRIVATE ${dino_sdk_warnings})
+    endif()
+endforeach()
