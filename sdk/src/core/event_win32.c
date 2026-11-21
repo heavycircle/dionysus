@@ -39,6 +39,13 @@
 #ifndef STATUS_CANCELLED
 #define STATUS_CANCELLED ((NTSTATUS)0xC0000120L)
 #endif
+// What a poll of a closed socket fails with: STATUS_INVALID_HANDLE, or
+// STATUS_OBJECT_TYPE_MISMATCH when the handle value already names something
+// else (wine gives the second for any closed socket). Both are Win32's
+// ERROR_INVALID_HANDLE. Spelled out because <winnt.h> has them as DWORDs,
+// which don't compare with an NTSTATUS.
+#define STATUS_HANDLE_GONE     ((NTSTATUS)0xC0000008L)
+#define STATUS_HANDLE_NOT_THIS ((NTSTATUS)0xC0000024L)
 
 #define SIO_BASE_HANDLE_     0x48000022
 #define SIO_BSP_HANDLE_POLL_ 0x4800001D
@@ -249,8 +256,10 @@ static VOID CALLBACK process_ended(PVOID context, BOOLEAN timed_out)
 {
     (void)timed_out;
     struct item *s = context;
-    InterlockedExchange(&s->fired, 1);
-    PostQueuedCompletionStatus(s->port, 0, 0, &s->io.ov);
+    // Only a packet that is really in the port: release() and destroy wait
+    // for one whenever fired is set.
+    if (PostQueuedCompletionStatus(s->port, 0, 0, &s->io.ov))
+        InterlockedExchange(&s->fired, 1);
 }
 
 // Once only: the exit is reported once, and the item is never rearmed.
@@ -265,6 +274,10 @@ static int submit_process(struct dino_event_loop *loop, struct item *s)
     return 0;
 }
 
+// What submit returns for a socket that was closed without a del.
+#define GONE (-2)
+
+// 0 when a poll, read or wait is now in flight for s, GONE, or -1.
 static int submit(struct dino_event_loop *loop, struct item *s)
 {
     if (s->kind == KIND_PIPE)
@@ -284,6 +297,8 @@ static int submit(struct dino_event_loop *loop, struct item *s)
             &s->io.afd.info, sizeof(s->io.afd.info), &s->io.afd.info, sizeof(s->io.afd.info));
     // Success right away still posts a completion: the AFD handle doesn't skip
     // the port on success.
+    if (st == STATUS_HANDLE_GONE || st == STATUS_HANDLE_NOT_THIS)
+        return GONE;
     if (st != STATUS_PENDING && st != 0)
         return -1;
     s->polled  = mask;
@@ -407,6 +422,27 @@ dino_event_loop_t dino_event_loop_create(void)
     return (dino_event_loop_t)loop;
 }
 
+// A socket that was closed without a del. epoll forgets a closed descriptor
+// without a word, so do the same: reporting it would hand back a userdata
+// that is usually freed by now, and keeping it would make the next socket with
+// the same handle value "already added". Nothing is in flight for s.
+static void forget(struct dino_event_loop *loop, struct item *s)
+{
+    remove_slot(loop, s);
+    unqueue(loop, s);
+    free(s);
+}
+
+// Polls s again after a completion that had nothing to report. Returns the
+// event to report in its place: none, or an error if it can't be polled.
+static uint32_t resubmit(struct dino_event_loop *loop, struct item *s)
+{
+    int rc = submit(loop, s);
+    if (rc == GONE)
+        forget(loop, s);
+    return rc == -1 ? DINO_EVENT_ERROR | DINO_EVENT_HANGUP : 0;
+}
+
 // A completion for s: returns its event, or 0 when there is nothing to report.
 // Called with the lock held.
 static uint32_t complete(struct dino_event_loop *loop, struct item *s)
@@ -425,9 +461,11 @@ static uint32_t complete(struct dino_event_loop *loop, struct item *s)
     NTSTATUS status = s->io.afd.iosb.Status;
     if (status == STATUS_CANCELLED
         || (s->kind == KIND_SOCKET && s->io.afd.info.NumberOfHandles < 1))
+        return resubmit(loop, s);
+    if (s->kind == KIND_SOCKET && status == 0
+        && (s->io.afd.info.Handles[0].Events & AFD_POLL_LOCAL_CLOSE))
     {
-        if (submit(loop, s) != 0)
-            return DINO_EVENT_ERROR | DINO_EVENT_HANGUP;
+        forget(loop, s);
         return 0;
     }
     uint32_t events = DINO_EVENT_ERROR;
@@ -440,11 +478,7 @@ static uint32_t complete(struct dino_event_loop *loop, struct item *s)
     events &= (s->events & (DINO_EVENT_READ | DINO_EVENT_WRITE)) | DINO_EVENT_ERROR
         | DINO_EVENT_HANGUP;
     if (!events)
-    {
-        if (submit(loop, s) != 0)
-            return DINO_EVENT_ERROR | DINO_EVENT_HANGUP;
-        return 0;
-    }
+        return resubmit(loop, s);
     if (!(s->events & DINO_EVENT_ONESHOT))
         enqueue(loop, s);
     return events;
@@ -525,7 +559,7 @@ static int add_item(struct dino_event_loop *loop, enum kind kind, uintptr_t key,
     int rc = -1;
     if (!find(loop, key, kind) && insert(loop, s) == 0)
     {
-        rc = submit(loop, s);
+        rc = submit(loop, s) == 0 ? 0 : -1;
         if (rc != 0)
             remove_slot(loop, s);
     }
@@ -543,14 +577,26 @@ static int mod_item(
     int          rc = -1;
     if (s)
     {
-        s->events   = events;
-        s->userdata = userdata;
-        rc          = 0;
+        uint32_t old_events   = s->events;
+        void    *old_userdata = s->userdata;
+        int      was_queued   = s->queued;
+        s->events             = events;
+        s->userdata           = userdata;
+        rc                    = 0;
         unqueue(loop, s);
         if (!s->pending)
-            rc = submit(loop, s);
+            rc = submit(loop, s) == 0 ? 0 : -1;
         else if (kind == KIND_SOCKET && s->polled != to_afd(events))
             cancel(loop, s); // its completion resubmits with the new mask
+        // A failed mod changes nothing, as with epoll: the item keeps its old
+        // interest and userdata and is polled again by the next wait.
+        if (rc != 0)
+        {
+            s->events   = old_events;
+            s->userdata = old_userdata;
+            if (was_queued)
+                enqueue(loop, s);
+        }
     }
     ReleaseSRWLockExclusive(&loop->lock);
     return rc;
@@ -630,7 +676,12 @@ static int flush_queue(struct dino_event_loop *loop, dino_event_t *out, int max)
         s->queued      = 0;
         if (s->pending)
             continue;
-        if (submit(loop, s) != 0)
+        int rc = submit(loop, s);
+        if (rc == GONE)
+        {
+            forget(loop, s);
+        }
+        else if (rc != 0)
         {
             out[n].events   = DINO_EVENT_ERROR | DINO_EVENT_HANGUP;
             out[n].userdata = s->userdata;
@@ -668,8 +719,10 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
             if (!GetQueuedCompletionStatusEx(
                     loop->port, e, (ULONG)cap, &got, wait < 0 ? INFINITE : (DWORD)wait, FALSE))
             {
+                // Timers already collected are out of the heap: report them
+                // rather than lose them with the error.
                 if (GetLastError() != WAIT_TIMEOUT)
-                    return -1;
+                    return n > 0 ? n : -1;
                 got = 0;
             }
         }

@@ -10,11 +10,12 @@
 
 struct dino__event_timer
 {
-    uint64_t                  deadline_ns;
-    uint64_t                  interval_ns;
-    void                     *userdata;
-    size_t                    index; // in the heap, or NOT_IN_HEAP once a one-shot fired
-    struct dino__event_timer *prev, *next;
+    uint64_t                   deadline_ns;
+    uint64_t                   interval_ns;
+    void                      *userdata;
+    size_t                     index; // in the heap, or NOT_IN_HEAP once a one-shot fired
+    struct dino__event_timers *owner; // deleting through another loop would corrupt both
+    struct dino__event_timer  *prev, *next;
 };
 
 int dino__event_timers_init(struct dino__event_timers *t)
@@ -112,6 +113,7 @@ dino_event_timer_t dino_event_timer_add(
     tm->deadline_ns = dino_time_monotonic_ns() + (uint64_t)delay_ms * 1000000;
     tm->interval_ns = (uint64_t)interval_ms * 1000000;
     tm->userdata    = userdata;
+    tm->owner       = t;
 
     dino_mutex_lock(t->lock);
     int ok = push(t, tm) == 0;
@@ -142,6 +144,8 @@ int dino_event_timer_del(dino_event_loop_t loop, dino_event_timer_t timer)
         return -1;
     struct dino__event_timers *t  = (struct dino__event_timers *)loop;
     struct dino__event_timer  *tm = (struct dino__event_timer *)timer;
+    if (tm->owner != t)
+        return -1;
     dino_mutex_lock(t->lock);
     if (tm->index != NOT_IN_HEAP)
         remove_at(t, tm->index);
