@@ -165,25 +165,47 @@ static int is_relative_path(const char *path)
     return !(path[0] && path[1] == ':');
 }
 
+// The full path of dir\name if that is a file, or NULL.
+static wchar_t *file_at(const wchar_t *dir, const wchar_t *name, const wchar_t *extension)
+{
+    size_t   len    = wcslen(dir) + 1 + wcslen(name) + wcslen(extension) + 1;
+    wchar_t *joined = malloc(len * sizeof(wchar_t));
+    if (!joined)
+        return NULL;
+    wcscpy(joined, dir);
+    wcscat(joined, L"\\");
+    wcscat(joined, name);
+    wcscat(joined, extension);
+
+    // Also resolves "." and "..", turns / into \, and makes a relative dir
+    // absolute from the parent's directory, as the child's cwd will be.
+    wchar_t *full = NULL;
+    DWORD    need = GetFullPathNameW(joined, 0, NULL, NULL);
+    if (need)
+        full = malloc(need * sizeof(wchar_t));
+    DWORD attributes = INVALID_FILE_ATTRIBUTES;
+    if (full && GetFullPathNameW(joined, need, full, NULL) < need)
+        attributes = GetFileAttributesW(full);
+    free(joined);
+    if (attributes == INVALID_FILE_ATTRIBUTES || (attributes & FILE_ATTRIBUTE_DIRECTORY))
+    {
+        free(full);
+        return NULL;
+    }
+    return full;
+}
+
+// A relative program path as the child's working directory sees it: as given,
+// or with .exe added. Not SearchPathW: for a name that starts with ".\" or
+// "..\" it ignores the directory it is given and looks from the parent's.
 static wchar_t *find_in(const wchar_t *dir, const char *program)
 {
     wchar_t *name = widen(program, -1);
     if (!name)
         return NULL;
-    for (wchar_t *c = name; *c; c++)
-        if (*c == L'/')
-            *c = L'\\';
-    wchar_t *found = NULL;
-    DWORD    len   = SearchPathW(dir, name, L".exe", 0, NULL, NULL);
-    if (len)
-    {
-        found = malloc(len * sizeof(wchar_t));
-        if (found && SearchPathW(dir, name, L".exe", len, found, NULL) == 0)
-        {
-            free(found);
-            found = NULL;
-        }
-    }
+    wchar_t *found = file_at(dir, name, L"");
+    if (!found)
+        found = file_at(dir, name, L".exe");
     free(name);
     return found;
 }

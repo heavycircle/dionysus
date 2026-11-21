@@ -60,7 +60,9 @@ typedef struct
  * found from opts->cwd when that is set, on Windows too, where .exe is added.
  * The arguments reach the child exactly as given: on Windows they are quoted
  * by the MSVCRT rules that the child's C runtime uses to split them again.
- * All strings are UTF-8.
+ * A Windows program that reads its command line itself sees that quoting.
+ * cmd.exe is one: it doesn't know \", so { "cmd.exe", "/c", command } only
+ * works for a command without a " in it. All strings are UTF-8.
  *
  * A Windows .bat or .cmd file runs under cmd.exe, which splits its command
  * line by different rules. Each argument is quoted so that cmd.exe operators
@@ -96,6 +98,13 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
  * Every spawned process must be waited for exactly once; on POSIX it stays a
  * zombie until then.
  *
+ * On POSIX the exit status goes to whoever asks first. The program must not
+ * ignore SIGCHLD (SIG_IGN or SA_NOCLDWAIT), and nothing else in it may wait
+ * for the child (wait(), waitpid(-1, ...)): the kernel or that code then takes
+ * the status, and every wait here, dino_process_run included, fails with -1
+ * although the child ran. The child's process ID is then free to be reused,
+ * so don't call dino_process_kill on the handle after that.
+ *
  * @param  process    Handle from dino_process_spawn.
  * @param  exit_code  Receives how it ended: its exit code; 128 + the signal
  *                    number if a signal ended it (POSIX); DINO_EXIT_KILLED
@@ -108,6 +117,10 @@ int dino_process_wait(dino_process_t process, int *exit_code);
  * End a process immediately (SIGKILL / TerminateProcess). It can't clean up.
  * Still wait for it afterwards. A process that already exited is left as it
  * was, keeping its own exit code.
+ *
+ * Only this one process ends. What it started keeps running: the programs a
+ * shell script runs, and for a Windows .bat or .cmd file, where the process
+ * is the cmd.exe that runs it, everything the script started.
  *
  * @param  process  Handle from dino_process_spawn, not yet waited for.
  * @return 0 on success (including when it had already exited), -1 on error.
@@ -147,7 +160,8 @@ typedef struct
     const void *input;
     size_t      input_len;
     /** Give up after this many milliseconds, killing the child if it is still
-     *  running; 0 waits forever. */
+     *  running; 0 waits forever. As with dino_process_kill, what the child
+     *  started is not killed. */
     int timeout_ms;
 } dino_process_run_opts_t;
 

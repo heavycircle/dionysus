@@ -241,6 +241,37 @@ UTEST(process, relative_program_is_found_from_cwd)
     EXPECT_STREQ(expected, out);
 }
 
+#ifdef _WIN32
+// "./tool" with a cwd is the documented example. The parent stands somewhere
+// else here, so looking from the parent's own directory can't find it, which
+// is what Windows' own search does with a name that starts with a dot.
+UTEST(process, dot_relative_program_is_found_from_cwd)
+{
+    char dir[1024], prog[1024], here[1024], elsewhere[1024];
+    snprintf(dir, sizeof(dir), "%s", self_path);
+    char *file = strrchr(dir, '\\');
+    ASSERT_TRUE(file != NULL);
+    *file++ = '\0';
+    snprintf(prog, sizeof(prog), "./%s", file);
+    char *ext = strrchr(prog, '.');
+    if (ext && ext != prog)
+        *ext = '\0';
+    ASSERT_NE(0u, GetCurrentDirectoryA(sizeof(here), here));
+    ASSERT_NE(0u, GetTempPathA(sizeof(elsewhere), elsewhere));
+
+    char *const               argv[] = { prog, "--child-echo", "ok", NULL };
+    dino_process_spawn_opts_t opts   = { 0 };
+    opts.cwd                         = dir;
+    char out[256]                    = "";
+    ASSERT_TRUE(SetCurrentDirectoryA(elsewhere));
+    int rc = run(argv, &opts, out, sizeof(out));
+    SetCurrentDirectoryA(here);
+
+    EXPECT_EQ(0, rc);
+    EXPECT_STREQ("[ok]\n", out);
+}
+#endif
+
 UTEST(process, environment_replaces_the_parents)
 {
 #ifdef _WIN32
