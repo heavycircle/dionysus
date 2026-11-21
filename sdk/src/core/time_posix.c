@@ -26,7 +26,8 @@ void dino__sleep_ns(uint64_t ns)
 {
     if (ns == 0)
         return;
-    uint64_t deadline = dino_time_monotonic_ns() + ns;
+    uint64_t now      = dino_time_monotonic_ns();
+    uint64_t deadline = ns > UINT64_MAX - now ? UINT64_MAX : now + ns;
 
     struct timespec ts;
     ts.tv_sec  = (time_t)(deadline / NS_PER_S);

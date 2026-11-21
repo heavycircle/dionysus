@@ -13,3 +13,5 @@ foreach(test ${tests})
 endforeach()
 
 set_tests_properties(test_logging_env PROPERTIES ENVIRONMENT DINO_LOG=WaRn)
+# Its sleeping threads are still running, holding their handles, at exit.
+set_tests_properties(test_sleep_forever PROPERTIES ENVIRONMENT DINO_LEAK_CHECK=0)
