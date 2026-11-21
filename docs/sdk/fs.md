@@ -54,10 +54,12 @@ become descriptors 0, 1 and 2, and a later `printf` writes into one of them.
 
 `dino_fs_init()` points any of the three that are closed at `/dev/null` and leaves open ones alone.
 It's already run before `main()` in every program that links `dino_core` (see [runtime](runtime.md)),
-so you only call it yourself if you build with `DINO_NO_AUTO_RUNTIME`.
+so you only call it yourself if you build with `DINO_NO_AUTO_RUNTIME`, or to find out whether it worked: the run before `main()` has nowhere to report a failure.
 
-| Function         | Does                                                                    | Returns                                     |
-| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------- |
-| `dino_fs_init()` | Point closed stdio descriptors at `/dev/null`. Does nothing on Windows. | `0`, `-1` if `/dev/null` couldn't be opened |
+If `/dev/null` can't be opened (the kernel started the program before `/dev` existed, or it runs in a chroot without one), the closed descriptors are opened on `/` instead. Reads and writes on them fail, but they are taken, so the program's own files still can't become stdin, stdout or stderr. `dino_fs_init()` returns `-1` in that case.
+
+| Function         | Does                                                                    | Returns                                                                              |
+| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `dino_fs_init()` | Point closed stdio descriptors at `/dev/null`. Does nothing on Windows. | `0`, `-1` if `/dev/null` couldn't be opened (the descriptors are then opened on `/`) |
 
 See also: [`examples/fs_example`](../../examples/fs_example/main.c).

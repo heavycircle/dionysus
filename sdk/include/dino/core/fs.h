@@ -30,6 +30,10 @@ int dino_file_size(const char *path, uint64_t *size);
  * writes to stdout or stderr would land in them. Descriptors that are already
  * open are left alone. No-op on Windows.
  *
+ * If /dev/null can't be opened, the closed descriptors are opened on "/"
+ * instead: reads and writes on them fail, but the program's own files still
+ * can't take their place.
+ *
  * @return 0 on success, -1 if /dev/null could not be opened.
  */
 int dino_fs_init(void);

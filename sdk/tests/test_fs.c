@@ -12,6 +12,7 @@
 #else
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -182,5 +183,76 @@ UTEST(fs_init, keeps_stdio_open_and_is_repeatable)
         EXPECT_NE(-1, fcntl(fd, F_GETFD));
 #endif
 }
+
+#ifndef _WIN32
+// The descriptor a program started without stdio would be missing. The saved
+// copy puts it back, so the rest of the run still has its stdin and stderr;
+// it is kept clear of 0-2, where a plain dup() would put it.
+static int close_keeping_a_copy(int fd)
+{
+    int saved = fcntl(fd, F_DUPFD, 10);
+    DINO_PLATFORM_CALL(close(fd));
+    return saved;
+}
+
+static void restore(int fd, int saved)
+{
+    DINO_PLATFORM_CALL(dup2(saved, fd));
+    DINO_PLATFORM_CALL(close(saved));
+}
+
+static int is_dev_null(int fd)
+{
+    struct stat st, null;
+    return fstat(fd, &st) == 0 && stat("/dev/null", &null) == 0 && S_ISCHR(st.st_mode)
+        && st.st_rdev == null.st_rdev;
+}
+
+UTEST(fs_init, points_closed_stdio_at_dev_null_and_leaves_open_stdio_alone)
+{
+    struct stat out_before, out_after;
+    ASSERT_EQ(0, fstat(1, &out_before));
+    int in  = close_keeping_a_copy(0);
+    int err = close_keeping_a_copy(2);
+    ASSERT_NE(-1, in);
+    ASSERT_NE(-1, err);
+    ASSERT_EQ(-1, fcntl(0, F_GETFD));
+    ASSERT_EQ(-1, fcntl(2, F_GETFD));
+
+    int rc           = dino_fs_init();
+    int in_is_null   = is_dev_null(0);
+    int err_is_null  = is_dev_null(2);
+    int out_is_there = fstat(1, &out_after);
+    restore(0, in);
+    restore(2, err);
+
+    EXPECT_EQ(0, rc);
+    EXPECT_TRUE(in_is_null);
+    EXPECT_TRUE(err_is_null);
+    ASSERT_EQ(0, out_is_there);
+    EXPECT_TRUE(out_before.st_dev == out_after.st_dev && out_before.st_ino == out_after.st_ino);
+}
+
+// Internal: dino_fs_init with the device to use.
+int dino__fs_init_with(const char *null_device);
+
+// No /dev/null (early boot, a bare chroot): the descriptor is still taken, so
+// the program's next file can't become stdin, but nothing can be read from it.
+UTEST(fs_init, without_dev_null_the_descriptor_is_still_taken)
+{
+    int in = close_keeping_a_copy(0);
+    ASSERT_NE(-1, in);
+
+    int     rc    = dino__fs_init_with("/dino_test_no_such_directory/null");
+    int     taken = fcntl(0, F_GETFD);
+    char    byte;
+    ssize_t got = DINO_PLATFORM_CALL(read(0, &byte, 1));
+    restore(0, in);
+
+    EXPECT_EQ(-1, rc);
+    EXPECT_NE(-1, taken);
+    EXPECT_EQ(-1, got);
+}
+#endif
 
 UTEST_MAIN()
