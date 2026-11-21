@@ -55,6 +55,15 @@ UTEST(pipe, wait_times_out_on_an_empty_pipe_and_sees_data)
     EXPECT_EQ(DINO_TIMEOUT, dino_pipe_wait(r, 50));
     EXPECT_GE((dino_time_monotonic_ns() - start) / 1000000, 50u);
 
+    // Never early, not even by the part of a scheduler tick that Windows'
+    // own waits can be short. Short waits make that easy to see.
+    for (int i = 0; i < 40; i++)
+    {
+        start = dino_time_monotonic_ns();
+        ASSERT_EQ(DINO_TIMEOUT, dino_pipe_wait(r, 3));
+        ASSERT_GE(dino_time_monotonic_ns() - start, 3u * 1000000u);
+    }
+
     EXPECT_EQ(1, dino_pipe_write(w, "x", 1));
     EXPECT_EQ(0, dino_pipe_wait(r, 0));
     EXPECT_EQ(0, dino_pipe_wait(r, -1));
