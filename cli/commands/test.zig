@@ -22,6 +22,8 @@ pub const usage =
     \\                        catches invalid reads/writes and use of uninitialized
     \\                        memory as well as leaks
     \\    -R <regex>          Only run tests whose name matches <regex>
+    \\    --timeout <seconds> Stop a test that runs longer and fail it (default: 120).
+    \\                        A test's own TIMEOUT property in CMake takes precedence
     \\    --debug             Debug build (CMAKE_BUILD_TYPE=Debug)
     \\    --release           Release build (default)
     \\    -j, --jobs <n>      Parallel compile and test jobs (default: CPU count)
@@ -34,6 +36,9 @@ pub const usage =
     \\
 ;
 
+/// ctest's own default is 1500 s, which a hang costs once per target.
+const default_timeout_s = 120;
+
 pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     var args: Args = .{ .items = raw };
     var opts: build.Options = .{};
@@ -41,6 +46,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     var all = false;
     var memcheck = false;
     var filter: ?[]const u8 = null;
+    var timeout_s: u32 = default_timeout_s;
     var ctest_args: []const []const u8 = &.{};
     while (args.next()) |arg| {
         if (Args.isHelp(arg)) {
@@ -54,6 +60,9 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
             memcheck = true;
         } else if (try args.value(ctx, arg, &.{"-R"})) |v| {
             filter = v;
+        } else if (try args.value(ctx, arg, &.{"--timeout"})) |v| {
+            timeout_s = std.fmt.parseInt(u32, v, 10) catch 0;
+            if (timeout_s == 0) return ctx.usage("invalid timeout '{s}'", .{v});
         } else if (try build.parseCommon(ctx, &args, arg, &opts)) {
             continue;
         } else if (std.mem.startsWith(u8, arg, "-")) {
@@ -90,7 +99,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         if (ctx.interrupted != null) break;
         if (r.ok) {
             ctx.step("testing {s}", .{r.cfg.target.name});
-            ok.* = try ctest(ctx, r.cfg.build_dir, r.cfg.target, opts, filter, ctest_args);
+            ok.* = try ctest(ctx, r.cfg.build_dir, r.cfg.target, opts, filter, timeout_s, ctest_args);
         }
         if (!ok.*) failed += 1;
     }
@@ -122,12 +131,15 @@ fn ctest(
     t: Target,
     opts: build.Options,
     filter: ?[]const u8,
+    timeout_s: u32,
     extra: []const []const u8,
 ) Ctx.Error!bool {
     const jobs = opts.run.jobs orelse @as(u32, @intCast(std.Thread.getCpuCount() catch 1));
     var argv: std.ArrayList([]const u8) = .empty;
     argv.appendSlice(ctx.arena, &.{ "ctest", "--output-on-failure", "--no-tests=error", "-j", ctx.sprint("{d}", .{jobs}) }) catch @panic("OOM");
     if (filter) |f| argv.appendSlice(ctx.arena, &.{ "-R", f }) catch @panic("OOM");
+    // Before `extra`: ctest takes the last --timeout, so one after `--` still wins.
+    argv.appendSlice(ctx.arena, &.{ "--timeout", ctx.sprint("{d}", .{timeout_s}) }) catch @panic("OOM");
     argv.appendSlice(ctx.arena, extra) catch @panic("OOM");
     const env = if (targets.runnerFor(t) == .wine) try run.quietWine(ctx) else null;
     return try ctx.exec(argv.items, .{ .cwd = build_dir, .env = env }) == 0;
