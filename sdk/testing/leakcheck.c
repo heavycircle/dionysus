@@ -1,5 +1,5 @@
 // Linked into dino_test() executables on Linux targets together with
-// -Wl,--wrap=malloc,calloc,realloc,free,aligned_alloc,posix_memalign (see
+// -Wl,--wrap for the allocation and environment calls below (see
 // sdk/CMakeLists.txt). libc is linked statically, so its own allocations
 // (strdup, fopen, ...) go through these wrappers too. A test fails if anything
 // is still allocated when the process exits. DINO_LEAK_CHECK=0 disables it.
@@ -14,12 +14,21 @@ void *__real_realloc(void *ptr, size_t size);
 void  __real_free(void *ptr);
 void *__real_aligned_alloc(size_t alignment, size_t size);
 int   __real_posix_memalign(void **out, size_t alignment, size_t size);
+int   __real_setenv(const char *name, const char *value, int overwrite);
+int   __real_unsetenv(const char *name);
+int   __real_putenv(char *string);
+int   __real_clearenv(void);
 
 static long g_live;
+// Nonzero inside the environment calls: libc keeps the strings and the environ
+// array they allocate for the life of the process, so neither those
+// allocations nor the frees that replace them are counted.
+static __thread int g_untracked;
 
 static void count(long delta)
 {
-    __atomic_add_fetch(&g_live, delta, __ATOMIC_RELAXED);
+    if (!g_untracked)
+        __atomic_add_fetch(&g_live, delta, __ATOMIC_RELAXED);
 }
 
 void *__wrap_malloc(size_t size)
@@ -72,6 +81,38 @@ int __wrap_posix_memalign(void **out, size_t alignment, size_t size)
     return rc;
 }
 
+int __wrap_setenv(const char *name, const char *value, int overwrite)
+{
+    g_untracked++;
+    int rc = __real_setenv(name, value, overwrite);
+    g_untracked--;
+    return rc;
+}
+
+int __wrap_unsetenv(const char *name)
+{
+    g_untracked++;
+    int rc = __real_unsetenv(name);
+    g_untracked--;
+    return rc;
+}
+
+int __wrap_putenv(char *string)
+{
+    g_untracked++;
+    int rc = __real_putenv(string);
+    g_untracked--;
+    return rc;
+}
+
+int __wrap_clearenv(void)
+{
+    g_untracked++;
+    int rc = __real_clearenv();
+    g_untracked--;
+    return rc;
+}
+
 // musl's exit() runs the atexit list first, C++ static destructors included,
 // then destructors like this one, lowest priority last: anything freed by the
 // program's own cleanup is freed by now. An atexit handler would run before
@@ -92,4 +133,3 @@ __attribute__((destructor(101))) static void report(void)
     if (live < 0)
         fprintf(stderr, "dino leak check: %ld more frees than allocations\n", -live);
 }
-

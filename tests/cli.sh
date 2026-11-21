@@ -269,6 +269,38 @@ CPP
     grep -q 'dino leak check: .* still live at exit' out
 }
 
+# libc keeps what setenv and friends allocate for the environment; that isn't
+# reported, a real leak in the same test is.
+case_leak_check_setenv() {
+    project leak_setenv
+    cat >tests/test_main.c <<'C'
+#include <stdlib.h>
+#include <utest.h>
+
+static char entry[] = "DINO_PUT=1";
+
+UTEST(env, kept)
+{
+    ASSERT_EQ(setenv("DINO_A", "1", 1), 0);
+    ASSERT_EQ(setenv("DINO_A", "a longer value", 1), 0);
+    ASSERT_EQ(setenv("DINO_B", "2", 0), 0);
+    ASSERT_EQ(putenv(entry), 0);
+    ASSERT_EQ(unsetenv("DINO_B"), 0);
+    if (getenv("LEAK"))
+    {
+        void *volatile p = malloc(16);
+        (void)p;
+    }
+}
+
+UTEST_MAIN()
+C
+    dino test >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'more frees' out || { cat out; return 1; }
+    LEAK=1 dino test >out 2>&1 && return 1
+    grep -q 'dino leak check: 1 allocation(s) still live at exit' out
+}
+
 # A program that exits 7 after its first SIGINT or SIGTERM, and reports how
 # many arrived.
 signal_program() {
