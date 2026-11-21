@@ -5,6 +5,7 @@ dino test                  # build and run the tests for this machine
 dino test arm64 win64      # under qemu and wine
 dino test --all            # every target
 dino test -R network       # only tests whose name matches a regex
+dino test --timeout 600    # give each test executable ten minutes
 dino test --memcheck       # under valgrind
 ```
 
@@ -82,6 +83,12 @@ Keep the program's logic in a library that both the program and the tests link, 
 - **In parallel:** test executables run in parallel (`-j`, default: the number of CPUs). Tests that
   open sockets should each use their own ports.
 - **Filtering:** `-R <regex>` runs only the test executables whose names match.
+- **Timeouts:** a test executable that runs longer than 120 seconds is stopped and fails as `Timeout`. Its output ends with the `[ RUN ]` line of the case that was running, since test executables write to stdout unbuffered. `--timeout <seconds>` changes the limit for one run; for a test that is always slow, set it in `CMakeLists.txt`, which takes precedence over `--timeout`:
+
+  ```cmake
+  set_tests_properties(test_import PROPERTIES TIMEOUT 600)
+  ```
+
 - **ctest arguments:** anything after `--` goes to `ctest`, e.g.
   `dino test -- --repeat until-fail:20` to hunt a flaky test, or `dino test -- --output-on-failure`.
 - **Exit code:** non-zero if any test failed on any target, with a summary per target at the end.

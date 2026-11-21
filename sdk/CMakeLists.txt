@@ -86,12 +86,14 @@ add_library(dino_testing INTERFACE)
 # SYSTEM: utest.h's own warnings and clang-tidy findings stay out of test code.
 target_include_directories(dino_testing SYSTEM INTERFACE testing)
 target_link_libraries(dino_testing INTERFACE dino_util)
+# Object libraries rather than INTERFACE sources, so they build here with the
+# SDK's warnings instead of with each test's.
+add_library(dino_test_output OBJECT testing/unbuffered.c)
+target_sources(dino_testing INTERFACE $<TARGET_OBJECTS:dino_test_output>)
 # --wrap needs the static libc of the Linux targets: zig cc doesn't pass it to
 # lld-link, and the Windows CRT allocates inside a DLL anyway.
 option(DINO_NO_LEAK_CHECK "Don't link the allocation counter into dino_test() executables" OFF)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DINO_NO_LEAK_CHECK)
-    # An object library rather than an INTERFACE source, so it builds here with
-    # the SDK's warnings instead of with each test's.
     add_library(dino_leakcheck OBJECT testing/leakcheck.c)
     target_sources(dino_testing INTERFACE $<TARGET_OBJECTS:dino_leakcheck>)
     target_link_options(dino_testing INTERFACE
@@ -116,7 +118,7 @@ if(DINO_SDK_WERROR)
 else()
     list(APPEND dino_sdk_warnings -Wno-error)
 endif()
-foreach(target dino_core dino_util dino_leakcheck)
+foreach(target dino_core dino_util dino_test_output dino_leakcheck)
     if(TARGET ${target})
         target_compile_definitions(${target} PRIVATE _GNU_SOURCE)
         target_compile_options(${target} PRIVATE ${dino_sdk_warnings})
