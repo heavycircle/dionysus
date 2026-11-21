@@ -8,6 +8,13 @@ on:
     branches: [main, "release-*"]
   push:
     branches: [main, "release-*"]
+  # release.yml runs all of this on the tagged commit before publishing anything.
+  workflow_call:
+    inputs:
+      ref:
+        description: What to check out; empty means the commit that started the run
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -22,6 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.ref }}
           fetch-depth: 0
       - uses: ./.github/actions/setup-zig
       - uses: astral-sh/setup-uv@v6
@@ -55,6 +63,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
+          ref: ${{ inputs.ref }}
           # build.zig derives the version from `git describe`.
           fetch-depth: 0
       - uses: ./.github/actions/setup-zig
@@ -74,6 +83,8 @@ jobs:
     name: targets (${{ matrix.target }})
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
       - uses: docker/setup-buildx-action@v3
 
       # The image builds dino from this checkout, so the matrix tests the PR's dino.
