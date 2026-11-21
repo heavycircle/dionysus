@@ -132,6 +132,7 @@ examples/                  one standalone CMake project per SDK feature, plus or
                            org_app (a DINO_LIBRARY_PATH library and a project that uses it)
 tests/examples.sh          builds and runs every example on every target
 tests/sdk.sh               runs sdk/tests with `dino test`
+tests/windows.sh           runs the Windows builds of sdk/tests on Windows itself
 tests/warnings.sh          checks the portability warnings against tests/fixtures/raw_calls
 tests/docs.sh              checks docs links and builds and runs the C programs in docs/
 tests/headers.sh           checks every public header compiles alone as C and C++ and stays namespaced
@@ -244,6 +245,7 @@ tests/sdk.sh --all                                     # same, from a scratch co
 - Every `UTEST` needs at least one `ASSERT_*` or `EXPECT_*`; one without leaves utest's result
   parameter unused, which `-Wextra -Werror` rejects.
 - Tests run in parallel, so each file uses its own port range (`#define PORT 18100`, 18200, ...).
+- **Skips fail.** utest counts a case that calls `UTEST_SKIP` as passed, so `tests/sdk.sh` fails on any skipped case that isn't on its list of known ones (today: the symbolic link cases, under a wine that can't create links). Add to that list only with the reason, and only when another job runs the case for real.
 - A test file that runs longer than 120 seconds is stopped and fails as `Timeout`, and its output ends with the `[ RUN ]` line of the case that hung (`dino test --timeout <seconds>` changes the limit).
 
 ### Test matrix
@@ -258,6 +260,8 @@ environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings 
 The SDK's own sources are the exception: they drop the project's warning flags for a fixed `-Wall
 -Wextra` that never fails a project's build (the end of `sdk/CMakeLists.txt`). `sdk/tests` sets
 `DINO_SDK_WERROR`, so `tests/sdk.sh` is the check that fails on a warning in the SDK.
+
+`tests/windows.sh <directory>` runs the win64 or win32 builds of the SDK tests on Windows itself, with no emulator and no ctest; CI cross-compiles them on Linux and runs them on a Windows runner. Wine isn't Windows: some cases can't run or can't fail under it (symbolic links, `SO_REUSEADDR`), so this job is the one that checks them. No case may skip there. On Linux, `tests/windows.sh sdk/tests/build/win64 wine` tries the script itself.
 
 `tests/docs.sh [targets...]` keeps the documentation honest: every relative link and `#anchor` in
 the Markdown must resolve, and every ```` ```c ```` block in `docs/` that contains `int main(` (or
@@ -289,6 +293,7 @@ examples, docs) and the version this script installs, together.
 | `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
 | `unit` | `zig build test`, and `tests/cmake-minimum.sh` |
 | `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh` and `tests/docs.sh`; the x86_64 job also runs the SDK tests under valgrind, the warnings against glibc (`--memcheck`) and `tests/cli.sh` |
+| `windows (win32)`, `windows (win64)` | the SDK tests, cross-compiled by `windows-build` on Linux with `-Wall -Wextra -Werror`, run on Windows itself by `tests/windows.sh` |
 
 Run the same checks locally before asking for review:
 

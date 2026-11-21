@@ -1,6 +1,7 @@
 # Lint, unit tests, and per target: every example built and run, and the SDK's
 # own tests (sdk/tests) run with `dino test`, natively, under qemu-user or under
-# wine, inside the project's Docker image so CI and local runs match.
+# wine, inside the project's Docker image so CI and local runs match. The
+# Windows builds of the SDK tests also run on Windows itself.
 name: ci
 
 on:
@@ -145,3 +146,54 @@ jobs:
       - name: Docker image ownership
         if: matrix.target == 'x86_64'
         run: tests/docker.sh dionysus:ci
+
+  # Cross-compiled here, as users do it, and run by the `windows` jobs.
+  windows-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - uses: ./.github/actions/setup-zig
+
+      - name: Build the SDK tests for win64 and win32
+        env:
+          CFLAGS: -Wall -Wextra -Werror
+        run: |
+          zig build
+          cp -r sdk/tests "$RUNNER_TEMP/tests"
+          DINO_SDK_PATH=$PWD/sdk zig-out/bin/dino build win64 win32 -C "$RUNNER_TEMP/tests"
+          for target in win64 win32; do
+              mkdir -p "$RUNNER_TEMP/windows/$target"
+              cp "$RUNNER_TEMP/tests/build/$target"/test_*.exe "$RUNNER_TEMP/windows/$target/"
+          done
+          # With the executables, so the Windows job needs no checkout (which
+          # would give the script CRLF line endings).
+          cp tests/windows.sh "$RUNNER_TEMP/windows/"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-tests-windows
+          path: ${{ runner.temp }}/windows
+          retention-days: 1
+
+  # The only place the Windows halves of the SDK run on Windows: wine skips
+  # or can't fail some cases (symbolic links, SO_REUSEADDR).
+  windows:
+    needs: windows-build
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [win32, win64]
+    name: windows (${{ matrix.target }})
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sdk-tests-windows
+          path: windows
+
+      - name: SDK tests on Windows
+        shell: bash
+        run: bash windows/windows.sh "windows/${{ matrix.target }}"
