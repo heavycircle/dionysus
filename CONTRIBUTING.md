@@ -137,6 +137,8 @@ tests/docs.sh              checks docs links and builds and runs the C programs 
 tests/headers.sh           checks every public header compiles alone as C and C++ and stays namespaced
 tests/cli.sh               checks the dino command line end to end
 tests/cmake-minimum.sh     builds and tests with the oldest supported CMake
+tests/docker.sh            checks the image's entrypoint (file ownership, wine)
+tests/image.sh             smoke test of a built image, run before a release pushes it
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
 scripts/lintcommit.sh      checks commit messages
@@ -554,11 +556,19 @@ The release commit also sets every `ghcr.io/heavycircle/dionysus:X.Y.Z` in the M
 version, so the docs at a tag name the image that tag publishes. Write image references in the docs
 with a full version (any will do); the next release fixes it up.
 
-The script runs the unit tests, checks that the freshly built `dino` reports exactly the new
-version, and prints the `git push` command instead of pushing. Review the commits, then push. For
-a major release, bump `main` to `X+1.0.0-dev` by hand in a normal PR first.
+Before it changes anything the script fetches and requires that the branch is exactly
+`origin/<branch>`, that the tag and the release branch don't exist yet, and that the `ci` run for
+that commit succeeded (it asks `gh`; `--no-ci-check` skips the lookup). It then runs the unit tests,
+checks that the freshly built `dino` reports exactly the new version, and prints the
+`git push --atomic` command instead of pushing. If anything fails part-way, it deletes the tag and
+branch it made and resets to where it started. Review the commits, then push. For a major release,
+bump `main` to `X+1.0.0-dev` by hand in a normal PR first.
 
-Pushing the tag runs `.github/workflows/release.yml`, which publishes the GitHub Release:
+Pushing the tag runs `.github/workflows/release.yml`. Nothing is published until every `ci.yml` job
+has passed on the tagged commit and the image built from it has passed `tests/image.sh`: it holds
+the `dino` the tag names, `dino doctor` finds every tool and runner, a new project builds, runs and
+passes its tests on every target, and the entrypoint checks in `tests/docker.sh` pass. Then the
+image is pushed, and last the GitHub Release is published:
 
 - `dino-X.Y.Z-x86_64-linux.tar.xz`, `dino-X.Y.Z-aarch64-linux.tar.xz` and
   `dino-X.Y.Z-x86_64-windows.zip`, each holding `dino`, `LICENSE` and `README.md`, plus
@@ -578,10 +588,11 @@ Pushing the tag runs `.github/workflows/release.yml`, which publishes the GitHub
 
 To redo a release (a failed run, a fixed workflow), run **release** from the Actions tab with the
 tag as input, or `gh workflow run release -f tag=vX.Y.Z`. It replaces the assets, keeps the notes,
-and republishes the image.
+and republishes the image. The `ci` jobs run on the tag again first; for a tag older than today's
+`ci.yml`, whose tree lacks the scripts it calls, add `-f ci=false`.
 
 **Nightly.** `.github/workflows/nightly.yml` runs daily (and on demand) from `main`. When `main` has
-moved since the last nightly, it rebuilds the `nightly` prerelease: archives named
-`dino-nightly-<platform>` (stable download URLs; the binaries report the exact
+moved since the last nightly and its `ci` run succeeded, it rebuilds the `nightly` prerelease:
+archives named `dino-nightly-<platform>` (stable download URLs; the binaries report the exact
 `X.Y.0-dev.N+g<sha>` version), notes for everything since the last release, and the `:nightly`
-image.
+image. A `main` whose `ci` failed or is still running is skipped until the next run.
