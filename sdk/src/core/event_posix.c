@@ -314,8 +314,10 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
         {
             int wait = n > 0 ? 0 : dino__event_timers_timeout(&loop->timers, left);
             got      = epoll_wait(loop->epfd, evs, cap, wait);
+            // Timers already collected are out of the heap: report them
+            // rather than lose them with the error.
             if (got < 0 && errno != EINTR)
-                return -1;
+                return n > 0 ? n : -1;
         }
 
         int procs_ready = 0, pipes_ready = 0;
