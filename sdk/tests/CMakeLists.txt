@@ -2,6 +2,8 @@
 #
 #   DINO_SDK_PATH=$PWD/sdk dino test --all -C sdk/tests
 cmake_minimum_required(VERSION 3.20)
+# Warnings in the SDK's own sources fail this build; in a project they never do.
+set(DINO_SDK_WERROR ON)
 project(DinoSdkTests C)
 
 file(GLOB tests CONFIGURE_DEPENDS test_*.c)

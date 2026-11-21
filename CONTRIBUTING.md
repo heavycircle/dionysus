@@ -252,6 +252,9 @@ a known failure that starts passing fails the run, so remove its entry in the PR
 
 `tests/examples.sh /repo/examples arm64 win64` limits the run to some targets. `CFLAGS` from the
 environment reaches every compile; CI sets `-Wall -Wextra -Werror`, so warnings fail the build.
+The SDK's own sources are the exception: they drop the project's warning flags for a fixed `-Wall
+-Wextra` that never fails a project's build (the end of `sdk/CMakeLists.txt`). `sdk/tests` sets
+`DINO_SDK_WERROR`, so `tests/sdk.sh` is the check that fails on a warning in the SDK.
 
 `tests/docs.sh [targets...]` keeps the documentation honest: every relative link and `#anchor` in
 the Markdown must resolve, and every ```` ```c ```` block in `docs/` that contains `int main(` (or
