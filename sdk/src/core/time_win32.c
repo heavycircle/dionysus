@@ -38,7 +38,8 @@ void dino__sleep_ns(uint64_t ns)
 {
     if (ns == 0)
         return;
-    uint64_t deadline = dino_time_monotonic_ns() + ns;
+    uint64_t now      = dino_time_monotonic_ns();
+    uint64_t deadline = ns > UINT64_MAX - now ? UINT64_MAX : now + ns;
 
     // The high-resolution flag needs Windows 10 1803; older systems reject it.
     HANDLE timer = CreateWaitableTimerExW(
@@ -46,7 +47,7 @@ void dino__sleep_ns(uint64_t ns)
     if (!timer)
         timer = CreateWaitableTimerExW(NULL, NULL, 0, TIMER_ALL_ACCESS);
 
-    for (uint64_t now; (now = dino_time_monotonic_ns()) < deadline;)
+    for (; (now = dino_time_monotonic_ns()) < deadline;)
     {
         uint64_t remaining = deadline - now;
         if (!timer)
