@@ -268,6 +268,107 @@ C
     dino test --timeout 1 >out 2>&1 || { cat out; return 1; }
 }
 
+# Memory from every allocator entry point is counted: a block that is freed
+# leaves the count at zero, and one that isn't is reported.
+case_leak_check_allocators() {
+    project leak_allocators
+    cat >tests/test_main.c <<'C'
+#define _GNU_SOURCE
+#include <malloc.h>
+#include <stdlib.h>
+#include <string.h>
+#include <utest.h>
+
+static void *volatile kept;
+
+UTEST(leak, allocator)
+{
+    const char *which = getenv("LEAK");
+    void *p = NULL;
+    if (!which || strcmp(which, "memalign") == 0)
+        p = memalign(64, 100);
+    else if (strcmp(which, "valloc") == 0)
+        p = valloc(100);
+    else if (strcmp(which, "reallocarray") == 0)
+        p = reallocarray(NULL, 4, 8);
+    else if (strcmp(which, "aligned_alloc") == 0)
+        p = aligned_alloc(64, 128);
+    ASSERT_TRUE(p != NULL);
+    if (which)
+        kept = p;
+    else
+        free(p);
+}
+
+UTEST_MAIN()
+C
+    dino test >out 2>&1 || { cat out; return 1; }
+    local which
+    for which in memalign valloc reallocarray aligned_alloc; do
+        LEAK=$which dino test >out 2>&1 && { echo "$which"; cat out; return 1; }
+        grep -q 'dino leak check: 1 allocation(s) still live at exit' out || { echo "$which"; cat out; return 1; }
+    done
+}
+
+# What libc keeps for itself isn't reported, but a real leak next to it is.
+case_leak_check_libc_caches() {
+    project leak_caches
+    cat >tests/test_main.c <<'C'
+#include <netdb.h>
+#include <pwd.h>
+#include <stdlib.h>
+#include <time.h>
+#include <utest.h>
+
+static void *volatile kept;
+
+UTEST(leak, libc_keeps_these)
+{
+    EXPECT_TRUE(getpwuid(0) != NULL);
+    gethostbyname("localhost");
+    ASSERT_EQ(0, setenv("TZ", "/usr/share/zoneinfo/America/Argentina/ComodRivadavia", 1));
+    time_t now = time(NULL);
+    EXPECT_TRUE(localtime(&now) != NULL);
+    if (getenv("LEAK"))
+        kept = malloc(3);
+}
+
+UTEST_MAIN()
+C
+    dino test >out 2>&1 || { cat out; return 1; }
+    LEAK=1 dino test >out 2>&1 && { cat out; return 1; }
+    grep -q 'dino leak check: 1 allocation(s) still live at exit' out || { cat out; return 1; }
+}
+
+# More objects with destructors than fit in libc's first block of exit
+# handlers, and a locale, which libc++ and libc keep loaded.
+case_leak_check_cxx_statics() {
+    cxx_project leak_cxx_many
+    cat >tests/test_main.cpp <<'CPP'
+#include <locale>
+#include <string>
+#include <utest.h>
+
+struct Named
+{
+    std::string name{"long enough to need a heap allocation, not SSO"};
+    ~Named() {}
+};
+static Named g_a[1], g_b[1], g_c[1], g_d[1], g_e[1], g_f[1], g_g[1], g_h[1], g_i[1], g_j[1];
+#define FOUR(n) static Named g_##n##0, g_##n##1, g_##n##2, g_##n##3;
+FOUR(k) FOUR(l) FOUR(m) FOUR(n) FOUR(o) FOUR(p) FOUR(q) FOUR(r) FOUR(s) FOUR(t)
+
+UTEST(cxx, many_globals)
+{
+    std::locale named("");
+    EXPECT_EQ(1u, sizeof(g_a) / sizeof(g_a[0]));
+}
+
+UTEST_MAIN()
+CPP
+    LANG=en_US.UTF-8 dino test >out 2>&1 || { cat out; return 1; }
+}
+
 # A library in $work/<directory> for DINO_LIBRARY_PATH: target <name>, alias
 # <name>::<name>, and a test_main, the name every `dino init` project uses.
 # <tests> is the CMake that defines the test.
