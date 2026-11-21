@@ -22,7 +22,12 @@ IncludeCategories:
     Priority: 2
   - Regex: '^<windows\.h>$'
     Priority: 3
+  # Windows headers that need <winsock2.h> or <windows.h> first: after <windows.h>,
+  # in its block.
+  - Regex: '^<(aclapi|bcrypt|dbghelp|iphlpapi|iptypes|mstcpip|mswsock|ntstatus|psapi|sddl|shellapi|tlhelp32|userenv|wincrypt|winioctl|winternl)\.h>$'
+    Priority: 3
+    SortPriority: 4
   - Regex: '^<dino/'
-    Priority: 4
+    Priority: 5
   - Regex: '^<'
     Priority: 1

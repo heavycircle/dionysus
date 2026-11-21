@@ -1,11 +1,11 @@
 #include <dino/core/event.h>
 
 #include <stdlib.h>
-#include <winternl.h>
 
 #include <winsock2.h>
 
 #include <windows.h>
+#include <winternl.h>
 
 #include <dino/core/time.h>
 
