@@ -90,7 +90,7 @@ jobs:
       - name: Build and test ${{ matrix.target }}
         run: |
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/work" \
-            ghcr.io/heavycircle/dionysus:0.6.1 dino test ${{ matrix.target }}
+            ghcr.io/heavycircle/dionysus:0.6.2 dino test ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
@@ -112,7 +112,7 @@ To give every developer and CI job the same extras (organization libraries, more
 the image:
 
 ```dockerfile
-FROM ghcr.io/heavycircle/dionysus:0.6.1
+FROM ghcr.io/heavycircle/dionysus:0.6.2
 COPY company-libs /opt/company
 ENV DINO_LIBRARY_PATH=/opt/company/logging:/opt/company/proto
 ```
