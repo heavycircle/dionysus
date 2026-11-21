@@ -9,6 +9,8 @@
 
 #include <windows.h>
 
+#include <dino/core/time.h>
+
 // Anonymous pipes (CreatePipe) can't do overlapped I/O, so they can't be
 // waited on or attached to an event loop's completion port. Each pipe is a
 // uniquely named pipe instead: the server end comes from CreateNamedPipeW, the
@@ -139,6 +141,24 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
     return (int)n;
 }
 
+// WaitForSingleObject with a timeout. The timeout counts scheduler ticks and
+// can end up to a tick early, so keep waiting until the monotonic deadline has
+// really passed.
+static DWORD wait_for(HANDLE event, int timeout_ms)
+{
+    if (timeout_ms < 0)
+        return WaitForSingleObject(event, INFINITE);
+    uint64_t deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
+    for (;;)
+    {
+        uint64_t now  = dino_time_monotonic_ns();
+        DWORD    wait = now >= deadline ? 0 : (DWORD)((deadline - now + 999999) / 1000000);
+        DWORD    rc   = WaitForSingleObject(event, wait);
+        if (rc != WAIT_TIMEOUT || dino_time_monotonic_ns() >= deadline)
+            return rc;
+    }
+}
+
 // A zero-byte read completes when data arrives, without taking any of it, or
 // fails with ERROR_BROKEN_PIPE once every write end is closed.
 int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
@@ -158,8 +178,7 @@ int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
     BOOL  ok = ReadFile(p->handle, &none, 0, NULL, &ov);
     if (!ok && GetLastError() == ERROR_IO_PENDING)
     {
-        if (WaitForSingleObject(event, timeout_ms < 0 ? INFINITE : (DWORD)timeout_ms)
-            == WAIT_TIMEOUT)
+        if (wait_for(event, timeout_ms) == WAIT_TIMEOUT)
         {
             timed_out = 1;
             CancelIoEx(p->handle, &ov);
@@ -205,9 +224,7 @@ int dino__pipe_write_timeout(
     BOOL  ok        = WriteFile(p->handle, buf, (DWORD)len, NULL, &ov);
     if (ok || GetLastError() == ERROR_IO_PENDING)
     {
-        if (!ok
-            && WaitForSingleObject(event, timeout_ms < 0 ? INFINITE : (DWORD)timeout_ms)
-                == WAIT_TIMEOUT)
+        if (!ok && wait_for(event, timeout_ms) == WAIT_TIMEOUT)
         {
             timed_out = 1;
             CancelIoEx(p->handle, &ov);
