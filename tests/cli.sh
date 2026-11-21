@@ -268,6 +268,93 @@ C
     dino test --timeout 1 >out 2>&1 || { cat out; return 1; }
 }
 
+# A library in $work/<directory> for DINO_LIBRARY_PATH: target <name>, alias
+# <name>::<name>, and a test_main, the name every `dino init` project uses.
+# <tests> is the CMake that defines the test.
+library() {
+    local dir=$work/$1 name=$2 tests=$3
+    rm -rf "$dir"
+    mkdir -p "$dir/src" "$dir/tests"
+    echo "int ${name}_value(void) { return 7; }" >"$dir/src/lib.c"
+    cat >"$dir/tests/test_main.c" <<C
+#include <utest.h>
+
+int ${name}_value(void);
+
+UTEST($name, value)
+{
+    EXPECT_EQ(7, ${name}_value());
+}
+
+UTEST_MAIN()
+C
+    cat >"$dir/CMakeLists.txt" <<CMAKE
+cmake_minimum_required(VERSION 3.20)
+project($name C)
+add_library($name STATIC src/lib.c)
+add_library($name::$name ALIAS $name)
+$tests
+CMAKE
+}
+
+# Libraries whose tests have the same names as the project's, and as each
+# other's, are no problem when dino_test() gets LIBRARIES: only the tests of
+# the project being tested exist.
+case_library_tests_stay_out() {
+    library libs/one one 'dino_test(test_main tests/test_main.c LIBRARIES one::one)'
+    library libs/two two 'dino_test(test_main tests/test_main.c LIBRARIES two::two)'
+    export DINO_LIBRARY_PATH=$work/libs/one:$work/libs/two
+    project library_app
+    dino test >out 2>&1 || { cat out; return 1; }
+    grep -q '100% tests passed, 0 tests failed out of 1$' out || { cat out; return 1; }
+    dino test -C "$work/libs/one" >out 2>&1 || { cat out; return 1; }
+    grep -q '100% tests passed, 0 tests failed out of 1$' out || { cat out; return 1; }
+}
+
+# Without LIBRARIES the library's test target exists in every project, and the
+# error says which library to fix. On its own the library still works.
+case_library_test_name_clash() {
+    library libs/old old 'dino_test(test_main tests/test_main.c)
+target_link_libraries(test_main PRIVATE old::old)'
+    export DINO_LIBRARY_PATH=$work/libs/old
+    project clash_app
+    dino test >out 2>&1 && { cat out; return 1; }
+    grep -q 'dino_test(test_main): the library in' out || { cat out; return 1; }
+    grep -q "$work/libs/old" out || { cat out; return 1; }
+    dino test -C "$work/libs/old" >out 2>&1 || { cat out; return 1; }
+}
+
+# Testing a checkout of a library while another copy of it is registered.
+case_library_checkout() {
+    library libs/same same 'dino_test(test_main tests/test_main.c LIBRARIES same::same)'
+    library checkout/same same 'dino_test(test_main tests/test_main.c LIBRARIES same::same)'
+    export DINO_LIBRARY_PATH=$work/libs/same
+    cd "$work/checkout/same" || return 1
+    dino test -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'another copy of this project (same)' out || { cat out; return 1; }
+}
+
+# Tests a library registers with add_test() run when the library is tested,
+# and are disabled, not run and not failed, in a project that uses it.
+case_library_add_test() {
+    library libs/third third 'enable_testing()
+add_executable(third_selftest tests/selftest.c)
+add_test(NAME third_selftest COMMAND third_selftest "" "a;b")
+set_tests_properties(third_selftest PROPERTIES TIMEOUT 60)
+add_test(third_old third_selftest)'
+    echo 'int main(int argc, char **argv) { return argc == 3 && !argv[1][0] ? 0 : 1; }' >"$work/libs/third/tests/selftest.c"
+    export DINO_LIBRARY_PATH=$work/libs/third
+    project add_test_app
+    dino test >out 2>&1 || { cat out; return 1; }
+    grep -q '100% tests passed, 0 tests failed out of 1$' out || { cat out; return 1; }
+    grep -q 'third_selftest (Disabled)' out || { cat out; return 1; }
+    grep -q 'third_old (Disabled)' out || { cat out; return 1; }
+    # third_old passes no arguments, so only third_selftest can pass: the
+    # empty argument and the one with a semicolon arrived as written.
+    dino test -C "$work/libs/third" >out 2>&1 && { cat out; return 1; }
+    grep -q 'third_selftest \.* *Passed' out || { cat out; return 1; }
+}
+
 cxx_project() {
     project "$1"
     sed -i "s/^project($1 C)\$/project($1 C CXX)/; s/test_\\*\\.c)/test_*.cpp)/" CMakeLists.txt

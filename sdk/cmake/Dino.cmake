@@ -27,32 +27,91 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # A test executable: dino_util and dino_core plus utest.h (`#include <utest.h>`), and on Linux
 # targets a leak check that fails the test if anything is still allocated at
 # exit. Registered with CTest, which runs foreign targets under qemu or wine.
+#
+#   dino_test(<name> <sources>... [LIBRARIES <targets>...])
+#
+# A library's tests belong to the library: they run when it's the project being
+# tested, not in every project that has it on DINO_LIBRARY_PATH. With LIBRARIES
+# nothing at all is created there. Without it the caller links the target
+# itself, so the target has to exist, and target names are global: two
+# libraries, or a library and the project, can then only have a test_main each
+# by luck.
 function(dino_test name)
-    add_executable(${name} ${ARGN})
-    target_link_libraries(${name} PRIVATE dino_testing)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "LIBRARIES")
+    if(DINO__LIBRARY_DEPENDENCY AND "LIBRARIES" IN_LIST ARGN)
+        return()
+    endif()
+    if(TARGET ${name})
+        get_target_property(library ${name} DINO__LIBRARY_TEST)
+        if(library)
+            message(FATAL_ERROR
+                "dino_test(${name}): the library in ${library} (from DINO_LIBRARY_PATH) "
+                "already has a test target with this name, and target names are shared by "
+                "the project and every library.\n"
+                "Fix the library: give its dino_test() calls the libraries to link, "
+                "dino_test(${name} <sources> LIBRARIES <targets>), so that its tests exist "
+                "only when the library itself is the project being tested.")
+        endif()
+    endif()
+    add_executable(${name} ${arg_UNPARSED_ARGUMENTS})
+    target_link_libraries(${name} PRIVATE dino_testing ${arg_LIBRARIES})
     set_target_properties(${name} PROPERTIES FOLDER dino_tests)
-    # A library's tests belong to the library: they run when it's the project
-    # being tested, not in every project that has it on DINO_LIBRARY_PATH. The
-    # target still exists so the library's own target_link_libraries() works.
-    if(NOT DINO__LIBRARY_DEPENDENCY)
+    if(DINO__LIBRARY_DEPENDENCY)
+        set_target_properties(${name} PROPERTIES DINO__LIBRARY_TEST "${CMAKE_CURRENT_SOURCE_DIR}")
+    else()
         add_test(NAME ${name} COMMAND ${name})
+    endif()
+endfunction()
+
+# A library can also register tests with add_test() itself, as most third-party
+# CMakeLists.txt do. Their executables are never built in a project that only
+# uses the library, so there they are disabled: still there for the library's
+# own set_tests_properties() calls, but not run. Overriding a command keeps the
+# original as _add_test(); the arguments are passed on in brackets so that empty
+# ones and ones with semicolons arrive unchanged.
+function(add_test)
+    set(arguments "")
+    if(ARGC GREATER 0)
+        math(EXPR last "${ARGC} - 1")
+        foreach(i RANGE ${last})
+            string(APPEND arguments " [==[${ARGV${i}}]==]")
+        endforeach()
+    endif()
+    cmake_language(EVAL CODE "_add_test(${arguments})")
+    if(DINO__LIBRARY_DEPENDENCY)
+        if(ARGV0 STREQUAL "NAME")
+            set_tests_properties("${ARGV1}" PROPERTIES DISABLED TRUE)
+        else()
+            set_tests_properties("${ARGV0}" PROPERTIES DISABLED TRUE)
+        endif()
     endif()
 endfunction()
 
 # Organization libraries from DINO_LIBRARY_PATH (a CMake list; `dino` passes
 # the environment variable of the same name). EXCLUDE_FROM_ALL builds one only
 # when something links it. A library that is itself the top-level project,
-# because it's being built or tested on its own, isn't added a second time.
+# because it's being built or tested on its own, isn't added a second time:
+# neither the same directory nor another copy of it, such as the one a CI image
+# has on DINO_LIBRARY_PATH while a checkout of the library is tested.
 get_filename_component(_dino_top "${CMAKE_SOURCE_DIR}" REALPATH)
 set(DINO__LIBRARY_DEPENDENCY ON)
 foreach(_dino_library IN LISTS DINO_LIBRARY_PATH)
     get_filename_component(_dino_library "${_dino_library}" REALPATH)
-    if(NOT _dino_library STREQUAL _dino_top)
-        get_filename_component(_dino_name "${_dino_library}" NAME)
-        add_subdirectory("${_dino_library}" "${CMAKE_BINARY_DIR}/_dino_libs/${_dino_name}" EXCLUDE_FROM_ALL)
+    if(_dino_library STREQUAL _dino_top)
+        continue()
     endif()
+    file(STRINGS "${_dino_library}/CMakeLists.txt" _dino_project
+        REGEX "^[ \t]*[Pp][Rr][Oo][Jj][Ee][Cc][Tt][ \t]*\\(" LIMIT_COUNT 1)
+    if(_dino_project MATCHES "\\([ \t]*\"?([A-Za-z0-9_.+-]+)" AND CMAKE_MATCH_1 STREQUAL PROJECT_NAME)
+        message(NOTICE "dino: not using ${_dino_library} from DINO_LIBRARY_PATH: "
+            "it is another copy of this project (${PROJECT_NAME})")
+        continue()
+    endif()
+    get_filename_component(_dino_name "${_dino_library}" NAME)
+    add_subdirectory("${_dino_library}" "${CMAKE_BINARY_DIR}/_dino_libs/${_dino_name}" EXCLUDE_FROM_ALL)
 endforeach()
 unset(DINO__LIBRARY_DEPENDENCY)
 unset(_dino_top)
 unset(_dino_library)
 unset(_dino_name)
+unset(_dino_project)
