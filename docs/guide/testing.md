@@ -98,6 +98,13 @@ dino leak check: 1 allocation(s) still live at exit
 It counts every `malloc`, `calloc`, `realloc`, `aligned_alloc`, `posix_memalign` and `free`, the C
 library's own included (`strdup`, `fopen`, ...), so a missing `free` or `fclose` is caught.
 
+- **When it checks:** at the very end of the process, after `atexit` handlers and the destructors of
+  C++ globals and function-local statics. Memory a global frees in its destructor doesn't count.
+- **What it ignores:** the environment. libc keeps the strings and the `environ` array that
+  `setenv`, `putenv`, `unsetenv` and `clearenv` allocate for the life of the process, so they aren't
+  counted.
+- **C++:** C++ tests get the same check, including in a project that enables only `CXX`. `new` and
+  `delete` go through `malloc` and `free`, so they're counted too.
 - **Windows targets** have no leak check: the C runtime allocates inside a DLL there.
 - **Turning it off:** `DINO_LEAK_CHECK=0` in the environment disables it for one run.
   `DINO_NO_LEAK_CHECK` (set before `project()`) leaves it out of the build.
