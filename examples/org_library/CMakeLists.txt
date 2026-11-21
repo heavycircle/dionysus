@@ -16,11 +16,11 @@ add_library(org::config ALIAS org_config)
 target_include_directories(org_config PUBLIC include)
 target_link_libraries(org_config PUBLIC dino_util)
 
-# Only registered with `dino test` when this is the project being tested, never
-# in the projects that link org::config.
+# With LIBRARIES the tests exist only when this is the project being tested. In
+# the projects that link org::config they aren't even targets, so their names
+# can't clash with those projects' own tests.
 file(GLOB TESTS CONFIGURE_DEPENDS tests/test_*.c)
 foreach(test ${TESTS})
     get_filename_component(test_name ${test} NAME_WE)
-    dino_test(${test_name} ${test})
-    target_link_libraries(${test_name} PRIVATE org::config)
+    dino_test(${test_name} ${test} LIBRARIES org::config)
 endforeach()

@@ -102,8 +102,7 @@ add_library(acme::log ALIAS acme_log)
 target_include_directories(acme_log PUBLIC include)
 target_link_libraries(acme_log PUBLIC dino_util)
 
-dino_test(test_log tests/test_log.c)
-target_link_libraries(test_log PRIVATE acme::log)
+dino_test(test_log tests/test_log.c LIBRARIES acme::log)
 ```
 
 Rules and recommendations:
@@ -126,10 +125,9 @@ Rules and recommendations:
   dino's toolchain already, the same as for the SDK.
 - **Check the SDK version** with `DINO_SDK_VERSION` (for example `0.6.0`) if you rely on newer APIs.
 - **Depend on other registered libraries by name.** `target_link_libraries(acme_proto PUBLIC acme::log)` works whatever order the entries are in, as long as both are registered.
-- **Tests and tools are yours alone.** `dino_test()` targets only reach CTest when the library is
-  the project being tested, and executables defined in a library never show up in a consuming
-  project's `dino run`. Nothing in a library builds unless something links it. For other setup that
-  should only happen standalone, check `if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)`.
+- **Give `dino_test()` the libraries to link.** `dino_test(test_log tests/test_log.c LIBRARIES acme::log)` defines the test only when the library is the project being tested; in a project that uses the library it creates nothing. Without `LIBRARIES` the test target is created there too, so that your own `target_link_libraries(test_log ...)` has something to work on, and its name is then taken in every project: two libraries, or a library and a project, can't both have a `test_main`.
+- **Guard everything else that is only for the library itself.** Calls that need the test to exist, such as `set_tests_properties(test_log PROPERTIES TIMEOUT 300)`, and tools or examples you don't want in other projects, go inside `if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)` (or `if(PROJECT_IS_TOP_LEVEL)`, from CMake 3.21).
+- **Tests and tools are yours alone.** Nothing in a library builds unless something links it, and executables defined in a library never show up in a consuming project's `dino run`. Tests registered with plain `add_test()`, as third-party code does, are disabled in the projects that use the library: `dino test` lists them as `Disabled` and doesn't run them.
 
 ## Testing a library
 
@@ -144,6 +142,8 @@ dino test --memcheck -C /opt/acme/acme_log # under valgrind
 On Linux targets every `dino_test()` executable also fails if anything is still allocated at exit,
 exactly as in the SDK's own tests. This works with the library still on `DINO_LIBRARY_PATH`, because
 a library that is the project being built isn't added a second time.
+
+The same holds for another copy of it: when you test a checkout while the installed copy is on `DINO_LIBRARY_PATH` (a CI image with the libraries baked in, say), the entry whose `project()` name matches the project being built is left out, and `dino test -v` says so. The other libraries on the path are used as usual.
 
 ## Example: an organization's libraries
 
@@ -179,8 +179,7 @@ target_link_libraries(acme_proto PUBLIC acme::log dino_core)
 file(GLOB TESTS CONFIGURE_DEPENDS tests/test_*.c)
 foreach(test ${TESTS})
     get_filename_component(test_name ${test} NAME_WE)
-    dino_test(${test_name} ${test})
-    target_link_libraries(${test_name} PRIVATE acme::proto)
+    dino_test(${test_name} ${test} LIBRARIES acme::proto)
 endforeach()
 ```
 
@@ -232,7 +231,7 @@ export DINO_LIBRARY_PATH=/opt/acme/acme_log:/opt/acme/acme_proto:/opt/third_part
 
 A third-party library doesn't need to know about dino at all; it only needs a `CMakeLists.txt` that
 defines a static target. If upstream already ships a suitable one, the directory can be the upstream
-checkout itself.
+checkout itself. Its own tests don't run in your projects: `dino test` lists them as `Disabled`.
 
 ## Docker and CI
 
@@ -271,17 +270,19 @@ add_subdirectory(<library> ${CMAKE_BINARY_DIR}/_dino_libs/<name> EXCLUDE_FROM_AL
 ```
 
 `EXCLUDE_FROM_ALL` is what keeps an unused library from being built. A library that is itself the
-top-level project is skipped. While libraries are being added, `dino_test()` creates the test
-executable but doesn't register it with CTest, so it's built only if something asks for it, and
-never run.
+top-level project is skipped, and so is another copy of it (an entry with the same `project()` name).
+
+While libraries are being added, `dino_test()` with `LIBRARIES` does nothing. Without it, it creates the test executable but doesn't register it with CTest, so it's built only if something asks for it, and never run. `add_test()` is overridden for the same stretch: the test is registered, so the library's own `set_tests_properties()` calls still work, and then marked `DISABLED`.
 
 ## Troubleshooting
 
-| Message                                                                                           | Cause                                                                                                |
-| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `DINO_LIBRARY_PATH entry '...' does not exist`                                                    | A typo, or a host path used inside Docker.                                                           |
-| `DINO_LIBRARY_PATH entry '...' has no CMakeLists.txt`                                             | The entry points at the repository, not at the library directory inside it.                          |
-| `... has the same directory name as '...'`                                                        | Two libraries named alike, e.g. `a/log` and `b/log`. Rename one directory.                           |
-| `Target "app" links to: acme::log but the target was not found`                                   | The library isn't on `DINO_LIBRARY_PATH` (check `dino doctor`), or its alias is spelled differently. |
-| `add_library cannot create target "..." because another target with the same name already exists` | Two libraries, or a library and the SDK or the project, define the same target name.                 |
-| `... needs the dino SDK 0.6 or newer`                                                             | The library's own version check: update `dino`.                                                      |
+| Message                                                                                           | Cause                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DINO_LIBRARY_PATH entry '...' does not exist`                                                    | A typo, or a host path used inside Docker.                                                                                                                 |
+| `DINO_LIBRARY_PATH entry '...' has no CMakeLists.txt`                                             | The entry points at the repository, not at the library directory inside it.                                                                                |
+| `... has the same directory name as '...'`                                                        | Two libraries named alike, e.g. `a/log` and `b/log`. Rename one directory.                                                                                 |
+| `Target "app" links to: acme::log but the target was not found`                                   | The library isn't on `DINO_LIBRARY_PATH` (check `dino doctor`), or its alias is spelled differently.                                                       |
+| `add_library cannot create target "..." because another target with the same name already exists` | Two libraries, or a library and the SDK or the project, define the same target name.                                                                       |
+| `dino_test(test_main): the library in ... already has a test target with this name`               | A library creates its test targets in every project. Give its `dino_test()` calls `LIBRARIES`, as described under [Writing a library](#writing-a-library). |
+| `set_tests_properties Can not find test to add properties to: ...`                                | A library sets properties on its own test outside a guard; see [Writing a library](#writing-a-library).                                                    |
+| `... needs the dino SDK 0.6 or newer`                                                             | The library's own version check: update `dino`.                                                                                                            |

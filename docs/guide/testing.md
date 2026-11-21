@@ -21,10 +21,11 @@ The `dino init` template turns every `tests/test_*.c` into a test executable:
 file(GLOB TESTS CONFIGURE_DEPENDS tests/test_*.c)
 foreach(test ${TESTS})
     get_filename_component(test_name ${test} NAME_WE)
-    dino_test(${test_name} ${test})
-    target_link_libraries(${test_name} PRIVATE core)   # the code under test, if it's a library
+    dino_test(${test_name} ${test} LIBRARIES core)   # the code under test, if it's a library
 endforeach()
 ```
+
+`dino_test(name sources... [LIBRARIES targets...])` is `add_executable()` plus the test framework, and links the listed targets. For anything else, the name is an ordinary CMake target.
 
 A test file is a set of `UTEST` cases followed by `UTEST_MAIN()`:
 
