@@ -4,13 +4,13 @@ A dino project is an ordinary CMake project. `dino` adds the SDK and a few funct
 project it builds, through CMake's `CMAKE_PROJECT_INCLUDE` hook, so a `CMakeLists.txt` never needs
 to know where the SDK is:
 
-| Provided                           | What it is                                                                                           |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `dino_executable(name sources...)` | `add_executable()` plus linking `dino_util` (and with it `dino_core`)                                |
-| `dino_test(name sources...)`       | a test executable with utest.h and the leak check, registered with CTest (see [Testing](testing.md)) |
-| `dino_core`                        | the portability layer: sockets, threads, processes, pipes, the event loop, ...                       |
-| `dino_util`                        | extras built on it, such as logging                                                                  |
-| `DINO_SDK_VERSION`                 | the SDK's version, for example `0.6.0`                                                               |
+| Provided                                            | What it is                                                                                           |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `dino_executable(name sources...)`                  | `add_executable()` plus linking `dino_util` (and with it `dino_core`)                                |
+| `dino_test(name sources... [LIBRARIES targets...])` | a test executable with utest.h and the leak check, registered with CTest (see [Testing](testing.md)) |
+| `dino_core`                                         | the portability layer: sockets, threads, processes, pipes, the event loop, ...                       |
+| `dino_util`                                         | extras built on it, such as logging                                                                  |
+| `DINO_SDK_VERSION`                                  | the SDK's version, for example `0.6.0`                                                               |
 
 Everything else is plain CMake, so any CMake guide applies. This page covers what most projects
 need.
@@ -161,8 +161,7 @@ project(app C)
 
 ## Using the SDK from an existing project
 
-A project that already has its own `CMakeLists.txt` builds with `dino build` unchanged. To use the
-SDK, link it:
+A project that already has its own `CMakeLists.txt` builds with `dino build` unchanged, with one exception: no target can be named `test`. dino enables CTest for every project, and CMake then reserves that name (`The target name "test" is reserved when CTest testing is enabled`). To use the SDK, link it:
 
 ```cmake
 target_link_libraries(existing_app PRIVATE dino_core)   # or dino_util for logging too
