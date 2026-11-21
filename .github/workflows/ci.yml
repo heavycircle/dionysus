@@ -138,13 +138,45 @@ jobs:
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
             dionysus:ci /repo/tests/sdk.sh --memcheck
 
+  # The two checks below don't depend on the target. They are the slowest in
+  # the run, so each has a job of its own instead of making one target job take
+  # three times as long as the others.
+  cli:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: docker/setup-buildx-action@v3
+
+      # The `targets` jobs write the layer cache; this one only reads it.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: dionysus:ci
+          cache-from: type=gha
+
       - name: dino command line
-        if: matrix.target == 'x86_64'
         run: docker run --rm -v "$PWD:/repo:ro" dionysus:ci /repo/tests/cli.sh
+
+  docker:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: dionysus:ci
+          cache-from: type=gha
 
       # The image's entrypoint: files in a mounted project keep their owner.
       - name: Docker image ownership
-        if: matrix.target == 'x86_64'
         run: tests/docker.sh dionysus:ci
 
   # Cross-compiled here, as users do it, and run by the `windows` jobs.
