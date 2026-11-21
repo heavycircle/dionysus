@@ -76,11 +76,15 @@ int main(void)
 | `dino_mutex_destroy(m)` | Free it. It must not be locked.           |                                            |
 | `dino_mutex_lock(m)`    | Lock, waiting if another thread holds it. | `0`, `-1` on error                         |
 | `dino_mutex_trylock(m)` | Lock only if that's possible right now.   | `0` if locked, `-1` if it's held elsewhere |
-| `dino_mutex_unlock(m)`  | Unlock.                                   | `0`, `-1` on error                         |
+| `dino_mutex_unlock(m)`  | Unlock.                                   | `0`, `-1` if not held by this thread       |
 
 Mutexes are **recursive**: the thread that holds one can lock it again, and must unlock it as many
 times. That's the behaviour of Windows critical sections, and the SDK gives it on Linux too, so code
 doesn't deadlock on one platform only.
+
+Only the thread holding a mutex can unlock it. Unlocking from another thread, or one time too many,
+returns `-1` and leaves the mutex as it was, on both platforms. (On Windows, a critical section
+unlocked by the wrong thread would otherwise be silently corrupted.)
 
 ## Condition variables
 
@@ -95,7 +99,7 @@ doesn't deadlock on one platform only.
 - **Re-check in a loop:** wake-ups can be spurious, so always wait in a loop that re-checks the
   condition, as the example does.
 - **Lock once before waiting:** the mutex must be locked exactly once by the waiting thread. Waiting
-  while holding it more than once is undefined.
+  while holding it more than once is undefined, and waiting without holding it returns `-1`.
 - **Monotonic timeouts:** `dino_cond_timedwait` measures on the monotonic clock, so changing the
   system time doesn't shorten or extend it.
 

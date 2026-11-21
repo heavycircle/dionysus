@@ -10,7 +10,8 @@ extern "C"
 
 /**
  * Get the size of a regular file, including files over 2 GB on Windows,
- * where ftell and stat's size stop at 2 GB.
+ * where ftell and stat's size stop at 2 GB. A symbolic link reports the size
+ * of the file it points to, on Windows as on Linux.
  *
  * @param  path  Path to the file, UTF-8 on every platform.
  * @param  size  Receives the size in bytes; 0 on failure.
