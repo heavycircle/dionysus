@@ -242,6 +242,51 @@ UTEST(mutex, serializes_concurrent_increments)
     dino_mutex_destroy(g_mutex);
 }
 
+static int unlock_unowned(void *arg)
+{
+    return dino_mutex_unlock(*(dino_mutex_t *)arg);
+}
+
+UTEST(mutex, unlock_by_another_thread_fails_and_keeps_the_lock)
+{
+    g_mutex = dino_mutex_create();
+    ASSERT_NE(DINO_INVALID_MUTEX, g_mutex);
+    ASSERT_EQ(0, dino_mutex_lock(g_mutex));
+
+    dino_thread_t t;
+    int           result = 0;
+    ASSERT_EQ(0, dino_thread_create(&t, unlock_unowned, &g_mutex));
+    ASSERT_EQ(0, dino_thread_join(t, &result));
+    EXPECT_EQ(-1, result);
+
+    // Still held by this thread: another one can't take it.
+    ASSERT_EQ(0, dino_thread_create(&t, try_lock, &result));
+    dino_thread_join(t, NULL);
+    EXPECT_NE(0, result);
+
+    EXPECT_EQ(0, dino_mutex_unlock(g_mutex));
+    dino_mutex_destroy(g_mutex);
+}
+
+UTEST(mutex, unlock_without_lock_fails)
+{
+    dino_mutex_t m = dino_mutex_create();
+    ASSERT_NE(DINO_INVALID_MUTEX, m);
+    EXPECT_EQ(-1, dino_mutex_unlock(m));
+
+    // One unlock too many after a recursive lock.
+    ASSERT_EQ(0, dino_mutex_lock(m));
+    ASSERT_EQ(0, dino_mutex_lock(m));
+    EXPECT_EQ(0, dino_mutex_unlock(m));
+    EXPECT_EQ(0, dino_mutex_unlock(m));
+    EXPECT_EQ(-1, dino_mutex_unlock(m));
+
+    // And the mutex still works.
+    ASSERT_EQ(0, dino_mutex_trylock(m));
+    EXPECT_EQ(0, dino_mutex_unlock(m));
+    dino_mutex_destroy(m);
+}
+
 UTEST(mutex, invalid_handle_is_rejected)
 {
     EXPECT_NE(0, dino_mutex_lock(DINO_INVALID_MUTEX));
@@ -276,6 +321,18 @@ UTEST(cond, create_destroy_and_invalid_handles)
 #define ITEMS      2000
 
 // A bounded queue: the producer waits while it's full, the consumer while it's empty.
+UTEST(cond, waiting_on_an_unowned_mutex_fails)
+{
+    dino_mutex_t m = dino_mutex_create();
+    dino_cond_t  c = dino_cond_create();
+    ASSERT_NE(DINO_INVALID_MUTEX, m);
+    ASSERT_NE(DINO_INVALID_COND, c);
+    EXPECT_EQ(-1, dino_cond_wait(c, m));
+    EXPECT_EQ(-1, dino_cond_timedwait(c, m, 10));
+    dino_cond_destroy(c);
+    dino_mutex_destroy(m);
+}
+
 struct queue
 {
     dino_mutex_t lock;
