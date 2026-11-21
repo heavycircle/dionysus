@@ -103,17 +103,21 @@ anything is still allocated when the test exits, it fails:
 dino leak check: 1 allocation(s) still live at exit
 ```
 
-It counts every `malloc`, `calloc`, `realloc`, `aligned_alloc`, `posix_memalign` and `free`, the C
-library's own included (`strdup`, `fopen`, ...), so a missing `free` or `fclose` is caught.
+It counts every `malloc`, `calloc`, `realloc`, `reallocarray`, `aligned_alloc`, `memalign`, `valloc`, `posix_memalign` and `free`, the C library's own included (`strdup`, `fopen`, ...), so a missing `free` or `fclose` is caught.
 
 - **When it checks:** at the very end of the process, after `atexit` handlers and the destructors of
   C++ globals and function-local statics. Memory a global frees in its destructor doesn't count.
-- **What it ignores:** the environment. libc keeps the strings and the `environ` array that
-  `setenv`, `putenv`, `unsetenv` and `clearenv` allocate for the life of the process, so they aren't
-  counted.
+- **What it ignores:** memory the C library keeps for itself, for the life of the process or until the next call of the same kind. None of it is yours to free:
+  - the environment: the strings and the `environ` array that `setenv`, `putenv`, `unsetenv` and `clearenv` allocate;
+  - the list of `atexit` handlers, which is also where C++ registers the destructors of globals;
+  - the entries `getpwuid`, `getpwnam`, `getpwent`, `getgrgid`, `getgrnam`, `getgrent`, `gethostbyname` and `gethostbyaddr` return;
+  - the time zone that `tzset`, `localtime`, `mktime`, `ctime` and `strftime` read from `TZ`;
+  - locales: `setlocale`, `newlocale`, `duplocale` and `freelocale`, so a `locale_t` you forget to free isn't reported either.
+- **Child processes:** a child made with `fork()` reports nothing; only the test process itself is checked.
+- **A count below zero** (`... more frees than allocations`) also fails the test. It means memory was freed that the check never counted, so a leak of the same size would go unnoticed: a bug in the check, worth reporting, with `DINO_LEAK_CHECK=0` as the way around it.
 - **C++:** C++ tests get the same check, including in a project that enables only `CXX`. `new` and
   `delete` go through `malloc` and `free`, so they're counted too.
-- **Windows targets** have no leak check: the C runtime allocates inside a DLL there.
+- **Windows targets** have no leak check: the C runtime allocates inside a DLL there. The same goes for a Linux build against a dynamic C library (`DINO_DYNAMIC`).
 - **Turning it off:** `DINO_LEAK_CHECK=0` in the environment disables it for one run.
   `DINO_NO_LEAK_CHECK` (set before `project()`) leaves it out of the build.
 
