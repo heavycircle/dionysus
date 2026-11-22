@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <wchar.h>
 
+#include "error_internal.h"
 #include "pipe_internal.h"
 
 #define PIPE_BYTES 65536
@@ -31,6 +32,7 @@ static dino_pipe_t wrap(HANDLE h, int read_end, int overlapped)
     if (!p)
     {
         CloseHandle(h);
+        dino__error_set(DINO_ENOMEM);
         return DINO_INVALID_PIPE;
     }
     p->handle     = h;
@@ -59,11 +61,12 @@ static int create_pair(
     HANDLE server
         = CreateNamedPipeW(name, open_mode, pipe_mode, 1, PIPE_BYTES, PIPE_BYTES, 0, NULL);
     if (server == INVALID_HANDLE_VALUE)
-        return -1;
+        return dino__fail_os();
     HANDLE client = CreateFileW(name, server_reads ? GENERIC_WRITE : GENERIC_READ, 0, NULL,
         OPEN_EXISTING, client_overlapped ? FILE_FLAG_OVERLAPPED : 0, NULL);
     if (client == INVALID_HANDLE_VALUE)
     {
+        dino__error_set_os();
         CloseHandle(server);
         return -1;
     }
@@ -75,7 +78,8 @@ static int create_pair(
         dino_pipe_close(*server_end);
         dino_pipe_close(*client_end);
         *server_end = *client_end = DINO_INVALID_PIPE;
-        return -1;
+        // Closing the half that was made reported nothing, or its own reason.
+        return dino__fail(DINO_ENOMEM);
     }
     return 0;
 }
@@ -118,26 +122,26 @@ static BOOL transfer(struct dino_pipe *p, int write, void *buf, DWORD len, DWORD
 int dino_pipe_read(dino_pipe_t pipe, void *buf, int len)
 {
     if (pipe == DINO_INVALID_PIPE || len < 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     if (len == 0)
         return 0;
 
     DWORD n;
     if (!transfer((struct dino_pipe *)pipe, 0, buf, (DWORD)len, &n))
-        return GetLastError() == ERROR_BROKEN_PIPE ? 0 : -1;
+        return GetLastError() == ERROR_BROKEN_PIPE ? 0 : dino__fail_os();
     return (int)n;
 }
 
 int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
 {
     if (pipe == DINO_INVALID_PIPE || len < 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     if (len == 0)
         return 0;
 
     DWORD n;
     if (!transfer((struct dino_pipe *)pipe, 1, (void *)buf, (DWORD)len, &n))
-        return -1;
+        return dino__fail_os();
     return (int)n;
 }
 
@@ -165,11 +169,11 @@ int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
 {
     struct dino_pipe *p = (struct dino_pipe *)pipe;
     if (!p || !p->read_end || !p->overlapped)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     HANDLE event = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!event)
-        return -1;
+        return dino__fail_os();
     OVERLAPPED ov = { 0 };
     ov.hEvent     = (HANDLE)((ULONG_PTR)event | 1);
     char  none;
@@ -191,7 +195,9 @@ int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
 
     if (ok || err == ERROR_BROKEN_PIPE)
         return 0;
-    return timed_out && err == ERROR_OPERATION_ABORTED ? DINO_TIMEOUT : -1;
+    if (timed_out && err == ERROR_OPERATION_ABORTED)
+        return DINO_TIMEOUT;
+    return dino__fail_code((long)err);
 }
 
 // As dino_pipe_wait does for reads: an overlapped write, cancelled when the
@@ -202,7 +208,7 @@ int dino__pipe_write_timeout(
     struct dino_pipe *p = (struct dino_pipe *)pipe;
     *written            = 0;
     if (!p || p->read_end || len < 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     if (len == 0)
         return 0;
     if (!p->overlapped)
@@ -216,7 +222,7 @@ int dino__pipe_write_timeout(
 
     HANDLE event = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!event)
-        return -1;
+        return dino__fail_os();
     OVERLAPPED ov   = { 0 };
     ov.hEvent       = (HANDLE)((ULONG_PTR)event | 1);
     int   timed_out = 0;
@@ -238,17 +244,24 @@ int dino__pipe_write_timeout(
     *written = (int)n;
     if (ok || n > 0)
         return 0;
-    return timed_out && err == ERROR_OPERATION_ABORTED ? DINO_TIMEOUT : -1;
+    if (timed_out && err == ERROR_OPERATION_ABORTED)
+        return DINO_TIMEOUT;
+    return dino__fail_code((long)err);
 }
 
 int dino_pipe_close(dino_pipe_t pipe)
 {
     struct dino_pipe *p = (struct dino_pipe *)pipe;
     if (!p)
+        return dino__fail(DINO_EINVAL);
+    if (!CloseHandle(p->handle))
+    {
+        dino__error_set_os();
+        free(p);
         return -1;
-    BOOL ok = CloseHandle(p->handle);
+    }
     free(p);
-    return ok ? 0 : -1;
+    return 0;
 }
 
 intptr_t dino__pipe_to_os(dino_pipe_t pipe)
@@ -259,18 +272,20 @@ intptr_t dino__pipe_to_os(dino_pipe_t pipe)
 
 int dino__pipe_is_read_end(dino_pipe_t pipe)
 {
-    return pipe == DINO_INVALID_PIPE ? -1 : ((struct dino_pipe *)pipe)->read_end;
+    return pipe == DINO_INVALID_PIPE ? dino__fail(DINO_EINVAL)
+                                     : ((struct dino_pipe *)pipe)->read_end;
 }
 
 int dino__pipe_attach(dino_pipe_t pipe, intptr_t port, uint64_t loop_id)
 {
     struct dino_pipe *p = (struct dino_pipe *)pipe;
     if (!p || !p->overlapped || !loop_id)
-        return -1;
+        return dino__fail(DINO_EINVAL);
+    // In another loop already, for good (see dino/core/event.h).
     if (p->loop_id)
-        return p->loop_id == loop_id ? 0 : -1;
+        return p->loop_id == loop_id ? 0 : dino__fail(DINO_EEXIST);
     if (!CreateIoCompletionPort(p->handle, (HANDLE)port, 0, 0))
-        return -1;
+        return dino__fail_os();
     p->loop_id = loop_id;
     return 0;
 }

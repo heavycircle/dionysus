@@ -70,13 +70,13 @@ int main(void)
 
 ## Mutexes
 
-| Function                | Does                                      | Returns                                    |
-| ----------------------- | ----------------------------------------- | ------------------------------------------ |
-| `dino_mutex_create()`   | A new mutex.                              | the handle, or `DINO_INVALID_MUTEX`        |
-| `dino_mutex_destroy(m)` | Free it. It must not be locked.           |                                            |
-| `dino_mutex_lock(m)`    | Lock, waiting if another thread holds it. | `0`, `-1` on error                         |
-| `dino_mutex_trylock(m)` | Lock only if that's possible right now.   | `0` if locked, `-1` if it's held elsewhere |
-| `dino_mutex_unlock(m)`  | Unlock.                                   | `0`, `-1` if not held by this thread       |
+| Function                | Does                                      | Returns                                                             |
+| ----------------------- | ----------------------------------------- | ------------------------------------------------------------------- |
+| `dino_mutex_create()`   | A new mutex.                              | the handle, or `DINO_INVALID_MUTEX`                                 |
+| `dino_mutex_destroy(m)` | Free it. It must not be locked.           |                                                                     |
+| `dino_mutex_lock(m)`    | Lock, waiting if another thread holds it. | `0`, `-1` on error                                                  |
+| `dino_mutex_trylock(m)` | Lock only if that's possible right now.   | `0` if locked, `DINO_TIMEOUT` if it's held elsewhere, `-1` on error |
+| `dino_mutex_unlock(m)`  | Unlock.                                   | `0`, `-1` if not held by this thread                                |
 
 Mutexes are **recursive**: the thread that holds one can lock it again, and must unlock it as many
 times. That's the behaviour of Windows critical sections, and the SDK gives it on Linux too, so code

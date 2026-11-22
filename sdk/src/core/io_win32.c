@@ -6,6 +6,8 @@
 
 #include <windows.h>
 
+#include "error_internal.h"
+
 // WSAPoll numbers its flags differently from POSIX (POLLIN is 0x0300, 0x0001
 // is POLLERR), so DINO_* flags must be translated both ways. POLLERR and
 // POLLHUP are never requested: WSAPoll always reports them, and some versions
@@ -45,11 +47,11 @@ static int idle(int timeout_ms)
 int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
 {
     if (nfds < 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     WSAPOLLFD  stack_buf[64];
     WSAPOLLFD *wfds = nfds <= 64 ? stack_buf : malloc((size_t)nfds * sizeof(WSAPOLLFD));
     if (!wfds)
-        return -1;
+        return dino__fail(DINO_ENOMEM);
 
     // Unused slots (DINO_INVALID_SOCKET) are left out, as poll skips fd -1:
     // WSAPoll would report them as errors.
@@ -66,6 +68,8 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
     }
 
     int rc = n == 0 ? idle(timeout_ms) : WSAPoll(wfds, n, timeout_ms);
+    if (rc == SOCKET_ERROR)
+        dino__error_set_os();
 
     if (rc > 0)
         for (int i = 0, j = 0; i < nfds; i++)
@@ -82,7 +86,10 @@ dino_fd_set_t dino_fd_set_create(void)
 {
     fd_set *s = malloc(sizeof(fd_set));
     if (!s)
+    {
+        dino__error_set(DINO_ENOMEM);
         return DINO_INVALID_FD_SET;
+    }
     FD_ZERO(s);
     return (dino_fd_set_t)s;
 }
@@ -107,11 +114,11 @@ int dino_fd_set_add(dino_fd_set_t set, dino_socket_t sock)
 {
     fd_set *s = (fd_set *)set;
     if (set == DINO_INVALID_FD_SET || sock == DINO_INVALID_SOCKET)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     if (FD_ISSET((SOCKET)sock, s))
         return 0;
     if (s->fd_count >= FD_SETSIZE)
-        return -1;
+        return dino__fail(DINO_EMFILE);
     FD_SET((SOCKET)sock, s);
     return 0;
 }
@@ -155,5 +162,5 @@ int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, di
         wfds != DINO_INVALID_FD_SET ? (fd_set *)wfds : NULL,
         efds != DINO_INVALID_FD_SET ? (fd_set *)efds : NULL, tvp);
 
-    return (rc == SOCKET_ERROR) ? -1 : rc;
+    return (rc == SOCKET_ERROR) ? dino__fail_os() : rc;
 }

@@ -101,7 +101,10 @@ int dino_socket_listen(dino_socket_t sock, int backlog);
  * dino_socket_set_nonblocking on it for an event loop.
  *
  * @param  sock     Socket to accept connection.
- * @return Client socket, or DINO_INVALID_SOCKET on failure.
+ * @return Client socket, or DINO_INVALID_SOCKET on failure. On a non-blocking
+ *         listener with no connection waiting, dino_error() is DINO_EAGAIN;
+ *         any other code is a failure with the connection, if there was one,
+ *         still waiting (DINO_EMFILE when the process is out of descriptors).
  */
 dino_socket_t dino_socket_accept(dino_socket_t sock);
 
@@ -113,7 +116,9 @@ dino_socket_t dino_socket_accept(dino_socket_t sock);
  *                  Host names are not resolved.
  * @param  port     Port to connect to, 0 to 65535.
  * @return 0 on connection, -1 on error, if ip is not a valid address or if
- *         port is out of range.
+ *         port is out of range. On a non-blocking socket -1 with dino_error()
+ *         of DINO_EINPROGRESS means the connect has started: wait for the
+ *         socket to become writable, then ask dino_socket_error() how it ended.
  */
 int dino_socket_connect(dino_socket_t sock, const char *ip, int port);
 
@@ -127,7 +132,9 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port);
  * @param  buf      Buffer to send to sock.
  * @param  len      Maximum length of buf.
  * @return Number of bytes sent, or -1 if an error occurred (including a
- *         negative len).
+ *         negative len). On a non-blocking socket whose send buffer is full,
+ *         -1 with dino_error() of DINO_EAGAIN; DINO_EPIPE or DINO_ECONNRESET
+ *         when the peer is gone.
  */
 int dino_socket_send(dino_socket_t sock, const void *buf, int len);
 
@@ -137,8 +144,9 @@ int dino_socket_send(dino_socket_t sock, const void *buf, int len);
  * @param  sock     Socket to receive information.
  * @param  buf      Buffer to store received information.
  * @param  len      Maximum length of buf.
- * @return Number of bytes received, or -1 if an error occurred (including a
- *         negative len).
+ * @return Number of bytes received, 0 when the peer has closed, or -1 if an
+ *         error occurred (including a negative len). On a non-blocking socket
+ *         with nothing to read, -1 with dino_error() of DINO_EAGAIN.
  */
 int dino_socket_recv(dino_socket_t sock, void *buf, int len);
 
@@ -210,6 +218,20 @@ int dino_socket_set_nonblocking(dino_socket_t sock, int enable);
  * @return 0 on success, -1 on error.
  */
 int dino_socket_shutdown(dino_socket_t sock, dino_socket_shutdown_t how);
+
+/**
+ * The error waiting on a socket (SO_ERROR).
+ *
+ * This is how a non-blocking connect ends: once the socket is writable, or an
+ * event loop reports it, 0 here means it is connected and anything else is why
+ * it isn't (DINO_ECONNREFUSED, DINO_ETIMEDOUT, DINO_EUNREACH, ...). Ask once:
+ * Linux forgets the error when it is read, Windows may report it again.
+ *
+ * @param  sock  Socket to ask.
+ * @return 0 if no error is waiting, otherwise a DINO_E* code from
+ *         dino/core/error.h; DINO_EINVAL if sock is not a socket.
+ */
+int dino_socket_error(dino_socket_t sock);
 
 #ifdef __cplusplus
 }

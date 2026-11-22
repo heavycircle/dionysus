@@ -3,6 +3,44 @@
 What changed in the SDK between versions, and how to update code that uses it. The compiler finds
 almost everything here: a removed or renamed name fails to build, and the error points at the line.
 
+## To 0.7
+
+0.7 changes the API where it has to change before 1.0 freezes it.
+
+### Failures have a reason: `dino_error()`
+
+Every failure was `-1` with nothing to tell one from another, so a non-blocking `recv` that had nothing to read looked like a broken connection. [`dino_error()`](error.md) now gives the reason for the last failed call in the thread, as a `DINO_E*` code that is the same on Linux and Windows. Return values are unchanged, so code that only checks for `-1` keeps working.
+
+```c
+// Before: -1 for "nothing yet" and for "connection reset" alike.
+if (dino_socket_recv(sock, buf, len) < 0)
+    drop(conn);
+
+// After
+int n = dino_socket_recv(sock, buf, len);
+if (n < 0 && dino_error() != DINO_EAGAIN)
+    drop(conn);
+```
+
+A non-blocking `dino_socket_connect` fails with `DINO_EINPROGRESS` when it has started, and the new `dino_socket_error(sock)` says how it ended once the socket is writable.
+
+### `dino_mutex_trylock` returns `DINO_TIMEOUT` when the mutex is held
+
+It returned `-1` both for a mutex another thread holds and for an invalid handle. Held elsewhere is now `DINO_TIMEOUT`, the answer of every other wait that would have had to wait, and `-1` is left for errors.
+
+```c
+// Before
+if (dino_mutex_trylock(m) != 0)
+    return; // busy, or broken
+
+// After: the same test still works, since DINO_TIMEOUT is not 0. To tell them apart:
+int rc = dino_mutex_trylock(m);
+if (rc == DINO_TIMEOUT)
+    return; // busy
+```
+
+Code that tested `== -1` for "busy" must test for `DINO_TIMEOUT`.
+
 ## To 0.6.1
 
 Fixes only; nothing fails to build. These change what a program sees at run time.

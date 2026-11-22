@@ -83,7 +83,9 @@ void dino_event_loop_destroy(dino_event_loop_t loop);
  * @param  events    DINO_EVENT_READ and/or DINO_EVENT_WRITE, optionally with
  *                   DINO_EVENT_ONESHOT.
  * @param  userdata  Returned with every event for this socket.
- * @return 0 on success, -1 on error (including when sock is already added).
+ * @return 0 on success, -1 on error. dino_error() (dino/core/error.h) is
+ *         DINO_EEXIST when sock is already added; a mod or del of something
+ *         that isn't in the loop fails with DINO_ENOENT.
  */
 int dino_event_add_socket(
     dino_event_loop_t loop, dino_socket_t sock, uint32_t events, void *userdata);

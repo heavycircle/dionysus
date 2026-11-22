@@ -49,7 +49,9 @@ int dino_mutex_unlock(dino_mutex_t mutex);
  * Attempt to acquire the mutex without blocking.
  *
  * @param mutex  Handle to try-lock.
- * @return 0 if acquired, -1 if already held or on error.
+ * @return 0 if acquired, DINO_TIMEOUT if another thread holds it (a lock that
+ *         would have had to wait, like the other waits that run out of time),
+ *         -1 if mutex is not a mutex.
  */
 int dino_mutex_trylock(dino_mutex_t mutex);
 

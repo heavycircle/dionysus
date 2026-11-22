@@ -9,6 +9,7 @@
 
 #include <dino/core/time.h>
 
+#include "error_internal.h"
 #include "event_internal.h"
 #include "pipe_internal.h"
 #include "process_internal.h"
@@ -384,12 +385,16 @@ dino_event_loop_t dino_event_loop_create(void)
 {
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     if (!ntdll)
+    {
+        dino__error_set_os();
         return DINO_INVALID_EVENT_LOOP;
+    }
     nt_create_file_fn create
         = (nt_create_file_fn)(void (*)(void))GetProcAddress(ntdll, "NtCreateFile");
     struct dino_event_loop *loop = calloc(1, sizeof(*loop));
     if (!create || !loop)
     {
+        dino__error_set(loop ? DINO_ENOTSUP : DINO_ENOMEM);
         free(loop);
         return DINO_INVALID_EVENT_LOOP;
     }
@@ -409,6 +414,14 @@ dino_event_loop_t dino_event_loop_create(void)
     int timers = loop->port ? dino__event_timers_init(&loop->timers) : -1;
     if (!loop->ioctl || !loop->cancel || !loop->slots || !loop->afd || timers != 0)
     {
+        // Missing ntdll entry points, memory, or a port or device that can't
+        // be opened. A failed timer setup has recorded its own reason.
+        if (!loop->ioctl || !loop->cancel)
+            dino__error_set(DINO_ENOTSUP);
+        else if (!loop->slots)
+            dino__error_set(DINO_ENOMEM);
+        else if (!loop->port || !loop->afd)
+            dino__error_set(DINO_EOTHER);
         if (timers == 0)
             dino__event_timers_destroy(&loop->timers);
         if (loop->afd)
@@ -542,13 +555,25 @@ void dino_event_loop_destroy(dino_event_loop_t handle)
     free(loop);
 }
 
+// Why a submit failed, as a DINO_E* code; 0 when it didn't. A socket's poll
+// reports an NTSTATUS, which is not the thread's last error; the pipe and
+// process paths do set that.
+static int submit_reason(int rc, enum kind kind)
+{
+    if (rc == 0)
+        return 0;
+    if (rc == GONE)
+        return DINO_EINVAL;
+    return kind == KIND_SOCKET ? DINO_EOTHER : dino__error_from_os();
+}
+
 // add/mod/del for both kinds; the arguments are already checked.
 static int add_item(struct dino_event_loop *loop, enum kind kind, uintptr_t key, HANDLE handle,
     uint32_t events, void *userdata)
 {
     struct item *s = calloc(1, sizeof(*s));
     if (!s)
-        return -1;
+        return dino__fail(DINO_ENOMEM);
     s->kind     = kind;
     s->key      = key;
     s->handle   = handle;
@@ -556,25 +581,30 @@ static int add_item(struct dino_event_loop *loop, enum kind kind, uintptr_t key,
     s->userdata = userdata;
 
     AcquireSRWLockExclusive(&loop->lock);
-    int rc = -1;
-    if (!find(loop, key, kind) && insert(loop, s) == 0)
+    int reason = 0;
+    if (find(loop, key, kind))
+        reason = DINO_EEXIST;
+    else if (insert(loop, s) != 0)
+        reason = DINO_ENOMEM;
+    else
     {
-        rc = submit(loop, s) == 0 ? 0 : -1;
-        if (rc != 0)
+        reason = submit_reason(submit(loop, s), kind);
+        if (reason)
             remove_slot(loop, s);
     }
     ReleaseSRWLockExclusive(&loop->lock);
-    if (rc != 0)
-        free(s);
-    return rc;
+    if (!reason)
+        return 0;
+    free(s);
+    return dino__fail(reason);
 }
 
 static int mod_item(
     struct dino_event_loop *loop, enum kind kind, uintptr_t key, uint32_t events, void *userdata)
 {
     AcquireSRWLockExclusive(&loop->lock);
-    struct item *s  = find(loop, key, kind);
-    int          rc = -1;
+    struct item *s      = find(loop, key, kind);
+    int          reason = DINO_ENOENT;
     if (s)
     {
         uint32_t old_events   = s->events;
@@ -582,15 +612,15 @@ static int mod_item(
         int      was_queued   = s->queued;
         s->events             = events;
         s->userdata           = userdata;
-        rc                    = 0;
+        reason                = 0;
         unqueue(loop, s);
         if (!s->pending)
-            rc = submit(loop, s) == 0 ? 0 : -1;
+            reason = submit_reason(submit(loop, s), kind);
         else if (kind == KIND_SOCKET && s->polled != to_afd(events))
             cancel(loop, s); // its completion resubmits with the new mask
         // A failed mod changes nothing, as with epoll: the item keeps its old
         // interest and userdata and is polled again by the next wait.
-        if (rc != 0)
+        if (reason)
         {
             s->events   = old_events;
             s->userdata = old_userdata;
@@ -599,7 +629,7 @@ static int mod_item(
         }
     }
     ReleaseSRWLockExclusive(&loop->lock);
-    return rc;
+    return reason ? dino__fail(reason) : 0;
 }
 
 static int del_item(struct dino_event_loop *loop, enum kind kind, uintptr_t key)
@@ -613,14 +643,14 @@ static int del_item(struct dino_event_loop *loop, enum kind kind, uintptr_t key)
         release(loop, s);
     }
     ReleaseSRWLockExclusive(&loop->lock);
-    return s ? 0 : -1;
+    return s ? 0 : dino__fail(DINO_ENOENT);
 }
 
 int dino_event_add_socket(
     dino_event_loop_t loop, dino_socket_t sock, uint32_t events, void *userdata)
 {
     if (!dino__event_ctl_args_valid(loop, sock, events))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return add_item((struct dino_event_loop *)loop, KIND_SOCKET, sock, (HANDLE)base_socket(sock),
         events, userdata);
 }
@@ -629,21 +659,21 @@ int dino_event_mod_socket(
     dino_event_loop_t loop, dino_socket_t sock, uint32_t events, void *userdata)
 {
     if (!dino__event_ctl_args_valid(loop, sock, events))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return mod_item((struct dino_event_loop *)loop, KIND_SOCKET, sock, events, userdata);
 }
 
 int dino_event_del_socket(dino_event_loop_t loop, dino_socket_t sock)
 {
     if (!dino__event_ctl_args_valid(loop, sock, 0))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return del_item((struct dino_event_loop *)loop, KIND_SOCKET, sock);
 }
 
 int dino_event_add_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata)
 {
     if (!dino__event_pipe_args_valid(loop, events) || dino__pipe_is_read_end(pipe) != 1)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     struct dino_event_loop *l = (struct dino_event_loop *)loop;
     if (dino__pipe_attach(pipe, (intptr_t)l->port, l->id) != 0)
         return -1;
@@ -653,14 +683,14 @@ int dino_event_add_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t event
 int dino_event_mod_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata)
 {
     if (!dino__event_pipe_args_valid(loop, events) || pipe == DINO_INVALID_PIPE)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return mod_item((struct dino_event_loop *)loop, KIND_PIPE, pipe, events, userdata);
 }
 
 int dino_event_del_pipe(dino_event_loop_t loop, dino_pipe_t pipe)
 {
     if (loop == DINO_INVALID_EVENT_LOOP || pipe == DINO_INVALID_PIPE)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return del_item((struct dino_event_loop *)loop, KIND_PIPE, pipe);
 }
 
@@ -694,7 +724,7 @@ static int flush_queue(struct dino_event_loop *loop, dino_event_t *out, int max)
 int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int timeout_ms)
 {
     if (!dino__event_wait_args_valid(handle, out, max))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
     uint64_t                deadline
         = dino_time_monotonic_ns() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0) * 1000000;
@@ -722,7 +752,7 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
                 // Timers already collected are out of the heap: report them
                 // rather than lose them with the error.
                 if (GetLastError() != WAIT_TIMEOUT)
-                    return n > 0 ? n : -1;
+                    return n > 0 ? n : dino__fail_os();
                 got = 0;
             }
         }
@@ -767,6 +797,7 @@ static int post_wake(struct dino_event_loop *loop)
         return 0;
     if (PostQueuedCompletionStatus(loop->port, 0, WAKE_KEY, NULL))
         return 0;
+    dino__error_set_os();
     InterlockedExchange(&loop->wake_posted, 0);
     return -1;
 }
@@ -775,7 +806,7 @@ int dino_event_wake(dino_event_loop_t handle)
 {
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
     if (!loop)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     InterlockedExchange(&loop->user_wake, 1);
     return post_wake(loop);
 }
@@ -788,7 +819,7 @@ void dino__event_interrupt(dino_event_loop_t handle)
 int dino_event_add_process(dino_event_loop_t loop, dino_process_t process, void *userdata)
 {
     if (loop == DINO_INVALID_EVENT_LOOP || process == DINO_INVALID_PROCESS)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return add_item((struct dino_event_loop *)loop, KIND_PROCESS, process,
         (HANDLE)dino__process_to_os(process), 0, userdata);
 }
@@ -796,6 +827,6 @@ int dino_event_add_process(dino_event_loop_t loop, dino_process_t process, void 
 int dino_event_del_process(dino_event_loop_t loop, dino_process_t process)
 {
     if (loop == DINO_INVALID_EVENT_LOOP || process == DINO_INVALID_PROCESS)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return del_item((struct dino_event_loop *)loop, KIND_PROCESS, process);
 }

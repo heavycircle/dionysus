@@ -114,7 +114,7 @@ after changing `cli/` or `sdk/`.
 build.zig, build.zig.zon   Zig build for dino; build.zig.zon holds the version
 cli/                       dino source (main.zig, commands/, cmake.zig, libraries.zig, ...)
 sdk/
-  include/dino/core/       public headers: event, fs, io, mutex (+ condition variables, once), network,
+  include/dino/core/       public headers: error, event, fs, io, mutex (+ condition variables, once), network,
                            pipe, process, runtime, thread, time
   include/dino/util/       extras built on core: logging
   src/core/                implementations: <module>.c (shared, if any), <module>_posix.c and
@@ -366,6 +366,7 @@ where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same w
   Constructors return the handle, with the `DINO_INVALID_*` value on failure; functions that start
   something or produce several results take out-parameters and return `0` / `-1`. Waits return
   `DINO_TIMEOUT` when the time runs out. Document it in the header's `@return`.
+- **Every failure records a reason** for `dino_error()` before it returns: `return dino__fail(DINO_EINVAL);` for an argument, `return dino__fail_os();` right after the system call that failed, before any cleanup can replace `errno` (`src/core/error_internal.h`). A path that returns `-1` without one makes `dino_error()` report some earlier failure. `DINO_TIMEOUT` is not a failure and records nothing.
 - **Timeouts** are `int timeout_ms`: `-1` waits forever, `0` checks once.
 - **Strings are UTF-8** on every platform; Windows code converts them for the `W` APIs.
 - **Headers** are self-contained, in `extern "C"` guards, and documented with `/** */` comments

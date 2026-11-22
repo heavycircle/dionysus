@@ -13,6 +13,7 @@ Every project `dino` builds can use it: `dino_executable()` links it, or link it
 | Module                   | Header                | Library     | For                                                           |
 | ------------------------ | --------------------- | ----------- | ------------------------------------------------------------- |
 | [Runtime](runtime.md)    | `dino/core/runtime.h` | `dino_core` | process-wide setup, which is automatic                        |
+| [Errors](error.md)       | `dino/core/error.h`   | `dino_core` | why a call failed, with the same codes on every platform      |
 | [Network](network.md)    | `dino/core/network.h` | `dino_core` | TCP and UDP sockets over IPv4 and IPv6                        |
 | [Poll and select](io.md) | `dino/core/io.h`      | `dino_core` | waiting on a few sockets at once                              |
 | [Event loop](event.md)   | `dino/core/event.h`   | `dino_core` | waiting on many sockets, pipes, processes and timers at once  |
@@ -51,12 +52,14 @@ value on failure: `dino_socket_create`, `dino_mutex_create`, `dino_event_loop_cr
 start something or produce more than one result take out-parameters and return `0` or `-1`:
 `dino_thread_create`, `dino_process_spawn`, `dino_pipe_create`, `dino_file_size`.
 
-**Return values.** Functions that do something return `0` on success and `-1` on failure. Functions
-that wait with a timeout return `DINO_TIMEOUT` (`1`) when the time runs out. Counts (bytes read,
-events ready) are non-negative, with `-1` for an error. Failures don't come with a portable reason
-code; each header documents what can fail.
+**Return values.** Functions that do something return `0` on success and `-1` on failure. Counts (bytes read, events ready) are non-negative, with `-1` for an error. After any failure, [`dino_error()`](error.md) gives the reason as a `DINO_E*` code that is the same on every platform; "would block" on a non-blocking socket is `DINO_EAGAIN`.
 
-**Timeouts** are in milliseconds: `-1` waits forever, `0` checks and returns at once.
+**Waits** come in two kinds, and `0` means opposite things in them:
+
+- Waits for one thing return `0` when it happened and `DINO_TIMEOUT` (`1`) when the time ran out: `dino_pipe_wait`, `dino_cond_timedwait`, `dino_process_wait_timeout`, and `dino_mutex_trylock`, which is a lock that doesn't wait.
+- Waits for any of several things return how many are ready, so `0` is the timeout: `dino_poll`, `dino_select`, `dino_event_wait`.
+
+**Timeouts** are in milliseconds: `-1` waits forever, `0` checks and returns at once. The one exception is `timeout_ms` in the options of `dino_process_run`, where `0` (the value a zeroed struct has) means no timeout.
 
 **Ownership.** Whatever creates a handle must release it exactly once: close sockets and pipes,
 join or detach threads, wait for processes, destroy mutexes and loops. Functions that allocate

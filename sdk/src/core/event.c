@@ -4,6 +4,7 @@
 
 #include <dino/core/time.h>
 
+#include "error_internal.h"
 #include "event_internal.h"
 
 #define NOT_IN_HEAP SIZE_MAX
@@ -105,11 +106,17 @@ dino_event_timer_t dino_event_timer_add(
     dino_event_loop_t loop, uint32_t delay_ms, uint32_t interval_ms, void *userdata)
 {
     if (loop == DINO_INVALID_EVENT_LOOP)
+    {
+        dino__error_set(DINO_EINVAL);
         return DINO_INVALID_EVENT_TIMER;
+    }
     struct dino__event_timers *t  = (struct dino__event_timers *)loop;
     struct dino__event_timer  *tm = calloc(1, sizeof(*tm));
     if (!tm)
+    {
+        dino__error_set(DINO_ENOMEM);
         return DINO_INVALID_EVENT_TIMER;
+    }
     tm->deadline_ns = dino_time_monotonic_ns() + (uint64_t)delay_ms * 1000000;
     tm->interval_ns = (uint64_t)interval_ms * 1000000;
     tm->userdata    = userdata;
@@ -130,6 +137,7 @@ dino_event_timer_t dino_event_timer_add(
     if (!ok)
     {
         free(tm);
+        dino__error_set(DINO_ENOMEM);
         return DINO_INVALID_EVENT_TIMER;
     }
     // A thread already waiting computed its timeout from the old earliest.
@@ -141,11 +149,11 @@ dino_event_timer_t dino_event_timer_add(
 int dino_event_timer_del(dino_event_loop_t loop, dino_event_timer_t timer)
 {
     if (loop == DINO_INVALID_EVENT_LOOP || timer == DINO_INVALID_EVENT_TIMER)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     struct dino__event_timers *t  = (struct dino__event_timers *)loop;
     struct dino__event_timer  *tm = (struct dino__event_timer *)timer;
     if (tm->owner != t)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     dino_mutex_lock(t->lock);
     if (tm->index != NOT_IN_HEAP)
         remove_at(t, tm->index);

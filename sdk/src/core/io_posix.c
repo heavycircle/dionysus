@@ -5,6 +5,8 @@
 #include <sys/select.h>
 #include <sys/time.h>
 
+#include "error_internal.h"
+
 // The DINO_* values happen to equal Linux's, but translating keeps that an
 // implementation detail rather than something every target must share.
 static short to_os_events(short events)
@@ -35,8 +37,10 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
 {
     struct pollfd  stack_buf[64];
     struct pollfd *pfds = nfds <= 64 ? stack_buf : malloc((size_t)nfds * sizeof(struct pollfd));
+    if (nfds < 0)
+        return dino__fail(DINO_EINVAL);
     if (!pfds)
-        return -1;
+        return dino__fail(DINO_ENOMEM);
 
     for (int i = 0; i < nfds; i++)
     {
@@ -46,6 +50,8 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
     }
 
     int rc = poll(pfds, (nfds_t)nfds, timeout_ms);
+    if (rc < 0)
+        dino__error_set_os();
 
     for (int i = 0; i < nfds; i++)
     {
@@ -64,7 +70,10 @@ dino_fd_set_t dino_fd_set_create(void)
 {
     fd_set *s = malloc(sizeof(fd_set));
     if (!s)
+    {
+        dino__error_set(DINO_ENOMEM);
         return DINO_INVALID_FD_SET;
+    }
     FD_ZERO(s);
     return (dino_fd_set_t)s;
 }
@@ -92,7 +101,7 @@ static int fits(dino_socket_t sock)
 int dino_fd_set_add(dino_fd_set_t set, dino_socket_t sock)
 {
     if (set == DINO_INVALID_FD_SET || !fits(sock))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     FD_SET((int)sock, (fd_set *)set);
     return 0;
 }
@@ -123,7 +132,8 @@ int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, di
         tvp        = &tv;
     }
 
-    return select((int)max_fd, rfds != DINO_INVALID_FD_SET ? (fd_set *)rfds : NULL,
+    int rc = select((int)max_fd, rfds != DINO_INVALID_FD_SET ? (fd_set *)rfds : NULL,
         wfds != DINO_INVALID_FD_SET ? (fd_set *)wfds : NULL,
         efds != DINO_INVALID_FD_SET ? (fd_set *)efds : NULL, tvp);
+    return rc < 0 ? dino__fail_os() : rc;
 }

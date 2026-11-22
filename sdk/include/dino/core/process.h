@@ -86,8 +86,10 @@ typedef struct
  * @param  opts     Options, or NULL for the defaults.
  * @param  pipes    Receives the parent's pipe ends; may be NULL if no stream
  *                  is DINO_STDIO_PIPE.
- * @return 0 on success, -1 if the program couldn't be started (not found, not
- *         executable, bad arguments, a stdio mode outside dino_stdio_t).
+ * @return 0 on success, -1 if the program couldn't be started. dino_error()
+ *         (dino/core/error.h) says why: DINO_ENOENT when the program or the
+ *         cwd isn't there, DINO_EACCES when it can't be executed, DINO_EINVAL
+ *         for bad arguments or a stdio mode outside dino_stdio_t.
  */
 int dino_process_spawn(dino_process_t *process, char *const argv[],
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes);
