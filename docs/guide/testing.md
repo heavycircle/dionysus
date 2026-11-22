@@ -78,8 +78,7 @@ Keep the program's logic in a library that both the program and the tests link, 
 
 ## Running tests
 
-- **Building:** `dino test` builds first (the same as `dino build` for those targets), then runs
-  CTest in each target's build directory.
+- **Building:** `dino test` builds the project and its test executables, then runs CTest in each target's build directory. `dino build` and `dino run` leave the test executables out, so a project with many tests doesn't compile them every time it runs; switching between the commands never reconfigures.
 - **Foreign targets** run under qemu-user or wine, exactly like `dino run`.
 - **In parallel:** test executables run in parallel (`-j`, default: the number of CPUs). Tests that
   open sockets should each use their own ports.

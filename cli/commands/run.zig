@@ -53,6 +53,9 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     }
     opts.targets = try build.resolveTargets(ctx, if (target_name) |n| &.{n} else &.{});
     const target = opts.targets[0];
+    // A test is left out of the default build; one asked for by name has to
+    // be built (with the others: they are one CMake target, dino_tests).
+    if (exe_name != null) opts.run.tests = true;
 
     const executables = if (no_build)
         try existingExecutables(ctx, opts)

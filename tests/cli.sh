@@ -119,6 +119,23 @@ case_doctor_checks_zig() {
     grep -q 'zig .*0\.13\.0.*dino needs Zig' out
 }
 
+# dino build and dino run leave the test executables out, and editors still
+# see their sources; dino test builds them, and switching back and forth
+# never reconfigures. A test asked for by name with --exe is built too.
+case_tests_left_out_of_build() {
+    project no_tests
+    dino build >out 2>&1 || { cat out; return 1; }
+    [[ ! -e build/x86_64/test_main ]] || { echo "dino build built the test"; return 1; }
+    ! grep -q test_main out || { cat out; return 1; }
+    grep -q 'tests/test_main.c' compile_commands.json || { echo "test source missing from compile_commands.json"; return 1; }
+    dino test >out 2>&1 || { cat out; return 1; }
+    [[ -x build/x86_64/test_main ]] || return 1
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    ! grep -q -- '-S .* -B ' out || { echo "switching back reconfigured"; cat out; return 1; }
+    dino clean >/dev/null
+    dino run --exe test_main >out 2>&1 || { cat out; return 1; }
+}
+
 # A target named twice, even by its triple, is built once.
 case_duplicate_targets() {
     project duplicates

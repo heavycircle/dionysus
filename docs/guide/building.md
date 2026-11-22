@@ -47,8 +47,9 @@ Each target builds in `build/<target>/`, and `dino build` lists what it produced
 ```
 ==> arm64 (aarch64-linux-musl, release)
     build/arm64/hello (6.3 KiB)
-    build/arm64/test_main (40.2 KiB)
 ```
+
+Test executables (from `dino_test()`) aren't part of it: `dino build` and `dino run` build only the project's own programs, and [`dino test`](testing.md) builds the tests. Their sources are still in `compile_commands.json`, so editors know them.
 
 The Linux binaries are static ELF files linked against musl. They run on any Linux kernel for their
 architecture, with nothing installed. The Windows binaries are PE files linked against MinGW-w64
@@ -89,7 +90,7 @@ dino run -- --verbose input.txt   # arguments for the program go after --
 - **Signals:** dino waits for the program to exit. Ctrl-C and Ctrl-\\ at the terminal, and the hangup of a closed terminal, reach the program directly, once. A signal sent to dino alone (`kill`, a supervisor's `SIGTERM`) is passed on to the program, and once the program has exited, to anything it left running, so an interrupted `dino build` doesn't leave make and the compilers working in the background. dino doesn't wait for those to finish. A signal that was ignored when dino started (`nohup dino build`, a background job in a script) stays ignored, by dino and by what it runs. On Windows, Ctrl-C and Ctrl-Break reach the program and dino ignores them. The same holds while `dino build` and `dino test` run CMake and CTest, and once interrupted they stop instead of going on to the next target.
 - **wine output:** wine's own `fixme:` chatter is silenced unless you set `WINEDEBUG` yourself.
 - **Several executables:** pick one with `--exe <name>`. Test executables (from `dino_test()`) are
-  never picked automatically, only by name.
+  never picked automatically, only by name, and `dino run --exe` builds the tests too.
 - **Skipping the build:** `--no-build` runs what's already in `build/<target>/`, whichever mode
   was built last. With `--debug` or `--release` as well, it fails if that isn't the mode there.
 

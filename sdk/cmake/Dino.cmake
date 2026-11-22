@@ -23,6 +23,10 @@ enable_testing()
 # Test targets get FOLDER dino_tests, which the CMake file API reports, so
 # `dino run` can tell them apart from the program itself.
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+# Test executables are left out of `all`, so `dino build` and `dino run` don't
+# compile them; `dino test` builds this target as well. One build directory
+# serves both, so switching commands never reconfigures.
+add_custom_target(dino_tests)
 
 # A test executable: dino_util and dino_core plus utest.h (`#include <utest.h>`), and on Linux
 # targets a leak check that fails the test if anything is still allocated at
@@ -53,13 +57,14 @@ function(dino_test name)
                 "only when the library itself is the project being tested.")
         endif()
     endif()
-    add_executable(${name} ${arg_UNPARSED_ARGUMENTS})
+    add_executable(${name} EXCLUDE_FROM_ALL ${arg_UNPARSED_ARGUMENTS})
     target_link_libraries(${name} PRIVATE dino_testing ${arg_LIBRARIES})
     set_target_properties(${name} PROPERTIES FOLDER dino_tests)
     if(DINO__LIBRARY_DEPENDENCY)
         set_target_properties(${name} PROPERTIES DINO__LIBRARY_TEST "${CMAKE_CURRENT_SOURCE_DIR}")
     else()
         add_test(NAME ${name} COMMAND ${name})
+        add_dependencies(dino_tests ${name})
     endif()
 endfunction()
 
