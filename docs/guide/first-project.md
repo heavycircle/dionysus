@@ -26,12 +26,12 @@ hello/
 ```
 
 `dino init` never overwrites a file that already exists, so it's safe to run in a directory that
-already has some of these. It also configures the project once, so `compile_commands.json` exists
+already has some of these. In a directory that already has a `CMakeLists.txt` it treats the project as yours: it adds whichever of `.gitignore`, `.clang-format` and `.clang-tidy` are missing and leaves `src/` and `tests/` alone, so a `main.c` you renamed or a sample test you deleted doesn't come back. It also configures the project once, so `compile_commands.json` exists
 before the first build and your editor works straight away. `--no-configure` skips that step.
 
 The project, and its program, are named after the directory. A name that CMake or dino already
 uses for a target is refused before anything is written: `all`, `clean`, `help`, `install`,
-`package`, `test`, `test_main` and anything starting with `dino_`.
+`package`, `preinstall`, `test`, `test_main`, anything starting with `dino_`, and the names of directories in `build/<target>/` (`CMakeFiles`, `Testing`, `_dino`, `_dino_libs`). An existing project is never refused for its name.
 
 The generated `CMakeLists.txt`:
 

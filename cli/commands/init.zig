@@ -12,7 +12,10 @@ pub const usage =
     \\Create a new dino project in <directory> (default: the current directory).
     \\Existing files are never overwritten. The project is named after the
     \\directory, which can't be a name CMake or dino already uses (all, clean,
-    \\help, install, package, test, test_main, dino_*).
+    \\help, install, package, test, test_main, dino_*, ...).
+    \\
+    \\In a directory that already has a CMakeLists.txt, only the files it lacks
+    \\among .gitignore, .clang-format and .clang-tidy are added.
     \\
     \\Creates:
     \\    CMakeLists.txt         Builds every .c file under src/ and links the SDK
@@ -103,27 +106,44 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
             return ctx.usage("unknown option '{s}'\n\n{s}", .{ arg, usage });
         } else if (dir != null) {
             return ctx.usage("`dino init` takes a single directory", .{});
+        } else if (arg.len == 0) {
+            return ctx.usage("the directory for `dino init` is empty", .{});
         } else {
             dir = arg;
         }
     }
-    const root = if (base) |b| ctx.join(&.{ b, dir orelse "." }) else dir orelse ".";
+    // -C as in the other commands and in git and make: an absolute directory
+    // is not moved under it.
+    const root = if (dir) |d|
+        (if (base != null and !std.fs.path.isAbsolute(d)) ctx.join(&.{ base.?, d }) else d)
+    else
+        base orelse ".";
     const cwd = Io.Dir.cwd();
     // Named before anything is created, so a refused name leaves nothing behind.
     const here = cwd.realPathFileAlloc(ctx.io, ".", ctx.arena) catch |e|
         return ctx.fail("resolving the current directory: {t}", .{e});
     const abs = std.fs.path.resolve(ctx.arena, &.{ here, root }) catch @panic("OOM");
     const name = projectName(ctx.arena, std.fs.path.basename(abs));
-    if (isReserved(name)) {
+    // A directory that has a CMakeLists.txt is a project already: it keeps its
+    // name, whatever that is, and gets no second main() or sample test, which
+    // its own CMakeLists.txt would pick up. Only the tooling files are added.
+    const is_new = !ctx.exists(ctx.join(&.{ root, "CMakeLists.txt" }));
+    if (is_new and isReserved(name)) {
         return ctx.usage("'{s}' can't be a project name: CMake or dino already has a target by that name; use a directory with another name", .{name});
     }
-    for ([_][]const u8{ "src", "tests" }) |sub| cwd.createDirPath(ctx.io, ctx.join(&.{ root, sub })) catch |e|
-        return ctx.fail("creating {s}: {t}", .{ root, e });
+    // Before any file: a failure here must not leave a CMakeLists.txt behind,
+    // which would make the next attempt take this for an existing project.
+    if (is_new) {
+        for ([_][]const u8{ "src", "tests" }) |sub| {
+            const path = ctx.join(&.{ root, sub });
+            cwd.createDirPath(ctx.io, path) catch |e| return ctx.fail("creating {s}: {t}", .{ path, e });
+        }
+    }
 
-    const files = [_]struct { path: []const u8, data: []const u8 }{
+    const files = [_]struct { path: []const u8, data: []const u8, source: bool = false }{
         .{ .path = "CMakeLists.txt", .data = ctx.sprint(cmake_template, .{name}) },
-        .{ .path = "src/main.c", .data = ctx.sprint(main_template, .{name}) },
-        .{ .path = "tests/test_main.c", .data = ctx.sprint(test_template, .{}) },
+        .{ .path = "src/main.c", .data = ctx.sprint(main_template, .{name}), .source = true },
+        .{ .path = "tests/test_main.c", .data = ctx.sprint(test_template, .{}), .source = true },
         .{ .path = ".gitignore", .data = gitignore_template },
         .{ .path = ".clang-format", .data = templates.clang_format },
         .{ .path = ".clang-tidy", .data = templates.clang_tidy },
@@ -134,8 +154,19 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
             ctx.print("    exists   {s}\n", .{dest});
             continue;
         }
-        cwd.writeFile(ctx.io, .{ .sub_path = dest, .data = file.data, .flags = .{ .exclusive = true } }) catch |e|
-            return ctx.fail("writing {s}: {t}", .{ dest, e });
+        if (file.source and !is_new) {
+            ctx.print("    skipped  {s} (the project already exists)\n", .{dest});
+            continue;
+        }
+        cwd.writeFile(ctx.io, .{ .sub_path = dest, .data = file.data, .flags = .{ .exclusive = true } }) catch |e| switch (e) {
+            // Something is there that exists() can't see through: a symbolic
+            // link to a file that is gone.
+            error.PathAlreadyExists => {
+                ctx.print("    exists   {s}\n", .{dest});
+                continue;
+            },
+            else => return ctx.fail("writing {s}: {t}", .{ dest, e }),
+        };
         ctx.print("    created  {s}\n", .{dest});
     }
 
@@ -164,7 +195,10 @@ fn configureHost(ctx: *Ctx, root: []const u8) Ctx.Error!u8 {
         return 0;
     };
     ctx.step("configuring for {s} ({s})", .{ host.name, host.triple });
-    if (!try build.configureOnly(ctx, .{ .project = root, .targets = &.{host} })) {
+    // An error it has already reported (a bad DINO_LIBRARY_PATH entry, say)
+    // is the same outcome: the project is there, the configure step isn't.
+    const configured = build.configureOnly(ctx, .{ .project = root, .targets = &.{host} }) catch false;
+    if (!configured) {
         ctx.errorMessage("files were created, but configuring failed (see above)", .{});
         return 1;
     }
@@ -172,8 +206,9 @@ fn configureHost(ctx: *Ctx, root: []const u8) Ctx.Error!u8 {
     return 0;
 }
 
-/// CMake target names allow letters, digits, `_`, `-`, `.` and `+`; anything
-/// else in the directory name becomes `_`.
+/// Letters, digits, `_` and `-` are kept; anything else in the directory name
+/// becomes `_`. CMake would also take `.` and `+` in a target name, but the
+/// name is the program's file name too.
 fn projectName(arena: std.mem.Allocator, base: []const u8) []const u8 {
     if (base.len == 0) return "app";
     const name = arena.dupe(u8, base) catch @panic("OOM");
@@ -184,12 +219,15 @@ fn projectName(arena: std.mem.Allocator, base: []const u8) []const u8 {
 }
 
 /// Targets CMake defines itself (see policy CMP0037), the test target the
-/// generated CMakeLists.txt adds, and the SDK's dino_ namespace.
+/// generated CMakeLists.txt adds, the SDK's dino_ namespace, and the
+/// directories CMake, CTest and Dino.cmake make in build/<target>/, where the
+/// program of the same name would have to go.
 const reserved = [_][]const u8{
     "all",        "clean",          "help",       "install",       "test",
     "package",    "package_source", "edit_cache", "rebuild_cache", "ALL_BUILD",
     "ZERO_CHECK", "RUN_TESTS",      "INSTALL",    "PACKAGE",       "list_install_components",
-    "test_main",
+    "preinstall", "test_main",      "CMakeFiles", "Testing",       "_dino",
+    "_dino_libs",
 };
 
 fn isReserved(name: []const u8) bool {
@@ -204,6 +242,8 @@ test isReserved {
     try std.testing.expect(isReserved("test"));
     try std.testing.expect(isReserved("dino_core"));
     try std.testing.expect(isReserved("ZERO_CHECK"));
+    try std.testing.expect(isReserved("preinstall"));
+    try std.testing.expect(isReserved("_dino_libs"));
     try std.testing.expect(!isReserved("testing"));
     try std.testing.expect(!isReserved("dino"));
 }
