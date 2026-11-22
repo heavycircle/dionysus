@@ -129,14 +129,19 @@ jobs:
           context: .
           load: true
           tags: dionysus:release
-          # The build context has no .git; pass the exact version.
-          build-args: DINO_VERSION=${{ needs.build.outputs.version }}
+          # The build context has no .git; pass the exact version. A published
+          # image warms its zig cache (Dockerfile); CI's per-PR images don't.
+          build-args: |
+            DINO_VERSION=${{ needs.build.outputs.version }}
+            WARM_ZIG_CACHE=1
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
 
       # A tag from before the script existed is re-published untested.
       - name: Test the image
         if: hashFiles('tests/image.sh') != ''
+        env:
+          DINO_IMAGE_WARM: 1
         run: tests/image.sh dionysus:release "${{ needs.build.outputs.version }}"
 
       - uses: docker/login-action@v3
@@ -152,7 +157,9 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.tags.outputs.tags }}
-          build-args: DINO_VERSION=${{ needs.build.outputs.version }}
+          build-args: |
+            DINO_VERSION=${{ needs.build.outputs.version }}
+            WARM_ZIG_CACHE=1
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
 

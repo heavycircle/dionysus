@@ -158,7 +158,7 @@ dino clean arm win32  # just these
 
 The first build of each target, in each build mode, takes noticeably longer than later ones: zig builds the C library (musl or MinGW) and its runtime for that target and caches them in its own cache directory (`~/.cache/zig`), which every later project reuses. On a typical machine that is several seconds for a Linux target and longer for Windows; `dino` says so when it starts configuring a target for the first time.
 
-The C library is built again for each new combination of flags that reach the link, since zig caches it per set of flags: switching to `--debug` once, or adding a flag such as `-flto` or `-mcpu=...`, each costs one more of these builds. In Docker, mount a directory as the zig cache (see [Docker](docker.md#file-ownership)) so containers don't start cold every time.
+The C library is built again for each new combination of flags that reach the link, since zig caches it per set of flags: switching to `--debug` once, or adding a flag such as `-flto` or `-mcpu=...`, each costs one more of these builds. In Docker, the published images come with Release builds' libraries already in their cache, and a mounted cache keeps the rest between containers (see [Docker](docker.md#the-zig-cache)).
 
 ## Without dino
 
