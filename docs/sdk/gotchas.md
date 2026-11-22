@@ -72,10 +72,12 @@ a socket or pipe doesn't, which is one more reason to use the `dino_*` calls.
 
 ## Exit codes
 
-On Linux only the low 8 bits of an exit code survive (`exit(256)` reads as 0), and a process killed
-by a signal reports `128 + signal`. Windows keeps 32 bits. Stay within 0 to 125 for codes that mean
-the same everywhere. `dino_process_wait` reports `DINO_EXIT_KILLED` (137) after
-`dino_process_kill` on both.
+On Linux only the low 8 bits of an exit code survive (`exit(256)` reads as 0); Windows keeps 32 bits. Stay within 0 to 125 for codes that mean the same everywhere.
+
+Tell a crash from an exit with `status.signal`, not with `status.code`: a signal on Linux, or a crash on Windows, sets `signal`, and `code` then holds each platform's own number (`128 + signal` on Linux, the `NTSTATUS` on Windows, such as `0xC0000005`). Two differences remain:
+
+- **`abort()`** ends a Linux program with `SIGABRT`, but a MinGW program with exit code 3 and no signal.
+- **A Windows program that exits with a code that looks like an error `NTSTATUS`** (both top bits set) is reported as a crash, since Windows itself can't tell the two apart.
 
 ## Stack size
 

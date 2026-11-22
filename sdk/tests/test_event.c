@@ -1042,9 +1042,9 @@ UTEST(event, child_stdout_through_the_loop)
 
     dino_event_del_pipe(loop, pipes.out);
     dino_pipe_close(pipes.out);
-    int code = -1;
-    EXPECT_EQ(0, dino_process_wait(proc, &code));
-    EXPECT_EQ(0, code);
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait(proc, &status));
+    EXPECT_EQ(0, status.code);
     dino_event_loop_destroy(loop);
 }
 
@@ -1086,9 +1086,9 @@ UTEST(event, process_exit_reported_once)
     EXPECT_EQ(0, dino_event_wait(loop, out, 4, 200));
 
     ASSERT_EQ(0, dino_event_del_process(loop, p));
-    int code = -1;
-    EXPECT_EQ(0, dino_process_wait_timeout(p, 0, &code));
-    EXPECT_EQ(3, code);
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait_timeout(p, 0, &status));
+    EXPECT_EQ(3, status.code);
     dino_event_loop_destroy(loop);
 }
 
@@ -1107,9 +1107,9 @@ UTEST(event, process_kill_reported)
     EXPECT_EQ((uint32_t)DINO_EVENT_EXIT, out[0].events);
 
     ASSERT_EQ(0, dino_event_del_process(loop, p));
-    int code = -1;
-    EXPECT_EQ(0, dino_process_wait(p, &code));
-    EXPECT_EQ(DINO_EXIT_KILLED, code);
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(DINO_EXIT_KILLED, status.code);
     dino_event_loop_destroy(loop);
 }
 

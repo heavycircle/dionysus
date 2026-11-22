@@ -25,9 +25,9 @@ static int run_and_collect(void)
         dino_process_result_free(&result);
         return 0;
     }
-    printf("run: exit %d, stdout: %s", result.exit_code, result.out);
+    printf("run: exit %d, stdout: %s", result.status.code, result.out);
     printf("run: stderr: %s", result.err);
-    int ok = result.exit_code == 3 && strstr(result.out, "hello from the child")
+    int ok = result.status.code == 3 && strstr(result.out, "hello from the child")
         && strstr(result.err, "a warning");
     dino_process_result_free(&result);
     return ok;
@@ -56,11 +56,11 @@ static int spawn_and_stream(void)
     output[total] = '\0';
     dino_pipe_close(pipes.out);
 
-    int code = -1;
-    if (dino_process_wait(child, &code) != 0)
+    dino_process_status_t status = { -1, 0 };
+    if (dino_process_wait(child, &status) != 0)
         return 0;
-    printf("spawn: exit %d, stdout: %s", code, output);
-    return code == 3 && strstr(output, "hello from the child") != NULL;
+    printf("spawn: exit %d, stdout: %s", status.code, output);
+    return status.code == 3 && strstr(output, "hello from the child") != NULL;
 }
 
 int main(void)

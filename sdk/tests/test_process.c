@@ -6,6 +6,7 @@
 // clang-format on
 #endif
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,10 +63,10 @@ static int run(const char *const argv[], const dino_process_spawn_opts_t *base, 
     read_all(pipes.out, out, size);
     strip_cr(out);
     dino_pipe_close(pipes.out);
-    int code = -1;
-    if (dino_process_wait(p, &code) != 0)
+    dino_process_status_t status = { -1, 0 };
+    if (dino_process_wait(p, &status) != 0)
         return -1;
-    return code;
+    return status.code;
 }
 
 UTEST(process, exit_code_is_reported)
@@ -75,9 +76,9 @@ UTEST(process, exit_code_is_reported)
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
     ASSERT_NE(DINO_INVALID_PROCESS, p);
     EXPECT_NE(0u, dino_process_id(p));
-    int code = -1;
-    EXPECT_EQ(0, dino_process_wait(p, &code));
-    EXPECT_EQ(7, code);
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(7, status.code);
 }
 
 UTEST(process, stdout_is_captured)
@@ -115,9 +116,9 @@ UTEST(process, stdin_and_stderr_pipes)
 
     dino_pipe_close(pipes.out);
     dino_pipe_close(pipes.err);
-    int code = -1;
-    EXPECT_EQ(0, dino_process_wait(p, &code));
-    EXPECT_EQ(0, code);
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(0, status.code);
 }
 
 UTEST(process, null_stdio)
@@ -134,9 +135,9 @@ UTEST(process, null_stdio)
     opts.stderr_mode               = DINO_STDIO_NULL;
     dino_process_t p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, &opts, NULL));
-    int code = -1;
-    EXPECT_EQ(0, dino_process_wait(p, &code));
-    EXPECT_EQ(0, code);
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(0, status.code);
 }
 
 #ifndef _WIN32
@@ -154,15 +155,16 @@ UTEST(process, pipes_survive_a_parent_with_closed_stdio)
     dino_process_spawn_opts_t opts   = { 0 };
     opts.stdout_mode                 = DINO_STDIO_NULL;
     opts.stderr_mode                 = DINO_STDIO_PIPE;
-    dino_process_t       p;
-    dino_process_pipes_t pipes;
-    char                 err[64] = "";
-    int                  spawned = dino_process_spawn(&p, argv, &opts, &pipes), code = -1;
+    dino_process_t        p;
+    dino_process_pipes_t  pipes;
+    char                  err[64] = "";
+    int                   spawned = dino_process_spawn(&p, argv, &opts, &pipes);
+    dino_process_status_t status  = { -1, 0 };
     if (spawned == 0)
     {
         read_all(pipes.err, err, sizeof(err));
         dino_pipe_close(pipes.err);
-        dino_process_wait(p, &code);
+        dino_process_wait(p, &status);
     }
 
     dup2(saved_in, 0);
@@ -171,7 +173,7 @@ UTEST(process, pipes_survive_a_parent_with_closed_stdio)
     close(saved_out);
     ASSERT_EQ(0, spawned);
     EXPECT_STREQ("err\n", err);
-    EXPECT_EQ(0, code);
+    EXPECT_EQ(0, status.code);
 }
 #endif
 
@@ -354,9 +356,40 @@ UTEST(process, kill_ends_a_running_child)
     dino_process_t p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
     EXPECT_EQ(0, dino_process_kill(p));
-    int code = -1;
-    EXPECT_EQ(0, dino_process_wait(p, &code));
-    EXPECT_EQ(DINO_EXIT_KILLED, code);
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(DINO_EXIT_KILLED, status.code);
+    EXPECT_EQ(9, status.signal);
+}
+
+// How a process ended, told apart the same way on every platform: an exit
+// with a code, or a signal (on Windows, a crash). The Windows child ends with
+// the status an access violation gives, without crashing for real, which
+// would start a debugger under wine.
+UTEST(process, exit_and_crash_are_told_apart)
+{
+#ifdef _WIN32
+    const char *const exits[]   = { self_path, "--child-exit", "200", NULL };
+    const char *const crashes[] = { self_path, "--child-exit", "0xC0000005", NULL };
+#else
+    const char *const exits[]   = SHELL("exit 200");
+    const char *const crashes[] = SHELL("kill -SEGV $$");
+#endif
+    dino_process_t        p;
+    dino_process_status_t status = { -1, -1 };
+    ASSERT_EQ(0, dino_process_spawn(&p, exits, NULL, NULL));
+    ASSERT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(200, status.code);
+    EXPECT_EQ(0, status.signal);
+
+    ASSERT_EQ(0, dino_process_spawn(&p, crashes, NULL, NULL));
+    ASSERT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(SIGSEGV, status.signal);
+#ifdef _WIN32
+    EXPECT_EQ((int)0xC0000005, status.code);
+#else
+    EXPECT_EQ(128 + SIGSEGV, status.code);
+#endif
 }
 
 #ifndef _WIN32
@@ -372,9 +405,9 @@ UTEST(process, kill_after_the_child_exited_succeeds)
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
     dino_sleep_ms(1500);
     EXPECT_EQ(0, dino_process_kill(p));
-    int code = -1;
-    ASSERT_EQ(0, dino_process_wait(p, &code));
-    EXPECT_EQ(0, code);
+    dino_process_status_t status = { -1, 0 };
+    ASSERT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(0, status.code);
 }
 
 UTEST(process, signal_is_reported_as_128_plus_its_number)
@@ -401,9 +434,9 @@ UTEST(process, missing_program_fails_to_spawn)
     if (rc == 0 && preload && strstr(preload, "vgpreload"))
     {
         dino_pipe_close(pipes.out);
-        int code = -1;
-        EXPECT_EQ(0, dino_process_wait(p, &code));
-        EXPECT_EQ(127, code);
+        dino_process_status_t status = { -1, 0 };
+        EXPECT_EQ(0, dino_process_wait(p, &status));
+        EXPECT_EQ(127, status.code);
         return;
     }
 #endif
@@ -461,9 +494,9 @@ UTEST(process, wait_timeout_times_out_then_reaps)
 
     // Still valid after a timeout.
     EXPECT_EQ(0, dino_process_kill(p));
-    int code = -1;
-    EXPECT_EQ(0, dino_process_wait_timeout(p, 10000, &code));
-    EXPECT_EQ(DINO_EXIT_KILLED, code);
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait_timeout(p, 10000, &status));
+    EXPECT_EQ(DINO_EXIT_KILLED, status.code);
 }
 
 UTEST(process, wait_timeout_returns_the_exit_code)
@@ -471,9 +504,9 @@ UTEST(process, wait_timeout_returns_the_exit_code)
     const char *const argv[] = SHELL("exit 5");
     dino_process_t    p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
-    int code = -1;
-    EXPECT_EQ(0, dino_process_wait_timeout(p, 10000, &code));
-    EXPECT_EQ(5, code);
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait_timeout(p, 10000, &status));
+    EXPECT_EQ(5, status.code);
     EXPECT_EQ(-1, dino_process_wait_timeout(DINO_INVALID_PROCESS, 0, NULL));
 }
 
@@ -486,10 +519,10 @@ UTEST(process, wait_timeout_returns_when_the_child_exits)
 #endif
     dino_process_t p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
-    uint64_t start = dino_time_monotonic_ns();
-    int      code  = -1;
-    EXPECT_EQ(0, dino_process_wait_timeout(p, 20000, &code));
-    EXPECT_EQ(6, code);
+    uint64_t              start  = dino_time_monotonic_ns();
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait_timeout(p, 20000, &status));
+    EXPECT_EQ(6, status.code);
     // Long before the timeout: the wait ends with the child, not the clock.
     EXPECT_LT((dino_time_monotonic_ns() - start) / 1000000, 10000u);
 }
@@ -513,7 +546,7 @@ UTEST(process, run_reads_both_outputs_without_deadlock)
 #endif
     dino_process_result_t r;
     ASSERT_EQ(0, dino_process_run(argv, NULL, &r));
-    EXPECT_EQ(4, r.exit_code);
+    EXPECT_EQ(4, r.status.code);
     // 61 and 60 characters, a newline, and a \r before it on Windows.
     size_t eol = 1;
 #ifdef _WIN32
@@ -547,7 +580,7 @@ UTEST(process, run_feeds_input_while_reading)
     opts.input_len               = SIZE;
     dino_process_result_t r;
     ASSERT_EQ(0, dino_process_run(argv, &opts, &r));
-    EXPECT_EQ(0, r.exit_code);
+    EXPECT_EQ(0, r.status.code);
     strip_cr(r.out);
     EXPECT_EQ((size_t)SIZE, strlen(r.out));
     EXPECT_EQ(0, memcmp(input, r.out, SIZE));
@@ -571,7 +604,7 @@ UTEST(process, run_survives_a_child_that_ignores_its_input)
     opts.input_len               = SIZE;
     dino_process_result_t r;
     EXPECT_EQ(0, dino_process_run(argv, &opts, &r));
-    EXPECT_EQ(0, r.exit_code);
+    EXPECT_EQ(0, r.status.code);
     dino_process_result_free(&r);
     free(input);
 }
@@ -589,7 +622,7 @@ UTEST(process, run_kills_after_the_timeout)
     uint64_t              start = dino_time_monotonic_ns();
     EXPECT_EQ(DINO_TIMEOUT, dino_process_run(argv, &opts, &r));
     EXPECT_GE((dino_time_monotonic_ns() - start) / 1000000, 200u);
-    EXPECT_EQ(DINO_EXIT_KILLED, r.exit_code);
+    EXPECT_EQ(DINO_EXIT_KILLED, r.status.code);
 #ifndef _WIN32
     EXPECT_STREQ("started\n", r.out);
 #endif
@@ -614,7 +647,7 @@ UTEST(process, run_stops_reading_at_the_timeout_when_a_grandchild_holds_the_outp
     uint64_t              start = dino_time_monotonic_ns();
     EXPECT_EQ(DINO_TIMEOUT, dino_process_run(argv, &opts, &r));
     EXPECT_LT((dino_time_monotonic_ns() - start) / 1000000, (uint64_t)timeout + 1500);
-    EXPECT_EQ(0, r.exit_code);
+    EXPECT_EQ(0, r.status.code);
     strip_cr(r.out);
     EXPECT_STREQ("hi\n", r.out);
     dino_process_result_free(&r);
@@ -642,7 +675,7 @@ UTEST(process, run_stops_writing_at_the_timeout_when_a_grandchild_holds_the_inpu
     uint64_t              start = dino_time_monotonic_ns();
     EXPECT_EQ(DINO_TIMEOUT, dino_process_run(argv, &opts, &r));
     EXPECT_LT((dino_time_monotonic_ns() - start) / 1000000, 2000u);
-    EXPECT_EQ(0, r.exit_code);
+    EXPECT_EQ(0, r.status.code);
     dino_process_result_free(&r);
     free(input);
 }
@@ -655,7 +688,7 @@ UTEST(process, run_reports_a_missing_program)
     int                   rc = dino_process_run(argv, NULL, &r);
     // See missing_program_fails_to_spawn: under valgrind glibc can't tell.
     if (rc == 0)
-        EXPECT_EQ(127, r.exit_code);
+        EXPECT_EQ(127, r.status.code);
     else
         EXPECT_EQ(-1, rc);
     dino_process_result_free(&r);
@@ -734,12 +767,21 @@ static int child_main(const char *mode)
     }
     return 2;
 }
+
+// --child-exit <code>: end with that code, decimal or 0x hex, as the process's
+// own exit status, which can be one an exception would give.
+static int child_exit(const char *code)
+{
+    ExitProcess((UINT)strtoul(code, NULL, 0));
+}
 #endif
 
 int main(int argc, const char *const argv[])
 {
 #ifdef _WIN32
     GetModuleFileNameA(NULL, self_path, sizeof(self_path));
+    if (argc > 2 && strcmp(argv[1], "--child-exit") == 0)
+        return child_exit(argv[2]);
     if (argc > 1 && strncmp(argv[1], "--child-", 8) == 0)
         return child_main(argv[1]);
 #endif

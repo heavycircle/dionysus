@@ -5,7 +5,7 @@ almost everything here: a removed or renamed name fails to build, and the error 
 
 ## To 0.7
 
-0.7 changes the API where it has to change before 1.0 freezes it. The compiler finds the changes to handle types, `argv` and the renamed names; the changes to `dino_mutex_trylock`, to negative lengths and to event flags it doesn't.
+0.7 changes the API where it has to change before 1.0 freezes it. The compiler finds the changes to handle types, `argv`, process status and the renamed names; the changes to `dino_mutex_trylock`, to negative lengths and to event flags it doesn't.
 
 ### Failures have a reason: `dino_error()`
 
@@ -85,6 +85,26 @@ Three differences between Linux and Windows are gone; each changes what one plat
 - **A socket at the end of the stream, or reset, reports `READ`** with `HANGUP` (and `ERROR` for a reset) on Windows too, when it is watched for `READ`. Before, Windows reported `HANGUP` alone, so a handler that only looked at `READ` never saw the connection close.
 - **A pipe reports `HANGUP` only once it is drained** on Linux too. Before, Linux reported `READ | HANGUP` as soon as the last writer closed, with data still waiting, so a handler that stopped at `HANGUP` lost the tail of the output.
 - **A socket watched for neither `READ` nor `WRITE` no longer reports a peer's close or shutdown**, only a reset. Before, a half-closed peer ended every wait at once for as long as the socket stayed in the loop.
+
+### How a process ended: `dino_process_status_t`
+
+The exit code was an `int` that meant different things per platform: a crashed child gave `139` on Linux and a negative `NTSTATUS` on Windows, with no portable way to tell a crash from an exit. `dino_process_wait`, `dino_process_wait_timeout` and the result of `dino_process_run` now report a `dino_process_status_t` with `code` and `signal`. `signal` is `0` for an exit and the matching `<signal.h>` number for a signal or a crash, on both platforms.
+
+```c
+// Before
+int code;
+dino_process_wait(child, &code);
+if (code > 128) /* a signal, on Linux only */;
+printf("%d\n", result.exit_code);
+
+// After
+dino_process_status_t status;
+dino_process_wait(child, &status);
+if (status.signal) /* a signal or a crash, on both */;
+printf("%d\n", result.status.code);
+```
+
+`dino_process_kill` now reports `signal` `9` as well as `code` `DINO_EXIT_KILLED` on Windows too.
 
 ### `dino_mutex_trylock` returns `DINO_TIMEOUT` when the mutex is held
 

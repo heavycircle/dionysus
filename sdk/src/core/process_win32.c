@@ -1,5 +1,6 @@
 #include <dino/core/process.h>
 
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
@@ -387,7 +388,56 @@ done:
     return started ? 0 : dino__fail(reason);
 }
 
-int dino_process_wait(dino_process_t process, int *exit_code)
+// The code dino_process_kill gives TerminateProcess: the one Windows uses
+// itself for a process ended from outside, so that it can't be mistaken for
+// an exit(137) of the program's own.
+#define KILLED_BY_DINO 0x40010004 // DBG_TERMINATE_PROCESS
+
+// How a process ended, in the terms POSIX uses: a crash is the signal that
+// would have ended it there. NTSTATUS values with both severity bits set are
+// errors; anything else is an exit code the program chose.
+static dino_process_status_t decode_exit(DWORD code)
+{
+    dino_process_status_t s = { (int)code, 0 };
+    switch (code)
+    {
+    case KILLED_BY_DINO:
+        s.code   = DINO_EXIT_KILLED;
+        s.signal = 9; // SIGKILL's number; <signal.h> has no SIGKILL here
+        break;
+    case 0xC0000005: // access violation
+    case 0xC0000006: // in-page error
+    case 0xC00000FD: // stack overflow
+        s.signal = SIGSEGV;
+        break;
+    case 0xC000001D: // illegal instruction
+    case 0xC0000096: // privileged instruction
+        s.signal = SIGILL;
+        break;
+    case 0xC000008C: // array bounds exceeded
+    case 0xC000008D: // floating-point denormal operand
+    case 0xC000008E: // floating-point divide by zero
+    case 0xC000008F: // floating-point inexact result
+    case 0xC0000090: // floating-point invalid operation
+    case 0xC0000091: // floating-point overflow
+    case 0xC0000092: // floating-point stack check
+    case 0xC0000093: // floating-point underflow
+    case 0xC0000094: // integer divide by zero
+    case 0xC0000095: // integer overflow
+        s.signal = SIGFPE;
+        break;
+    case 0xC000013A: // Ctrl-C
+        s.signal = SIGINT;
+        break;
+    default:
+        if ((code & 0xC0000000) == 0xC0000000)
+            s.signal = SIGABRT;
+        break;
+    }
+    return s;
+}
+
+int dino_process_wait(dino_process_t process, dino_process_status_t *status)
 {
     if (process == DINO_INVALID_PROCESS)
         return dino__fail(DINO_EINVAL);
@@ -396,8 +446,8 @@ int dino_process_wait(dino_process_t process, int *exit_code)
     if (WaitForSingleObject(h, INFINITE) != WAIT_OBJECT_0 || !GetExitCodeProcess(h, &code))
         return dino__fail_os();
     CloseHandle(h);
-    if (exit_code)
-        *exit_code = (int)code;
+    if (status)
+        *status = decode_exit(code);
     return 0;
 }
 
@@ -405,7 +455,7 @@ int dino_process_kill(dino_process_t process)
 {
     if (process == DINO_INVALID_PROCESS)
         return dino__fail(DINO_EINVAL);
-    if (TerminateProcess((HANDLE)process, DINO_EXIT_KILLED))
+    if (TerminateProcess((HANDLE)process, KILLED_BY_DINO))
         return 0;
     // Fails with access denied once the process has exited. Nothing is left to
     // kill, which Linux reports as success.
@@ -421,12 +471,12 @@ uint64_t dino_process_id(dino_process_t process)
 
 // The timeout counts scheduler ticks and can end up to a tick early, so keep
 // waiting until the monotonic deadline has really passed.
-int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_code)
+int dino_process_wait_timeout(dino_process_t process, int timeout_ms, dino_process_status_t *status)
 {
     if (process == DINO_INVALID_PROCESS)
         return dino__fail(DINO_EINVAL);
     if (timeout_ms < 0)
-        return dino_process_wait(process, exit_code);
+        return dino_process_wait(process, status);
 
     uint64_t deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
     for (;;)
@@ -435,7 +485,7 @@ int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_
         DWORD    wait = now >= deadline ? 0 : (DWORD)((deadline - now + 999999) / 1000000);
         DWORD    rc   = WaitForSingleObject((HANDLE)process, wait);
         if (rc == WAIT_OBJECT_0)
-            return dino_process_wait(process, exit_code);
+            return dino_process_wait(process, status);
         if (rc != WAIT_TIMEOUT)
             return dino__fail_os();
         if (dino_time_monotonic_ns() >= deadline)
