@@ -48,6 +48,10 @@ COPY scripts/docker-entrypoint.sh /usr/local/bin/dino-entrypoint
 RUN useradd --create-home dino && install -d -o dino -g dino /work && groupadd --system dino-entrypoint
 
 ENV WINEDEBUG=-all
+# Wine maps Windows file names and arguments to Unix ones through the locale:
+# in the default C locale a name such as café.txt can't be created and its é
+# arrives mangled in argv. C.UTF-8 ships with Debian's base image.
+ENV LANG=C.UTF-8
 # A wine prefix takes ~40 s to create, so it's built once here, in /opt, as dino,
 # and made writable by anyone. Every user's own ~/.wine (dino's below, others'
 # from the entrypoint) is a few KB that links into it. The chmod has to share

@@ -77,6 +77,8 @@ docker run --rm -v "$PWD:/work" -e CFLAGS="-Wall -Wextra -Werror" \
 Paths in variables such as `DINO_LIBRARY_PATH` are container paths. Mount what they point to; see
 [Organization libraries](libraries.md#docker-and-ci).
 
+`LANG` is `C.UTF-8`, so file names and arguments outside ASCII reach Windows programs under wine intact, as UTF-8 (see [UTF-8 on Windows](../sdk/fs.md#utf-8-on-windows)). Without a UTF-8 locale wine can't create such a file at all.
+
 ## CI
 
 A GitHub Actions workflow that builds and tests every target on each push and PR:
