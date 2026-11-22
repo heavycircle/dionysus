@@ -40,6 +40,13 @@ dino_pipe_t saved = pipe;
 dino_pipe_close(saved);
 ```
 
+### Bad arguments fail instead of crashing or being guessed at
+
+- **Null out-parameters** to `dino_thread_create`, `dino_pipe_create`, `dino_process_spawn` and `dino_poll` fail with `-1` and `DINO_EINVAL`; they crashed before.
+- **Values outside the socket enums** make `dino_socket_create` return `DINO_INVALID_SOCKET`. Before, an unknown domain, type or protocol quietly became IPv4, stream or "any", so passing a platform's own `AF_INET6` by habit gave an IPv4 socket.
+- **`dino_pipe_wait` on a write end** fails with `-1` on Linux too; it timed out there, or reported readable once the reader was gone.
+- **`dino_env_get` leaves an empty string** in `buf` when it fails, instead of whatever was there.
+
 ### Lengths are `size_t`
 
 `dino_socket_send`, `dino_socket_recv`, `dino_pipe_read`, `dino_pipe_write` and `dino_socket_setopt` take their length as `size_t`, like `strlen` and `sizeof`, so the casts can go. A length over 2 GB used to wrap: a 4 GB + 16 byte buffer was sent as 16 bytes. Now one call moves at most `INT_MAX` bytes and returns how many it moved, which callers already handle, since a transfer may always be short. Return values are still `int`.

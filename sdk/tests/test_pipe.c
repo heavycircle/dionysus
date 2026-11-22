@@ -240,6 +240,18 @@ UTEST(pipe, an_earlier_pending_sigpipe_is_left_alone)
 }
 #endif
 
+// Only a read end can be waited for, on every platform: a write end would
+// time out on Linux, or report readable once its reader is gone.
+UTEST(pipe, wait_on_a_write_end_fails)
+{
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    EXPECT_EQ(-1, dino_pipe_wait(w, 10));
+    dino_pipe_close(r);
+    EXPECT_EQ(-1, dino_pipe_wait(w, 10));
+    dino_pipe_close(w);
+}
+
 UTEST(pipe, invalid_arguments_are_rejected)
 {
     char buf[4];
@@ -247,6 +259,9 @@ UTEST(pipe, invalid_arguments_are_rejected)
     EXPECT_EQ(-1, dino_pipe_write(DINO_INVALID_PIPE, buf, 4));
     EXPECT_EQ(-1, dino_pipe_wait(DINO_INVALID_PIPE, 0));
     EXPECT_EQ(-1, dino_pipe_close(DINO_INVALID_PIPE));
+    dino_pipe_t only;
+    EXPECT_EQ(-1, dino_pipe_create(NULL, &only));
+    EXPECT_EQ(-1, dino_pipe_create(&only, NULL));
 
     dino_pipe_t r, w;
     ASSERT_EQ(0, dino_pipe_create(&r, &w));

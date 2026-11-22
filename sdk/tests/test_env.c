@@ -76,6 +76,14 @@ UTEST(env, invalid_names_are_rejected)
     EXPECT_EQ(-1, dino_env_get("A=B", buf, sizeof(buf)));
     EXPECT_EQ(-1, dino_env_get(NAME, NULL, 4));
     EXPECT_EQ(-1, dino_env_unset(""));
+
+    // After a failure buf is an empty string, safe to print.
+    memcpy(buf, "garbage", sizeof(buf));
+    EXPECT_EQ(-1, dino_env_get("DINO_TEST_NO_SUCH_VARIABLE", buf, sizeof(buf)));
+    EXPECT_STREQ("", buf);
+    memcpy(buf, "garbage", sizeof(buf));
+    EXPECT_EQ(-1, dino_env_get("A=B", buf, sizeof(buf)));
+    EXPECT_STREQ("", buf);
 }
 
 UTEST_MAIN()

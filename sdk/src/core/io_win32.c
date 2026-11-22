@@ -50,7 +50,7 @@ static int idle(int timeout_ms)
 
 int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
 {
-    if (nfds < 0)
+    if (nfds < 0 || (nfds > 0 && !fds))
         return dino__fail(DINO_EINVAL);
     WSAPOLLFD  stack_buf[64];
     WSAPOLLFD *wfds = nfds <= 64 ? stack_buf : malloc((size_t)nfds * sizeof(WSAPOLLFD));

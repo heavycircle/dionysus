@@ -69,7 +69,8 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, size_t len);
  *
  * @param  pipe        Reading end.
  * @param  timeout_ms  Milliseconds to wait; -1 to wait forever; 0 to check.
- * @return 0 when readable, DINO_TIMEOUT when the time ran out, -1 on error.
+ * @return 0 when readable, DINO_TIMEOUT when the time ran out, -1 on error,
+ *         including for a write end.
  */
 int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms);
 

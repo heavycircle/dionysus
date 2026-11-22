@@ -245,7 +245,7 @@ uint64_t dino_process_current_id(void);
  * @param  buf   Destination; may be NULL when size is 0, to ask for the length.
  * @param  size  Size of buf in bytes.
  * @return Length of the value (without the NUL), or -1 if it isn't set or name
- *         is invalid.
+ *         is invalid; then buf, if size isn't 0, holds an empty string.
  */
 int dino_env_get(const char *name, char *buf, size_t size);
 

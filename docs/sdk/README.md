@@ -57,6 +57,8 @@ start something or produce more than one result take out-parameters and return `
 
 **Timeouts** are in milliseconds: `-1` waits forever, `0` checks and returns at once. The one exception is `timeout_ms` in the options of `dino_process_run`, where `0` (the value a zeroed struct has) means no timeout.
 
+**Arguments.** A null pointer where the function needs one, an invalid handle, or a value outside an enum fails with `-1` (or the invalid handle) and `dino_error()` of `DINO_EINVAL`, never a crash. Out-parameters are set even on failure: handles to their invalid value, strings to empty.
+
 **Ownership.** Whatever creates a handle must release it exactly once: close sockets and pipes,
 join or detach threads, wait for processes, destroy mutexes and loops. Functions that allocate
 for you (`dino_process_run`) have a matching free.

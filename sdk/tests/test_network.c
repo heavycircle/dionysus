@@ -77,6 +77,18 @@ UTEST(network, create_and_close)
     EXPECT_EQ(0, dino_socket_close(s));
 }
 
+// A value outside the enums, such as a platform's own AF_INET6 passed by
+// habit, is refused instead of becoming an IPv4 TCP socket.
+UTEST(network, values_outside_the_enums_are_refused)
+{
+    EXPECT_EQ(DINO_INVALID_SOCKET,
+        dino_socket_create((dino_socket_domain_t)10, DINO_SOCK_STREAM, DINO_IPPROTO_TCP));
+    EXPECT_EQ(DINO_INVALID_SOCKET,
+        dino_socket_create(DINO_AF_INET, (dino_socket_type_t)9, DINO_IPPROTO_TCP));
+    EXPECT_EQ(DINO_INVALID_SOCKET,
+        dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, (dino_socket_protocol_t)5));
+}
+
 UTEST(network, close_invalid_socket_fails)
 {
     EXPECT_NE(0, dino_socket_close(DINO_INVALID_SOCKET));

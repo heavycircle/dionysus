@@ -471,6 +471,7 @@ UTEST(process, invalid_arguments_are_rejected)
         }
     }
 
+    EXPECT_EQ(-1, dino_process_spawn(NULL, argv, NULL, NULL));
     EXPECT_EQ(-1, dino_process_wait(DINO_INVALID_PROCESS, NULL));
     EXPECT_EQ(-1, dino_process_kill(DINO_INVALID_PROCESS));
     EXPECT_EQ(0u, dino_process_id(DINO_INVALID_PROCESS));
