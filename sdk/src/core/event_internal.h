@@ -38,7 +38,7 @@ struct dino__event_timers
     dino_mutex_t               lock;
     struct dino__event_timer **heap;
     size_t                     len, cap;
-    struct dino__event_timer  *all; // every timer, fired one-shots included
+    struct dino__event_timer  *all;          // every timer, fired one-shots included
     atomic_int                 timers_first; // flips every wait: see dino__event_timers_turn
     // Threads blocked on a timeout computed from the heap: only they need
     // interrupting when an earlier timer is added. Raised under lock.
@@ -60,8 +60,8 @@ int dino__event_timers_turn(struct dino__event_timers *t);
 // shortened to the next deadline, rounded up so the timer is due when the
 // wait returns; if no timer was due the caller is about to block on it, and
 // counts as waiting until it calls dino__event_timers_waited.
-int dino__event_timers_step(struct dino__event_timers *t, dino_event_t *out, int max,
-    int timeout_ms, uint64_t deadline_ns, int *left_ms, int *wait_ms);
+int  dino__event_timers_step(struct dino__event_timers *t, dino_event_t *out, int max,
+     int timeout_ms, uint64_t deadline_ns, int *left_ms, int *wait_ms);
 void dino__event_timers_waited(struct dino__event_timers *t);
 
 // Makes a blocked dino_event_wait recompute its timeout, without reporting a
