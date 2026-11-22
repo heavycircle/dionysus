@@ -17,7 +17,7 @@ The warning shows up everywhere the code is compiled or analyzed:
   the project root.
 - **clang-tidy**, as `clang-diagnostic-deprecated-declarations`.
 
-The calls are marked deprecated *for dino projects*: the functions are fine in general, but each has
+The calls are marked deprecated _for dino projects_: the functions are fine in general, but each has
 a `dino_*` replacement that works the same on every target. A deprecation is used, rather than a
 custom warning, because the compiler keeps it quiet when the call is inside a system header, such
 as an inline function in a header-only library you include. You can't change that code, so it never
@@ -174,8 +174,7 @@ __typeof__(pipe) pipe __attribute__((deprecated(
   path for Linux targets and Windows-only ones only for Windows, so `__has_include(<poll.h>)` still
   gives the right answer.
 - **When unsure, no warning.** A redeclaration that depends on feature macros (`usleep`, `pipe2`,
-  the POSIX clocks) is only made when the header surely declared the function. A wrapper can miss a
-  warning, but it can't break a build.
+  the POSIX clocks) is only made when the header surely declared the function, and nothing is redeclared unless the C library's own header was included: a header of your own with the same name, such as a library's `process.h` found through the wrapper, is passed through untouched. A wrapper can miss a warning, but it can't break a build.
 
 The SDK adds the directory to `dino_core`'s interface include path. Everything that links the SDK
 gets it: `dino_executable()`, `dino_test()`, a plain `target_link_libraries(app PRIVATE dino_core)`,

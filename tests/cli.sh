@@ -439,6 +439,147 @@ case_glibc_triple_links_dynamically() {
     [[ $(build/x86_64-linux-gnu/glibc) == *Hello* ]]
 }
 
+# find_path and find_package don't find the host's headers and libraries,
+# which are for another C library; find_program still finds host tools.
+case_find_skips_host_paths() {
+    project find_host
+    cat >>CMakeLists.txt <<'CMAKE'
+find_path(DINO_TEST_STDIO stdio.h)
+find_package(ZLIB QUIET)
+find_program(DINO_TEST_SH sh)
+message(STATUS "find: ${DINO_TEST_STDIO} | ${ZLIB_FOUND} | ${DINO_TEST_SH}")
+CMAKE
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    local line
+    line=$(grep -- '-- find:' out)
+    if [[ $line != "-- find: DINO_TEST_STDIO-NOTFOUND | "*" | /"*sh || $line == *"| TRUE |"* ]]; then
+        echo "$line"
+        return 1
+    fi
+}
+
+# A project may pick C89 (CMAKE_C_STANDARD or CFLAGS); the SDK's sources are
+# C11 either way. Its tests can't: utest.h needs C99.
+case_c89_project() {
+    project c89
+    sed -i 's/^project(/set(CMAKE_C_STANDARD 90)\nset(CMAKE_C_EXTENSIONS OFF)\nproject(/' CMakeLists.txt
+    dino build >out 2>&1 || { cat out; return 1; }
+    rm -rf build
+    CFLAGS=-std=c89 dino build >out 2>&1 || { cat out; return 1; }
+}
+
+# The wrappers don't redeclare anything in -std=c89 -pedantic code: the
+# pragma comes first, before any // comment.
+case_wrappers_quiet_under_c89_pedantic() {
+    project c89_pedantic
+    cat >src/main.c <<'C'
+#include <stdio.h>
+#include <unistd.h>
+#include <pthread.h>
+
+int main(void)
+{
+    puts("ok");
+    return 0;
+}
+C
+    rm tests/test_main.c
+    CFLAGS='-std=c89 -pedantic-errors' dino build >out 2>&1 || { cat out; return 1; }
+}
+
+# A project's own header with a wrapped name (spawn.h here, process.h on
+# Windows) is found through the wrapper without breaking the build. The
+# project's own include directories come before the wrappers'; a linked
+# library's come after them, so its header is the one #include_next reaches.
+case_own_header_with_a_wrapped_name() {
+    project own_header
+    cat >>CMakeLists.txt <<'CMAKE'
+add_library(own_headers INTERFACE)
+target_include_directories(own_headers INTERFACE include)
+target_link_libraries(own_header PRIVATE own_headers)
+CMAKE
+    mkdir -p include
+    printf '#define OWN_SPAWN 1\n' >include/spawn.h
+    printf '#define OWN_PROCESS 2\n' >include/process.h
+    mkdir -p src/net
+    cat >src/net/use.c <<'C'
+#include "spawn.h"
+#include "process.h"
+
+int own_headers(void)
+{
+    return OWN_SPAWN + OWN_PROCESS;
+}
+C
+    dino build x86_64 win64 >out 2>&1 || { cat out; return 1; }
+}
+
+# LTO (IPO) works for the SDK and the project's own static libraries: CMake
+# archives LTO objects with the compiler's archiver, which is zig's.
+case_lto_static_libraries() {
+    project lto
+    sed -i 's/^project(/set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)\nproject(/' CMakeLists.txt
+    cat >>CMakeLists.txt <<'CMAKE'
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo OUTPUT ipo_output)
+message(STATUS "ipo: ${ipo} ${ipo_output}")
+add_library(lto_lib STATIC lib/lib.c)
+target_link_libraries(lto PRIVATE lto_lib)
+CMAKE
+    mkdir -p lib && printf 'int lto_lib(void) { return 1; }\n' >lib/lib.c
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    grep -q -- '-- ipo: YES' out || { grep -- '-- ipo:' out; return 1; }
+    grep -q -- '-flto' out
+}
+
+# A .rc file builds for Windows targets with zig's resource compiler, without a
+# host windres.
+case_windows_resource_file() {
+    project rc
+    cat >src/app.rc <<'RC'
+1 VERSIONINFO
+FILEVERSION 1,2,3,4
+BEGIN
+END
+RC
+    cat >>CMakeLists.txt <<'CMAKE'
+if(WIN32)
+    target_sources(rc PRIVATE src/app.rc)
+endif()
+CMAKE
+    dino build win64 -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'dino-tools/rc' out || { echo "not built with zig rc"; grep -i 'app.rc' out; return 1; }
+}
+
+# An SDK option set after project() is too late, and the configure says so.
+case_late_sdk_option_warns() {
+    project late_option
+    echo 'set(DINO_NO_LEAK_CHECK ON)' >>CMakeLists.txt
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'DINO_NO_LEAK_CHECK is ON here, but the SDK read it as OFF' out || { cat out; return 1; }
+    sed -i '$d' CMakeLists.txt
+    sed -i 's/^project(/set(DINO_NO_LEAK_CHECK ON)\nproject(/' CMakeLists.txt
+    rm -rf build
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'DINO_NO_LEAK_CHECK is' out
+}
+
+# The build doesn't depend on finding zig on PATH again: the compiler and the
+# ar wrapper name the zig found at configure time.
+case_build_without_zig_on_path() {
+    project zig_path
+    cat >>CMakeLists.txt <<'CMAKE'
+add_library(zig_path_lib STATIC lib/lib.c)
+target_link_libraries(zig_path PRIVATE zig_path_lib)
+CMAKE
+    mkdir -p lib && printf 'int zig_path_lib(void) { return 1; }\n' >lib/lib.c
+    dino build >out 2>&1 || { cat out; return 1; }
+    printf 'int zig_path_lib(void) { return 2; }\n' >lib/lib.c
+    local cmake_dir
+    cmake_dir=$(dirname "$(command -v cmake)")
+    PATH=$cmake_dir:/usr/bin:/bin cmake --build build/x86_64 >out 2>&1 || { cat out; return 1; }
+}
+
 # Names CMake or dino already use are refused before anything is written.
 case_init_reserved_names() {
     local name

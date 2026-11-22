@@ -1,11 +1,11 @@
-// clang-format off: one redeclaration per call, laid out to be read.
 #pragma GCC system_header
+// clang-format off: one redeclaration per call, laid out to be read.
 #include_next <windows.h>
 
 #include "dino_portability.h"
 
 // WINBASEAPI keeps the redeclarations dllimport, like the originals.
-#if defined(DINO__WARNINGS) && !defined(DINO__WINDOWS_H)
+#if defined(DINO__WARNINGS) && !defined(DINO__WINDOWS_H) && (defined(_WINDOWS_) || defined(_INC_WINDOWS))
 #define DINO__WINDOWS_H
 
 WINBASEAPI __typeof__(Sleep) Sleep __attribute__((deprecated(

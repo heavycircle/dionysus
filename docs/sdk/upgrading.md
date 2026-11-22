@@ -9,6 +9,13 @@ almost everything here: a removed or renamed name fails to build, and the error 
 
 New: `dino_socket_sendto`, `dino_socket_recvfrom`, `dino_socket_local_addr` and `dino_socket_peer_addr`, with `dino_socket_addr_t` (see [Network](network.md#udp)). Two Windows behaviors now match Linux: a datagram larger than the buffer is returned cut to fit instead of failing, and an unconnected UDP socket no longer fails a receive with `DINO_ECONNRESET` after sending to a port nobody listens on.
 
+### Toolchain fixes
+
+- **`find_package`, `find_library`, `find_path` and pkg-config no longer search the host's system directories**, whose libraries and headers are for another C library. A project that found a host package by accident now gets "not found" at configure time instead of errors at build time. Point `CMAKE_PREFIX_PATH` at libraries built for the target.
+- **The SDK's sources are always C11**, so a project can choose C89.
+- **LTO** works with static libraries, and **`.rc` files** build for Windows targets, both with zig's own tools.
+- **SDK options set after `project()`** now get a warning; they never had an effect.
+
 ### Target conventions fixed for 1.0
 
 - **`CMAKE_SYSTEM_PROCESSOR`** is now what native CMake reports: `ppc` (was `powerpc`), `armv7l` (was `arm`), `x86` for win32 (was `i686`) and `AMD64` for win64 (was `x86_64`). A project or CMake module that matched the old values has to match the new ones (see the table in [Projects](../guide/projects.md)); modules written for native builds already do.

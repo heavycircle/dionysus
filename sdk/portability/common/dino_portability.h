@@ -1,3 +1,4 @@
+#pragma GCC system_header
 // Shared by the wrapper headers in sdk/portability/. Each wrapper includes
 // the real system header, then redeclares the calls that have a dino_*
 // replacement with a warning attached, so code that links the SDK hears about
@@ -10,8 +11,6 @@
 #ifndef DINO_PORTABILITY_H
 #define DINO_PORTABILITY_H
 
-#pragma GCC system_header
-
 #define DINO_PLATFORM_CALL(...)                                                                    \
     _Pragma("clang diagnostic push")                                                               \
         _Pragma("clang diagnostic ignored \"-Wdeprecated-declarations\"")                          \
@@ -23,6 +22,12 @@
 // inside a system header (a library's inline function), which the project can't
 // change. Spelled out rather than behind a macro, so a warning's note points at
 // a readable line.
+//
+// Each wrapper redeclares only once the real header's own include guard is
+// defined (musl's, glibc's or MinGW's). A project with a header of the same
+// name, such as its own "process.h", reaches the wrapper first, and
+// #include_next then finds the project's header, which declares none of the
+// calls: there is nothing to redeclare, so the wrapper stays out of the way.
 #ifndef DINO_ALLOW_PLATFORM_CALLS
 #define DINO__WARNINGS
 #endif

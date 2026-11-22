@@ -1,12 +1,12 @@
-// clang-format off: one redeclaration per call, laid out to be read.
 #pragma GCC system_header
+// clang-format off: one redeclaration per call, laid out to be read.
 #include_next <winsock2.h>
 
 #include "dino_portability.h"
 
 // WINSOCK_API_LINKAGE keeps the redeclarations dllimport, like the originals.
 // INCL_WINSOCK_API_PROTOTYPES 0 leaves the functions undeclared; unset means declared.
-#if defined(DINO__WARNINGS) && !defined(DINO__WINSOCK2_H) && (!defined(INCL_WINSOCK_API_PROTOTYPES) || INCL_WINSOCK_API_PROTOTYPES)
+#if defined(DINO__WARNINGS) && !defined(DINO__WINSOCK2_H) && (defined(_WINSOCK2API_)) && (!defined(INCL_WINSOCK_API_PROTOTYPES) || INCL_WINSOCK_API_PROTOTYPES)
 #define DINO__WINSOCK2_H
 
 WINSOCK_API_LINKAGE __typeof__(WSAStartup) WSAStartup __attribute__((deprecated(
