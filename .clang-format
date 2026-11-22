@@ -12,9 +12,12 @@ IndentExternBlock: NoIndent
 # Includes: the file's own header, then system headers, then other dino headers.
 IncludeBlocks: Regroup
 SortIncludes: CaseSensitive
+# SDK only: `dino init` leaves these lines out of the copy it writes, because
+# MainIncludeChar needs clang-format 19 and older versions reject the file.
 # <dino/core/io.h> is io.c's main header even though it uses angle brackets,
 # and also io_posix.c's and io_win32.c's.
 MainIncludeChar: Any
+# End of SDK only.
 IncludeIsMainRegex: '(_posix|_win32)?$'
 IncludeCategories:
   # Must precede <windows.h>, which otherwise pulls in the old winsock.h.
