@@ -160,6 +160,21 @@ The first build of each target, in each build mode, takes noticeably longer than
 
 The C library is built again for each new combination of flags that reach the link, since zig caches it per set of flags: switching to `--debug` once, or adding a flag such as `-flto` or `-mcpu=...`, each costs one more of these builds. In Docker, the published images come with Release builds' libraries already in their cache, and a mounted cache keeps the rest between containers (see [Docker](docker.md#the-zig-cache)).
 
+## Building the SDK once
+
+Each project compiles the SDK into its own build directory, once per target and build mode, and again after `dino clean`: about half a second for a Linux target and a few seconds for Windows. Set `DINO_SDK_PREBUILT=1` to build it once instead, outside any project, and have every project link that copy:
+
+```sh
+export DINO_SDK_PREBUILT=1
+dino build --all
+```
+
+- **What is shared:** one copy per zig version, target and build mode, under the unpacked SDK in `$DINO_HOME` (`dino doctor` shows where). The first project to need one builds it, saying so; every later project, and the same project after `dino clean`, only links it.
+- **Your flags don't reach it.** The shared copy is built with dino's own flags, so a project whose flags could change the SDK's code keeps compiling the SDK itself, with those flags. Warnings (`-W...`, but not `-Wa,` `-Wp,` `-Wl,`), `-w`, `-pedantic`, `-std=...` and how diagnostics look are known not to; anything else in `CFLAGS` or `CMAKE_C_FLAGS`, changed `CMAKE_C_FLAGS_RELEASE`/`_DEBUG`, a build type other than Debug or Release, or `add_compile_options()`, `add_compile_definitions()` or `include_directories()` before `project()` keeps the source build. `dino build -v` says when that happens and why.
+- **Not used** with `DINO_SDK_PATH`, which points at a working tree whose sources change without a new version, or for `dino test --memcheck`. If the copy can't be built or written, `dino` warns and compiles the SDK in the project.
+- **The SDK options** (`DINO_NO_AUTO_RUNTIME`, `DINO_NO_PLATFORM_WARNINGS`, `DINO_NO_LEAK_CHECK`) work the same either way: they change what a project links, not how the SDK is compiled.
+- **Your editor** no longer sees the SDK's sources in `compile_commands.json`, only your own; the SDK's headers are found as before.
+
 ## Without dino
 
 `dino build` is a thin layer over CMake, and a project needs nothing from it at build time beyond

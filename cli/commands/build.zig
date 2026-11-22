@@ -5,6 +5,7 @@ const Args = @import("../Args.zig");
 const cmake = @import("../cmake.zig");
 const compdb = @import("../compdb.zig");
 const sdk_cache = @import("../sdk_cache.zig");
+const prebuilt = @import("../prebuilt.zig");
 const libraries = @import("../libraries.zig");
 const targets = @import("../targets.zig");
 const Target = targets.Target;
@@ -133,9 +134,9 @@ pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
     const results = ctx.arena.alloc(Result, opts.targets.len) catch @panic("OOM");
     for (opts.targets, results, 0..) |target, *result, i| {
         if (ctx.interrupted != null) return results[0..i];
-        const cfg = config(ctx, opts, project, target);
-        result.* = .{ .cfg = cfg, .ok = false };
         ctx.step("{s} ({s}, {t})", .{ target.name, target.triple, opts.mode });
+        const cfg = try config(ctx, opts, project, target);
+        result.* = .{ .cfg = cfg, .ok = false };
 
         if (cmake.needsConfigure(ctx, cfg) and !try cmake.configure(ctx, cfg, opts.run)) continue;
         // Before compiling: editors need the compile database most when the code
@@ -158,7 +159,7 @@ pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
 /// compile_commands.json behind before the project has ever been compiled.
 pub fn configureOnly(ctx: *Ctx, opts: Options) Ctx.Error!bool {
     const project = try setup(ctx, opts);
-    const cfg = config(ctx, opts, project, opts.targets[0]);
+    const cfg = try config(ctx, opts, project, opts.targets[0]);
     if (cmake.needsConfigure(ctx, cfg) and !try cmake.configure(ctx, cfg, opts.run)) return false;
     exportCompileCommands(ctx, cfg, opts.project);
     return true;
@@ -188,12 +189,13 @@ fn zigVersion(ctx: *Ctx) []const u8 {
     return std.mem.trim(u8, result.stdout, " \r\n");
 }
 
-fn config(ctx: *Ctx, opts: Options, project: Project, target: Target) cmake.Config {
+fn config(ctx: *Ctx, opts: Options, project: Project, target: Target) Ctx.Error!cmake.Config {
     return .{
         .source_dir = project.source_dir,
         .build_dir = buildDir(ctx, opts.project, target),
         .sdk = project.sdk,
         .zig = project.zig,
+        .prebuilt = try prebuilt.dir(ctx, project.sdk, project.zig, target, opts.mode),
         .libraries = project.libraries,
         .target = target,
         .mode = opts.mode,

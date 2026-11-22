@@ -246,6 +246,163 @@ case_sdk_leftover_reported() {
     grep -q 'is not a complete SDK' err && [[ -d $sdk/cmake ]]
 }
 
+# With DINO_SDK_PREBUILT=1 the SDK is built once per zig version, target and
+# build type, outside any project, and imported. These cases share one
+# DINO_HOME, so only the first to need a set builds it.
+prebuilt() {
+    DINO_SDK_PATH='' DINO_HOME=$work/prebuilt_home DINO_SDK_PREBUILT=1 dino "$@"
+}
+
+# Whether the build log in $1 compiled the SDK in the project.
+sdk_compiled() {
+    grep -q 'mutex_posix\.c' "$1"
+}
+
+# A second project compiles no SDK source and its program runs; without the
+# variable the SDK is compiled in the project as before.
+case_prebuilt_shared() {
+    project prebuilt_a
+    prebuilt build >out 2>&1 || { cat out; return 1; }
+    project prebuilt_b
+    prebuilt build -v >out 2>&1 || { cat out; return 1; }
+    sdk_compiled out && { echo "the SDK was compiled again"; return 1; }
+    build/x86_64/prebuilt_b | grep -q 'Hello' || return 1
+    rm -rf build
+    DINO_SDK_PATH='' DINO_HOME=$work/prebuilt_home dino build -v >out 2>&1 || { cat out; return 1; }
+    sdk_compiled out
+}
+
+# Debug and release are separate sets, built from their own flags: NDEBUG
+# sets the default log level (logging.c). Switching back reuses the first.
+case_prebuilt_modes() {
+    project prebuilt_modes
+    cat >src/main.c <<'C'
+#include <stdio.h>
+#include <dino/util/logging.h>
+
+int main(void)
+{
+    printf("level %d\n", (int)dino_log_get_level());
+    return 0;
+}
+C
+    prebuilt build >/dev/null 2>&1 || return 1
+    local release debug
+    release=$(build/x86_64/prebuilt_modes)
+    prebuilt build --debug >/dev/null 2>&1 || return 1
+    debug=$(build/x86_64/prebuilt_modes)
+    [[ $release != "$debug" ]] || { echo "both builds print '$release'"; return 1; }
+    prebuilt build -v >out 2>&1 || { cat out; return 1; }
+    ! sdk_compiled out && [[ $(build/x86_64/prebuilt_modes) == "$release" ]] &&
+        [[ -d $(echo "$work"/prebuilt_home/sdk/*/lib/zig-*/x86_64-linux-musl-debug) ]]
+}
+
+# Flags that can't change the SDK's code, such as CI's, still use the set.
+case_prebuilt_neutral_flags() {
+    project prebuilt_neutral
+    CFLAGS='-Wall -Wextra -Werror -std=c11 -fcolor-diagnostics' prebuilt build -v >out 2>&1 || { cat out; return 1; }
+    ! sdk_compiled out
+}
+
+# Anything that could change the SDK's code keeps the source build, and with
+# the flag: the set was built without it.
+case_prebuilt_flag_fallback() {
+    project prebuilt_fallback
+    CFLAGS=-DDINO_TEST_X prebuilt build -v >out 2>&1 || { cat out; return 1; }
+    grep 'mutex_posix\.c' out | grep -q -- -DDINO_TEST_X || { echo "CFLAGS"; cat out; return 1; }
+    rm -rf build
+    prebuilt build -v -- -DCMAKE_C_FLAGS=-fshort-enums >out 2>&1 || { cat out; return 1; }
+    grep 'mutex_posix\.c' out | grep -q -- -fshort-enums || { echo "CMAKE_C_FLAGS"; cat out; return 1; }
+    rm -rf build
+    prebuilt build -v -- "-DCMAKE_C_FLAGS_RELEASE=-O2 -DNDEBUG" >out 2>&1 || { cat out; return 1; }
+    grep 'mutex_posix\.c' out | grep -q -- '-O2 -DNDEBUG' || { echo "CMAKE_C_FLAGS_RELEASE"; cat out; return 1; }
+    rm -rf build
+    sed -i 's/^project(/add_compile_definitions(DINO_TEST_Y)\nproject(/' CMakeLists.txt
+    prebuilt build -v >out 2>&1 || { cat out; return 1; }
+    grep 'mutex_posix\.c' out | grep -q -- -DDINO_TEST_Y || { echo "add_compile_definitions"; cat out; return 1; }
+}
+
+# Another zig gets its own set, and the project starts over with it.
+case_prebuilt_zig_version() {
+    project prebuilt_zig
+    prebuilt build >/dev/null 2>&1 || return 1
+    mkdir -p "$work/prebuilt_zig_bin"
+    # shellcheck disable=SC2016 # $1 and $@ are for the wrapper, not this shell
+    printf '#!/bin/sh\nif [ "$1" = version ]; then echo 0.17.98; exit 0; fi\nexec %s "$@"\n' \
+        "$(command -v zig)" >"$work/prebuilt_zig_bin/zig"
+    chmod +x "$work/prebuilt_zig_bin/zig"
+    PATH=$work/prebuilt_zig_bin:$PATH prebuilt build >out 2>&1 || { cat out; return 1; }
+    grep -q 'building the SDK' out && [[ -d $(echo "$work"/prebuilt_home/sdk/*/lib/zig-0.17.98) ]]
+}
+
+# Projects started together on an empty DINO_HOME all succeed, whichever
+# builds the set first, and leave nothing temporary behind.
+case_prebuilt_parallel() {
+    local i pids=() failed=0 lib
+    for i in 1 2 3 4; do
+        project "prebuilt_par$i"
+    done
+    for i in 1 2 3 4; do
+        (cd "$work/prebuilt_par$i" &&
+            DINO_SDK_PATH='' DINO_HOME=$work/prebuilt_par_home DINO_SDK_PREBUILT=1 dino build >log 2>&1) &
+        pids+=($!)
+    done
+    for i in "${pids[@]}"; do wait "$i" || failed=1; done
+    ((failed == 0)) || { cat "$work"/prebuilt_par*/log; return 1; }
+    lib=$(echo "$work"/prebuilt_par_home/sdk/*/lib/zig-*)
+    [[ $(ls "$lib") == x86_64-linux-musl-release ]] || { ls "$lib"; return 1; }
+}
+
+# A set without its marker is reported and never linked; nor is it deleted,
+# since it may be another dino's, just renamed into place.
+case_prebuilt_incomplete() {
+    project prebuilt_incomplete
+    export DINO_SDK_PATH='' DINO_HOME=$work/prebuilt_incomplete_home DINO_SDK_PREBUILT=1
+    dino build >/dev/null 2>&1 || return 1
+    local set
+    set=$(echo "$DINO_HOME"/sdk/*/lib/zig-*/x86_64-linux-musl-release)
+    rm "$set/dino-prebuilt.cmake"
+    rm -rf build
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'not a complete prebuilt SDK' out && sdk_compiled out && [[ -f $set/libdino_core.a ]]
+}
+
+# A set that can't be written is a warning, and the SDK is compiled in the
+# project.
+case_prebuilt_readonly() {
+    project prebuilt_readonly
+    export DINO_SDK_PATH='' DINO_HOME=$work/prebuilt_ro_home
+    dino doctor >/dev/null 2>&1
+    local sdk
+    sdk=$(echo "$DINO_HOME"/sdk/*)
+    chmod a-w "$sdk"
+    DINO_SDK_PREBUILT=1 dino build -v >out 2>&1
+    local rc=$?
+    chmod u+w "$sdk"
+    ((rc == 0)) || { cat out; return 1; }
+    grep -q 'compiling the SDK in the project instead' out && sdk_compiled out
+}
+
+# The SDK's options are applied to the imported set as to the source build.
+case_prebuilt_options() {
+    project prebuilt_options
+    prebuilt build -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'dino__runtime_auto' out || { echo "no -u dino__runtime_auto"; return 1; }
+    prebuilt build -v -- -DDINO_NO_AUTO_RUNTIME=ON -DDINO_NO_PLATFORM_WARNINGS=ON >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'dino__runtime_auto' out || { echo "DINO_NO_AUTO_RUNTIME ignored"; return 1; }
+    grep -q 'DINO_ALLOW_PLATFORM_CALLS' out || { echo "DINO_NO_PLATFORM_WARNINGS ignored"; return 1; }
+    prebuilt test -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'wrap=malloc' out || { echo "no leak check"; return 1; }
+    prebuilt test -v -- -DDINO_NO_LEAK_CHECK=ON >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'wrap=malloc' out && ! sdk_compiled out
+}
+
+# The leak check works with the imported objects, a C++-only project included.
+case_prebuilt_leak_check() {
+    export DINO_SDK_PATH='' DINO_HOME=$work/prebuilt_home DINO_SDK_PREBUILT=1
+    case_leak_check_allocators && case_leak_check_cxx_only
+}
+
 # Names CMake or dino already use are refused before anything is written.
 case_init_reserved_names() {
     local name

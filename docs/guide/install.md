@@ -111,11 +111,12 @@ All required tools found.
 
 ## Environment variables
 
-| Variable            | Effect                                                                                                                      |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `DINO_HOME`         | Where `dino` keeps its unpacked SDK. Default: `$XDG_CACHE_HOME/dino` or `~/.cache/dino` (`%LOCALAPPDATA%\dino` on Windows). |
-| `DINO_SDK_PATH`     | Build against this SDK directory instead of the built-in one. Used when working on the SDK itself.                          |
-| `DINO_LIBRARY_PATH` | [Organization libraries](libraries.md) every project can link.                                                              |
-| `CFLAGS`            | Read by CMake on a project's first configure and added to every compile, e.g. `CFLAGS="-Wall -Wextra"`.                     |
+| Variable            | Effect                                                                                                                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DINO_HOME`         | Where `dino` keeps its unpacked SDK. Default: `$XDG_CACHE_HOME/dino` or `~/.cache/dino` (`%LOCALAPPDATA%\dino` on Windows).                   |
+| `DINO_SDK_PATH`     | Build against this SDK directory instead of the built-in one. Used when working on the SDK itself.                                            |
+| `DINO_SDK_PREBUILT` | `1`: build the SDK once per zig version, target and build mode and share it between projects ([Building](building.md#building-the-sdk-once)). |
+| `DINO_LIBRARY_PATH` | [Organization libraries](libraries.md) every project can link.                                                                                |
+| `CFLAGS`            | Read by CMake on a project's first configure and added to every compile, e.g. `CFLAGS="-Wall -Wextra"`.                                       |
 
 Next: [your first project](first-project.md).
