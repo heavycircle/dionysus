@@ -127,8 +127,19 @@ endif()
 ```
 
 In C, `_WIN32` is defined for both Windows targets and `__linux__` for the Linux ones. In CMake,
-`CMAKE_SYSTEM_NAME` is `Windows` or `Linux`, and `CMAKE_SYSTEM_PROCESSOR` is the architecture as
-`uname -m` prints it: `x86_64`, `i686`, `arm`, `aarch64` or `powerpc`.
+`CMAKE_SYSTEM_NAME` is `Windows` or `Linux`, and `CMAKE_SYSTEM_PROCESSOR` is what CMake reports when it builds on that platform itself, so modules written for native builds match it: `uname -m` on Linux, `PROCESSOR_ARCHITECTURE` on Windows.
+
+| Target   | `CMAKE_SYSTEM_PROCESSOR` |
+| -------- | ------------------------ |
+| `x86_64` | `x86_64`                 |
+| `i386`   | `i686`                   |
+| `arm`    | `armv7l`                 |
+| `arm64`  | `aarch64`                |
+| `ppc`    | `ppc`                    |
+| `win32`  | `x86`                    |
+| `win64`  | `AMD64`                  |
+
+Another triple gets the Linux or Windows spelling of its architecture where one differs from zig's (`ppc64le`, `ARM64`), and zig's name otherwise.
 
 ## Compiler flags and the SDK
 

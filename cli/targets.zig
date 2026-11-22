@@ -22,7 +22,7 @@ pub const Target = struct {
 pub const known = [_]Target{
     .{ .name = "arm", .triple = "arm-linux-musleabihf", .description = "ARM 32-bit, hard float", .arch = .arm, .os = .linux },
     .{ .name = "arm64", .triple = "aarch64-linux-musl", .description = "ARM 64-bit", .arch = .aarch64, .os = .linux },
-    .{ .name = "i386", .triple = "x86-linux-musl", .description = "Intel x86 32-bit", .arch = .x86, .os = .linux },
+    .{ .name = "i386", .triple = "x86-linux-musl", .description = "Intel x86 32-bit, i686", .arch = .x86, .os = .linux },
     .{ .name = "ppc", .triple = "powerpc-linux-musleabihf", .description = "PowerPC 32-bit, big endian", .arch = .powerpc, .os = .linux },
     .{ .name = "win32", .triple = "x86-windows-gnu", .description = "Windows PE32 (x86)", .arch = .x86, .os = .windows },
     .{ .name = "win64", .triple = "x86_64-windows-gnu", .description = "Windows PE32+ (x86_64)", .arch = .x86_64, .os = .windows },
