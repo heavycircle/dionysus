@@ -20,8 +20,12 @@ on:
 permissions:
   contents: read
 
+# A pull request's runs replace each other; runs for a branch queue up. The
+# group names the pull request by number, not by github.ref: a run that starts
+# after its pull request was merged has the base branch as its ref, and would
+# cancel that branch's own run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
