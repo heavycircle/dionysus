@@ -81,6 +81,11 @@ void dino_log_write(dino_log_level_t level, const char *file, int line, const ch
 {
     if (level < dino_log_get_level() || level >= DINO_LOG_LEVEL_OFF || level < 0)
         return;
+    // Callable from users' own wrappers, which may pass anything.
+    if (!file)
+        file = "?";
+    if (!fmt)
+        fmt = "";
 
     int  saved_errno = errno;
     char buf[LINE_BYTES];

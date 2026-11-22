@@ -92,6 +92,7 @@ UTEST(thread, invalid_arguments_are_rejected)
     dino_thread_t t = (dino_thread_t)1;
     EXPECT_EQ(-1, dino_thread_create(&t, NULL, NULL));
     EXPECT_EQ(DINO_INVALID_THREAD, t);
+    EXPECT_EQ(-1, dino_thread_create(NULL, NULL, NULL));
     EXPECT_EQ(-1, dino_thread_join(DINO_INVALID_THREAD, NULL));
     EXPECT_EQ(-1, dino_thread_detach(DINO_INVALID_THREAD));
 }

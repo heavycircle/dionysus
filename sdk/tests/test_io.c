@@ -228,6 +228,12 @@ UTEST(fd_set, sockets_that_dont_fit_are_refused)
     dino_fd_set_destroy(other);
 }
 
+UTEST(poll, null_entries_are_rejected)
+{
+    EXPECT_EQ(-1, dino_poll(NULL, 1, 0));
+    EXPECT_EQ(0, dino_poll(NULL, 0, 0));
+}
+
 UTEST(fd_set, invalid_set_is_harmless)
 {
     EXPECT_EQ(-1, dino_fd_set_add(DINO_INVALID_FD_SET, 0));

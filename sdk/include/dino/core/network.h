@@ -63,10 +63,11 @@ void dino_net_cleanup(void);
  * A DINO_AF_INET6 socket is v6-only on every platform; see
  * dino_socket_set_v6only for one that also handles IPv4.
  *
- * @param  domain       Socket domain (i.e., AF_INET)
- * @param  type         Socket type (i.e., SOCK_STREAM)
- * @param  protocol     Socket protocol (IPPROTO_TCP)
- * @return Socket, or DINO_INVALID_SOCKET on failure.
+ * @param  domain       DINO_AF_INET or DINO_AF_INET6.
+ * @param  type         DINO_SOCK_STREAM or DINO_SOCK_DGRAM.
+ * @param  protocol     DINO_IPPROTO_TCP or DINO_IPPROTO_UDP.
+ * @return Socket, or DINO_INVALID_SOCKET on failure, including for a value
+ *         outside these enums (a platform's own AF_INET6, say).
  */
 dino_socket_t dino_socket_create(
     dino_socket_domain_t domain, dino_socket_type_t type, dino_socket_protocol_t protocol);

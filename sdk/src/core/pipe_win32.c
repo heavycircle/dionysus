@@ -86,6 +86,8 @@ static int create_pair(
 
 int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
 {
+    if (!read_end || !write_end)
+        return dino__fail(DINO_EINVAL);
     return create_pair(read_end, write_end, 1, 1);
 }
 

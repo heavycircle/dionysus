@@ -129,6 +129,28 @@ UTEST(logging, invalid_level_is_ignored)
     EXPECT_EQ(DINO_LOG_LEVEL_ERROR, dino_log_get_level());
 }
 
+// Users' own wrappers can pass anything; a missing file name or format
+// mustn't crash. volatile keeps the compiler from seeing the NULL format.
+static const char *volatile g_no_file;
+static const char *volatile g_no_format;
+
+static void emit_nulls(void)
+{
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-security"
+#pragma GCC diagnostic ignored "-Wformat-nonliteral"
+    dino_log_write(DINO_LOG_LEVEL_ERROR, g_no_file, 7, g_no_format);
+#pragma GCC diagnostic pop
+}
+
+UTEST(logging, missing_file_and_format_are_tolerated)
+{
+    dino_log_set_level(DINO_LOG_LEVEL_TRACE);
+    char buf[256];
+    EXPECT_GT(capture(buf, sizeof(buf), emit_nulls), 0u);
+    EXPECT_TRUE(strstr(buf, "?:7:") != NULL);
+}
+
 static void emit_long(void)
 {
     char big[3000];

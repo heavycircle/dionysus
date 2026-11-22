@@ -23,7 +23,7 @@ static int translate_domain(dino_socket_domain_t domain)
     case DINO_AF_INET6:
         return AF_INET6;
     default:
-        return AF_INET;
+        return -1;
     }
 }
 
@@ -36,7 +36,7 @@ static int translate_type(dino_socket_type_t type)
     case DINO_SOCK_DGRAM:
         return SOCK_DGRAM;
     default:
-        return SOCK_STREAM;
+        return -1;
     }
 }
 
@@ -49,7 +49,7 @@ static int translate_protocol(dino_socket_protocol_t protocol)
     case DINO_IPPROTO_UDP:
         return IPPROTO_UDP;
     default:
-        return 0;
+        return -1;
     }
 }
 
@@ -71,6 +71,13 @@ dino_socket_t dino_socket_create(
     int os_domain   = translate_domain(domain);
     int os_type     = translate_type(type);
     int os_protocol = translate_protocol(protocol);
+    // A value outside the enums, such as a platform's own AF_INET6 passed by
+    // habit, is refused rather than quietly made IPv4, stream or "any".
+    if (os_domain < 0 || os_type < 0 || os_protocol < 0)
+    {
+        dino__error_set(DINO_EINVAL);
+        return DINO_INVALID_SOCKET;
+    }
 
     // Never inherited by child processes: a child holding a copy keeps a
     // listening port bound, or a connection open, after the parent closes it.

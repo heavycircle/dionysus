@@ -23,6 +23,8 @@
 
 int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
 {
+    if (!read_end || !write_end)
+        return dino__fail(DINO_EINVAL);
     *read_end  = DINO_INVALID_PIPE;
     *write_end = DINO_INVALID_PIPE;
 
@@ -124,7 +126,9 @@ int dino__pipe_write_timeout(
 
 int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
 {
-    if (pipe == DINO_INVALID_PIPE)
+    // Only a read end can be waited for, as on Windows. A write end would
+    // time out, or report readable once its reader is gone.
+    if (dino__pipe_is_read_end(pipe) != 1)
         return dino__fail(DINO_EINVAL);
 
     struct pollfd pfd      = { TO_FD(pipe), POLLIN, 0 };

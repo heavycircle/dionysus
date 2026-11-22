@@ -70,6 +70,8 @@ static int close_inherited(posix_spawn_file_actions_t *actions)
 int dino_process_spawn(dino_process_t *process, const char *const argv[],
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
 {
+    if (!process)
+        return dino__fail(DINO_EINVAL);
     *process = DINO_INVALID_PROCESS;
     dino_process_pipes_t unused;
     if (!pipes)
@@ -276,7 +278,12 @@ uint64_t dino_process_current_id(void)
 
 int dino_env_get(const char *name, char *buf, size_t size)
 {
-    if (!dino__process_valid_env_name(name) || (!buf && size))
+    if (!buf && size)
+        return dino__fail(DINO_EINVAL);
+    // On any failure buf holds an empty string, so printing it is safe.
+    if (size)
+        buf[0] = '\0';
+    if (!dino__process_valid_env_name(name))
         return dino__fail(DINO_EINVAL);
     const char *value = getenv(name);
     if (!value)

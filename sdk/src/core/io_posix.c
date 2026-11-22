@@ -35,10 +35,10 @@ static short from_os_revents(short os)
 
 int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
 {
+    if (nfds < 0 || (nfds > 0 && !fds))
+        return dino__fail(DINO_EINVAL);
     struct pollfd  stack_buf[64];
     struct pollfd *pfds = nfds <= 64 ? stack_buf : malloc((size_t)nfds * sizeof(struct pollfd));
-    if (nfds < 0)
-        return dino__fail(DINO_EINVAL);
     if (!pfds)
         return dino__fail(DINO_ENOMEM);
 
