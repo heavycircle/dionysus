@@ -147,6 +147,10 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     argv.appendSlice(ctx.arena, &.{ "cmake", "-S", cfg.source_dir, "-B", cfg.build_dir }) catch @panic("OOM");
     if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }))) {
         if (try generator(ctx)) |g| argv.appendSlice(ctx.arena, &.{ "-G", g }) catch @panic("OOM");
+        // The only slow step a user sees with no output: zig builds the C
+        // library for this target and build type the first time anything uses
+        // it, and caches it for every later project.
+        ctx.print("    configuring; the first build of a target can take a minute while zig builds its C library\n", .{});
     }
     if (!opts.verbose) argv.append(ctx.arena, "--log-level=WARNING") catch @panic("OOM");
     argv.appendSlice(ctx.arena, defines(ctx, cfg)) catch @panic("OOM");

@@ -22,6 +22,11 @@ endif()
 # so user-supplied flags can never drop it and silently build for the host.
 set(CMAKE_C_COMPILER "zig;cc;-target;${ZIG_TARGET}" CACHE STRING "C Compiler" FORCE)
 set(CMAKE_CXX_COMPILER "zig;c++;-target;${ZIG_TARGET}" CACHE STRING "C++ Compiler" FORCE)
+# A cross compiler: CMake then identifies it by compiling alone. Otherwise its
+# compiler-ID step links a program with no flags at all, and zig builds a
+# Debug libc for it (about a minute, cold) that a Release build never uses.
+set(CMAKE_C_COMPILER_TARGET "${ZIG_TARGET}")
+set(CMAKE_CXX_COMPILER_TARGET "${ZIG_TARGET}")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -66,6 +71,10 @@ set(CMAKE_USER_MAKE_RULES_OVERRIDE "${CMAKE_CURRENT_LIST_DIR}/flags.cmake")
 if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type: Debug, Release, RelWithDebInfo, MinSizeRel")
 endif()
+# CMake's own checks (the ABI check, check_function_exists) link with the flags
+# of this build type, not Release's: each set of link flags makes zig build
+# another libc, and a Debug configure would otherwise also build a Release one.
+set(CMAKE_TRY_COMPILE_CONFIGURATION "${CMAKE_BUILD_TYPE}")
 
 # Don't use host machine glibc
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
