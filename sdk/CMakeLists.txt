@@ -56,26 +56,6 @@ if(WIN32)
     target_link_libraries(dino_core PRIVATE ws2_32)
 endif()
 
-# Wrappers for the system headers that declare calls with a dino_* replacement
-# (sdk/portability/common/dino_portability.h). INTERFACE only: everything that
-# links the SDK gets the warnings, the SDK's own sources never do. The POSIX-only
-# headers stay off Windows include paths so __has_include(<poll.h>) still tells
-# the truth there, and the reverse for the Windows ones.
-target_include_directories(dino_core BEFORE INTERFACE
-    "${CMAKE_CURRENT_SOURCE_DIR}/portability/common"
-    "${CMAKE_CURRENT_SOURCE_DIR}/portability/${DINO_PLATFORM}")
-option(DINO_NO_PLATFORM_WARNINGS "Don't warn about platform calls that have a dino_* replacement" OFF)
-if(DINO_NO_PLATFORM_WARNINGS)
-    target_compile_definitions(dino_core INTERFACE DINO_ALLOW_PLATFORM_CALLS)
-endif()
-
-# Links runtime_auto.c's constructor into every program, which wouldn't otherwise
-# pull that object from the archive. Its only job (closed stdio) is Linux-only.
-option(DINO_NO_AUTO_RUNTIME "Don't run the SDK's setup before main() (see dino/core/runtime.h)" OFF)
-if(NOT WIN32 AND NOT DINO_NO_AUTO_RUNTIME)
-    target_link_options(dino_core INTERFACE "LINKER:-u,dino__runtime_auto")
-endif()
-
 # Optional extras built on dino_core (logging, ...), kept out of the core library.
 add_library(dino_util STATIC
     src/util/logging.c
@@ -85,46 +65,29 @@ target_link_libraries(dino_util PUBLIC dino_core)
 # Used by dino_test() (cmake/Dino.cmake). testing/utest.h is sheredom/utest.h at
 # fc4715da3b3e3bfa936cf69850f2cfe969ed85b7, unmodified (public domain).
 add_library(dino_testing INTERFACE)
-# SYSTEM: utest.h's own warnings and clang-tidy findings stay out of test code.
-target_include_directories(dino_testing SYSTEM INTERFACE testing)
-target_link_libraries(dino_testing INTERFACE dino_util)
 # Object libraries rather than INTERFACE sources, so they build here with the
 # SDK's warnings instead of with each test's.
 add_library(dino_test_output OBJECT testing/unbuffered.c)
-target_sources(dino_testing INTERFACE $<TARGET_OBJECTS:dino_test_output>)
 # --wrap needs the static libc of the Linux targets: zig cc doesn't pass it to
 # lld-link, and the Windows CRT allocates inside a DLL anyway. A dynamic libc
 # (DINO_DYNAMIC) allocates inside a shared object too: what it allocates isn't
 # counted and what the program then frees is.
 option(DINO_NO_LEAK_CHECK "Don't link the allocation counter into dino_test() executables" OFF)
+set(DINO__LEAK_CHECK_OBJECTS "")
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DINO_DYNAMIC AND NOT DINO_NO_LEAK_CHECK)
     add_library(dino_leakcheck OBJECT testing/leakcheck.c)
-    target_sources(dino_testing INTERFACE $<TARGET_OBJECTS:dino_leakcheck>)
-    # Every call testing/leakcheck.c wraps, in its order.
-    set(dino_leakcheck_wraps
-        malloc calloc aligned_alloc memalign valloc realloc reallocarray free posix_memalign
-        setenv unsetenv putenv clearenv
-        atexit __cxa_atexit
-        getpwuid getpwnam getpwent setpwent endpwent getgrgid getgrnam getgrent setgrent endgrent
-        gethostbyname gethostbyname2 gethostbyaddr
-        tzset strftime
-        setlocale newlocale duplocale freelocale)
-    # musl's names for the calls that take a 64-bit time_t on a 32-bit target.
-    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-        list(APPEND dino_leakcheck_wraps __localtime64 __localtime64_r __mktime64 __ctime64 __ctime64_r)
-    else()
-        list(APPEND dino_leakcheck_wraps localtime localtime_r mktime ctime ctime_r)
-    endif()
-    foreach(wrapped ${dino_leakcheck_wraps})
-        target_link_options(dino_testing INTERFACE "LINKER:--wrap=${wrapped}")
-    endforeach()
+    set(DINO__LEAK_CHECK_OBJECTS $<TARGET_OBJECTS:dino_leakcheck>)
 endif()
 
-# The SDK's own sources are compiled inside the project today, so the
-# project's flags reach them (CFLAGS, and CMAKE_C_STANDARD or
-# add_compile_options() set before project()). Projects aren't promised that
-# (docs/guide/projects.md), but while it holds the sources must not rely on
-# those flags:
+set(DINO__SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+set(DINO__TEST_OBJECTS $<TARGET_OBJECTS:dino_test_output>)
+include(cmake/interface.cmake)
+
+# Unless prebuilt (DINO_SDK_PREBUILT), the SDK's own sources are compiled
+# inside the project, so the project's flags reach them (CFLAGS, and
+# CMAKE_C_STANDARD or add_compile_options() set before project()). Projects
+# aren't promised that (docs/guide/projects.md), but the sources must not rely
+# on those flags either way:
 # - _GNU_SOURCE: the POSIX halves need more than ISO C declares (clock_gettime,
 #   pthread mutex types, pipe2, accept4, gettid, ...), also under -std=c11.
 # - -Wno-everything drops the warnings the project enabled, so its
@@ -144,3 +107,36 @@ foreach(target dino_core dino_util dino_test_output dino_leakcheck)
         target_compile_options(${target} PRIVATE ${dino_sdk_warnings})
     endif()
 endforeach()
+
+# With DINO_SDK_PREBUILT=1, `dino build` builds the SDK on its own, once per zig
+# version, target and build type, setting this to where the result goes
+# (cli/prebuilt.zig); prebuilt.cmake imports it from there. dino-prebuilt.cmake
+# is copied last and marks a complete set.
+if(DINO_SDK_PREBUILD)
+    set(dino_prebuilt_info "${CMAKE_CURRENT_BINARY_DIR}/dino-prebuilt.cmake")
+    set(dino_leak_check OFF)
+    if(TARGET dino_leakcheck)
+        set(dino_leak_check ON)
+    endif()
+    file(WRITE "${dino_prebuilt_info}"
+        "set(DINO__PREBUILT_VERSION \"${PROJECT_VERSION}\")\n"
+        "set(DINO__PREBUILT_TARGET \"${ZIG_TARGET}\")\n"
+        "set(DINO__PREBUILT_BUILD_TYPE \"${CMAKE_BUILD_TYPE}\")\n"
+        "set(DINO__PREBUILT_LEAK_CHECK ${dino_leak_check})\n")
+    set(out "${DINO_SDK_PREBUILD}")
+    set(copy "${CMAKE_COMMAND}" -E copy)
+    set(steps
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${out}/include/dino"
+        COMMAND ${copy} "${CMAKE_CURRENT_BINARY_DIR}/include/dino/version.h" "${out}/include/dino/"
+        COMMAND ${copy} $<TARGET_FILE:dino_core> "${out}/libdino_core.a"
+        COMMAND ${copy} $<TARGET_FILE:dino_util> "${out}/libdino_util.a"
+        COMMAND ${copy} $<TARGET_OBJECTS:dino_test_output> "${out}/unbuffered.o")
+    set(dino_prebuilt_parts dino_core dino_util dino_test_output)
+    if(dino_leak_check)
+        list(APPEND steps COMMAND ${copy} $<TARGET_OBJECTS:dino_leakcheck> "${out}/leakcheck.o")
+        list(APPEND dino_prebuilt_parts dino_leakcheck)
+    endif()
+    list(APPEND steps COMMAND ${copy} "${dino_prebuilt_info}" "${out}/")
+    add_custom_target(dino_prebuilt ALL ${steps} VERBATIM)
+    add_dependencies(dino_prebuilt ${dino_prebuilt_parts})
+endif()

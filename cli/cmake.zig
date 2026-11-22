@@ -26,6 +26,8 @@ pub const Config = struct {
     /// What `zig version` printed. Objects built by another zig are not
     /// reused: a change starts the target over, as a new SDK does.
     zig: []const u8 = "",
+    /// The prebuilt SDK to import (cli/prebuilt.zig), or "" to compile it.
+    prebuilt: []const u8 = "",
     target: Target,
     mode: Mode,
     /// Absolute paths of the DINO_LIBRARY_PATH libraries.
@@ -50,6 +52,7 @@ pub fn defines(ctx: *Ctx, cfg: Config) []const []const u8 {
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     }) catch @panic("OOM");
     // Passed even when empty: a -D left out keeps its old value in CMakeCache.txt.
+    list.append(ctx.arena, ctx.sprint("-DDINO_SDK_PREBUILT_DIR={s}", .{cmakePath(ctx, cfg.prebuilt)})) catch @panic("OOM");
     var paths: std.ArrayList([]const u8) = .empty;
     for (cfg.libraries) |lib| paths.append(ctx.arena, cmakePath(ctx, lib)) catch @panic("OOM");
     const joined = std.mem.join(ctx.arena, ";", paths.items) catch @panic("OOM");
@@ -63,7 +66,7 @@ pub fn defines(ctx: *Ctx, cfg: Config) []const []const u8 {
 }
 
 /// CMake treats backslashes in -D values as escapes.
-fn cmakePath(ctx: *Ctx, path: []const u8) []const u8 {
+pub fn cmakePath(ctx: *Ctx, path: []const u8) []const u8 {
     if (builtin.os.tag != .windows) return path;
     const copy = ctx.arena.dupe(u8, path) catch @panic("OOM");
     std.mem.replaceScalar(u8, copy, '\\', '/');
@@ -181,7 +184,7 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
 
 /// Ninja when available; otherwise CMake's platform default, except on Windows
 /// where that default (Visual Studio) can't use the zig toolchain.
-fn generator(ctx: *Ctx) Ctx.Error!?[]const u8 {
+pub fn generator(ctx: *Ctx) Ctx.Error!?[]const u8 {
     if (ctx.findProgram("ninja") != null) return "Ninja";
     if (builtin.os.tag == .windows) {
         return ctx.fail("ninja is required on Windows (https://ninja-build.org)", .{});

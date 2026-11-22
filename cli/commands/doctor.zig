@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const Ctx = @import("../Ctx.zig");
 const Args = @import("../Args.zig");
 const sdk_cache = @import("../sdk_cache.zig");
+const prebuilt = @import("../prebuilt.zig");
 const libraries = @import("../libraries.zig");
 const targets = @import("../targets.zig");
 
@@ -74,6 +75,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     }
     if (sdk_cache.path(ctx)) |sdk| {
         report(ctx, true, "sdk", sdk);
+        report(ctx, true, "prebuilt", prebuilt.describe(ctx, sdk));
     } else |_| {
         problems += 1;
     }
