@@ -9,6 +9,13 @@ almost everything here: a removed or renamed name fails to build, and the error 
 
 New: `dino_socket_sendto`, `dino_socket_recvfrom`, `dino_socket_local_addr` and `dino_socket_peer_addr`, with `dino_socket_addr_t` (see [Network](network.md#udp)). Two Windows behaviors now match Linux: a datagram larger than the buffer is returned cut to fit instead of failing, and an unconnected UDP socket no longer fails a receive with `DINO_ECONNRESET` after sending to a port nobody listens on.
 
+### Target conventions fixed for 1.0
+
+- **`CMAKE_SYSTEM_PROCESSOR`** is now what native CMake reports: `ppc` (was `powerpc`), `armv7l` (was `arm`), `x86` for win32 (was `i686`) and `AMD64` for win64 (was `x86_64`). A project or CMake module that matched the old values has to match the new ones (see the table in [Projects](../guide/projects.md)); modules written for native builds already do.
+- **The `i386` target** builds for the i686 instead of zig's default Pentium 4, so its programs run on any 32-bit x86 PC and no longer need SSE2. Floating point uses the x87 unit instead; `CFLAGS=-mcpu=pentium4` gives back the old code.
+- **Triples whose C library can't link statically** (`x86_64-linux-gnu`, macOS, the BSDs) now link dynamically instead of failing CMake's compiler check.
+- **`dino test --all`** skips the targets this host can never run instead of refusing to start.
+
 ### Windows executables use UTF-8
 
 Executables from `dino_executable()` and `dino_test()` now carry a manifest that makes their Windows code page UTF-8 (Windows 10 1903 and later), and set the console to UTF-8 while they run: `argv`, `fopen`, `getenv` and `printf` now agree with the SDK's UTF-8 strings. A program that relied on `argv` arriving in the ANSI code page sees UTF-8 instead; one that links its own manifest sets `DINO_NO_UTF8_MANIFEST` (see [fs](fs.md#utf-8-on-windows)).

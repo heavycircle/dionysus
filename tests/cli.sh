@@ -196,7 +196,7 @@ case_system_processor() {
     # shellcheck disable=SC2016 # for CMake to expand
     echo 'message(STATUS "processor: ${CMAKE_SYSTEM_PROCESSOR}")' >>CMakeLists.txt
     local t want
-    for t in x86_64:x86_64 i386:i686 arm:arm arm64:aarch64 ppc:powerpc win32:i686 win64:x86_64; do
+    for t in x86_64:x86_64 i386:i686 arm:armv7l arm64:aarch64 ppc:ppc win32:x86 win64:AMD64; do
         want=${t#*:}
         t=${t%%:*}
         dino build -v "$t" >out 2>&1 || { cat out; return 1; }
@@ -401,6 +401,42 @@ case_prebuilt_options() {
 case_prebuilt_leak_check() {
     export DINO_SDK_PATH='' DINO_HOME=$work/prebuilt_home DINO_SDK_PREBUILT=1
     case_leak_check_allocators && case_leak_check_cxx_only
+}
+
+# The i386 target is built for an i686, without SSE2, rather than zig's
+# default Pentium 4. qemu-user doesn't enforce a CPU model's features, so the
+# compiler's own macros tell which CPU it built for.
+case_i386_builds_for_i686() {
+    project i386_cpu
+    cat >src/main.c <<'C'
+#include <stdio.h>
+
+int main(void)
+{
+#if defined(__SSE2__)
+    puts("sse2");
+#elif defined(__i686__)
+    puts("i686");
+#else
+    puts("other");
+#endif
+    return 0;
+}
+C
+    dino build i386 >out 2>&1 || { cat out; return 1; }
+    [[ $(dino run i386 --no-build 2>&1) == i686 ]] || { dino run i386 --no-build; return 1; }
+    # win32 keeps zig's default: Windows itself needs SSE2.
+    dino build win32 >out 2>&1 || { cat out; return 1; }
+    [[ $(dino run win32 --no-build 2>/dev/null | tr -d '\r') == sse2 ]]
+}
+
+# A triple whose C library can't be linked statically (glibc here) builds
+# dynamically instead of failing CMake's compiler check.
+case_glibc_triple_links_dynamically() {
+    project glibc
+    dino build x86_64-linux-gnu >out 2>&1 || { cat out; return 1; }
+    file build/x86_64-linux-gnu/glibc | grep -q 'dynamically linked' || { file build/x86_64-linux-gnu/glibc; return 1; }
+    [[ $(build/x86_64-linux-gnu/glibc) == *Hello* ]]
 }
 
 # Names CMake or dino already use are refused before anything is written.

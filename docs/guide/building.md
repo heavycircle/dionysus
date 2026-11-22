@@ -23,7 +23,7 @@ dino targets
   NAME     ZIG TARGET                 RUNS VIA       DESCRIPTION
   arm      arm-linux-musleabihf       qemu-arm       ARM 32-bit, hard float
   arm64    aarch64-linux-musl         qemu-aarch64   ARM 64-bit
-  i386     x86-linux-musl             native         Intel x86 32-bit
+  i386     x86-linux-musl             native         Intel x86 32-bit, i686
   ppc      powerpc-linux-musleabihf   qemu-ppc       PowerPC 32-bit, big endian
   win32    x86-windows-gnu            wine           Windows PE32 (x86)
   win64    x86_64-windows-gnu         wine           Windows PE32+ (x86_64)
@@ -33,10 +33,10 @@ dino targets
 ```
 
 - **With no target**, commands use the one marked `*`, which matches the host.
-- **`--all`** builds every named target. It can't be combined with explicit targets.
+- **`--all`** builds every named target. It can't be combined with explicit targets. `dino test --all` skips the tests of a target this host can never run (Linux targets on a Windows host, `arm` on an ARM64 machine without 32-bit support) and says so in the summary; a runner that is only missing (qemu, wine) fails up front, since installing it fixes that.
+- **CPUs:** each target builds for zig's baseline CPU of its architecture, except `i386`, which builds for the i686 (Pentium Pro and later, no SSE2 needed) as Debian's and Ubuntu's i386 ports do. Older or newer CPUs: `CFLAGS=-mcpu=i486`, `-mcpu=native` and so on, which also reach the link.
 - **Other Zig targets:** any Zig target triple works in place of a name, e.g.
-  `dino build riscv64-linux-musl`. Only the seven named targets are tested, and the SDK is only
-  written for Linux and Windows.
+  `dino build riscv64-linux-musl`. musl and MinGW triples (`*-linux-musl*`, `*-windows-gnu`) link statically, as the named targets do; any other C library (`x86_64-linux-gnu`, macOS, the BSDs) can't be linked statically, so those link dynamically. Only the seven named targets are tested, and the SDK is only written for Linux and Windows.
 - **Failures:** a target that fails to build doesn't stop the others. The summary at the end lists
   each target, and the command exits non-zero if any of them failed.
 

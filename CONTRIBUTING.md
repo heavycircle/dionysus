@@ -26,14 +26,14 @@ Dionysus lets you write C once and get tiny, fully static binaries for Linux (mu
 
 ### Prerequisites
 
-| Tool | Version | Needed for |
-| --- | --- | --- |
-| [Zig](https://ziglang.org/download/) | **0.17.1** exactly (`minimum_zig_version` in `build.zig.zon`) | building `dino`; it is also the C compiler and linker for every target |
-| CMake | 3.20 or newer | building any C project |
-| Ninja, or make | any | CMake generator; Ninja is required on Windows hosts |
-| `qemu-user` | any | running arm, arm64 and ppc builds on an x86_64 host (optional) |
-| `wine` (plus `wine32` for win32) | any | running Windows builds on Linux (optional) |
-| `clang-format` | 19 or newer; CI pins 19.1.7 (see [CI](#ci)) | formatting C code. The repository's `.clang-format` uses `MainIncludeChar`, which older versions reject; the copy `dino init` writes leaves it out and works from 14 |
+| Tool                                 | Version                                                       | Needed for                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Zig](https://ziglang.org/download/) | **0.17.1** exactly (`minimum_zig_version` in `build.zig.zon`) | building `dino`; it is also the C compiler and linker for every target                                                                                               |
+| CMake                                | 3.20 or newer                                                 | building any C project                                                                                                                                               |
+| Ninja, or make                       | any                                                           | CMake generator; Ninja is required on Windows hosts                                                                                                                  |
+| `qemu-user`                          | any                                                           | running arm, arm64 and ppc builds on an x86_64 host (optional)                                                                                                       |
+| `wine` (plus `wine32` for win32)     | any                                                           | running Windows builds on Linux (optional)                                                                                                                           |
+| `clang-format`                       | 19 or newer; CI pins 19.1.7 (see [CI](#ci))                   | formatting C code. The repository's `.clang-format` uses `MainIncludeChar`, which older versions reject; the copy `dino init` writes leaves it out and works from 14 |
 
 **Installing Zig.** Download the 0.17.1 archive for your platform from
 <https://ziglang.org/download/>, extract it anywhere, and put the directory on your `PATH`:
@@ -264,7 +264,7 @@ The SDK's own sources are the exception: they drop the project's warning flags f
 `tests/windows.sh <directory>` runs the win64 or win32 builds of the SDK tests on Windows itself, with no emulator and no ctest; CI cross-compiles them on Linux and runs them on a Windows runner. Wine isn't Windows: some cases can't run or can't fail under it (symbolic links, `SO_REUSEADDR`), so this job is the one that checks them. No case may skip there. On Linux, `tests/windows.sh sdk/tests/build/win64 wine` tries the script itself.
 
 `tests/docs.sh [targets...]` keeps the documentation honest: every relative link and `#anchor` in
-the Markdown must resolve, and every ```` ```c ```` block in `docs/` that contains `int main(` (or
+the Markdown must resolve, and every ` ```c ` block in `docs/` that contains `int main(` (or
 `UTEST_MAIN()`, built with `dino_test()`) is built for each target and run, and must exit 0. Write
 examples in the docs as complete programs that take no arguments, so they're tested; fragments
 without `main` aren't. A block that isn't C to compile belongs in a fence without the `c` tag.
@@ -288,14 +288,14 @@ examples, docs) and the version this script installs, together.
 
 `.github/workflows/ci.yml` runs on every PR and on pushes to `main` and `release-*`:
 
-| Job | What it checks |
-| --- | --- |
-| `lint` | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), and commit messages |
-| `unit` | `zig build test`, and `tests/cmake-minimum.sh` |
-| `targets (<target>)` | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh` and `tests/docs.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
-| `cli` | `tests/cli.sh` in the same image; a job of its own because it is the slowest check and doesn't depend on the target |
-| `docker` | `tests/docker.sh` on the same image: the entrypoint (file ownership, wine) |
-| `windows (win32)`, `windows (win64)` | the SDK tests, cross-compiled by `windows-build` on Linux with `-Wall -Wextra -Werror`, run on Windows itself by `tests/windows.sh` |
+| Job                                  | What it checks                                                                                                                                                                                                                                                                                                         |
+| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lint`                               | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), and commit messages                                                                                                                                       |
+| `unit`                               | `zig build test`, and `tests/cmake-minimum.sh`                                                                                                                                                                                                                                                                         |
+| `targets (<target>)`                 | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh` and `tests/docs.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
+| `cli`                                | `tests/cli.sh` in the same image; a job of its own because it is the slowest check and doesn't depend on the target                                                                                                                                                                                                    |
+| `docker`                             | `tests/docker.sh` on the same image: the entrypoint (file ownership, wine)                                                                                                                                                                                                                                             |
+| `windows (win32)`, `windows (win64)` | the SDK tests, cross-compiled by `windows-build` on Linux with `-Wall -Wextra -Werror`, run on Windows itself by `tests/windows.sh`                                                                                                                                                                                    |
 
 Run the same checks locally before asking for review:
 
@@ -322,12 +322,13 @@ version as CI. `uvx --from clang-format==19.1.7 clang-format -i <files>` fixes f
 
 `sdk/cmake/toolchain.cmake` makes CMake cross-compile with Zig:
 
-- `CMAKE_C_COMPILER` is `zig;cc;-target;<triple>`. The target lives in the compiler command, not in
+- `CMAKE_C_COMPILER` is `zig;cc;-target;<triple>`, plus `-mcpu=i686` for 32-bit x86 Linux. The target lives in the compiler command, not in
   `CMAKE_C_FLAGS`, so user flags can't drop it.
+- `CMAKE_SYSTEM_PROCESSOR` is what native CMake reports on that platform (`ppc`, `armv7l`, `AMD64`, ...), not zig's architecture name.
 - `ar` and `ranlib` are small generated wrappers around `zig ar` and `zig ranlib`, so no host
   binutils are needed.
-- Everything links statically (`-static`). musl and MinGW are the C libraries because they can be
-  linked statically; glibc can't be linked statically in a way that works reliably.
+- musl and MinGW triples link statically (`-static`). musl and MinGW are the C libraries because they can be
+  linked statically; glibc can't be linked statically in a way that works reliably, so a glibc (or macOS, BSD) triple links dynamically.
 - `flags.cmake` (loaded via `CMAKE_USER_MAKE_RULES_OVERRIDE`) sets per-configuration flags.
   `Release` and `MinSizeRel` use `-Oz`, section garbage collection, stripping and no unwind tables.
   `Debug` uses `-O0 -g`. A project configured without a build type gets `Release`.
@@ -339,15 +340,15 @@ PRIVATE dino_util)`, and `dino_test()`. That is why a user's `CMakeLists.txt` do
 where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same way, under
 `_dino_libs/` and `EXCLUDE_FROM_ALL`; see [docs/guide/libraries.md](docs/guide/libraries.md#how-it-works).
 
-| dino name | Zig triple | Output | Runs on an x86_64 Linux host via |
-| --- | --- | --- | --- |
-| `x86_64` | `x86_64-linux-musl` | static ELF | native |
-| `i386` | `x86-linux-musl` | static ELF | native |
-| `arm64` | `aarch64-linux-musl` | static ELF | `qemu-aarch64` |
-| `arm` | `arm-linux-musleabihf` | static ELF | `qemu-arm` |
-| `ppc` | `powerpc-linux-musleabihf` | static ELF | `qemu-ppc` |
-| `win64` | `x86_64-windows-gnu` | PE `.exe` | `wine` |
-| `win32` | `x86-windows-gnu` | PE `.exe` | `wine` (needs `wine32`) |
+| dino name | Zig triple                 | Output     | Runs on an x86_64 Linux host via |
+| --------- | -------------------------- | ---------- | -------------------------------- |
+| `x86_64`  | `x86_64-linux-musl`        | static ELF | native                           |
+| `i386`    | `x86-linux-musl`           | static ELF | native                           |
+| `arm64`   | `aarch64-linux-musl`       | static ELF | `qemu-aarch64`                   |
+| `arm`     | `arm-linux-musleabihf`     | static ELF | `qemu-arm`                       |
+| `ppc`     | `powerpc-linux-musleabihf` | static ELF | `qemu-ppc`                       |
+| `win64`   | `x86_64-windows-gnu`       | PE `.exe`  | `wine`                           |
+| `win32`   | `x86-windows-gnu`          | PE `.exe`  | `wine` (needs `wine32`)          |
 
 `dino targets` prints this table for the current host. Any other Zig triple can be passed to
 `dino build` directly.
@@ -423,7 +424,7 @@ of `core` and `DINO_CORE_` below.
 
 - **C:** `clang-format` with the repository's `.clang-format` (WebKit base, Allman braces, 100
   columns). Use the pinned version from [CI](#ci) (`uvx --from clang-format==19.1.7 clang-format
-  -i <files>`); other versions can format differently.
+-i <files>`); other versions can format differently.
 - **Includes** are sorted and grouped by clang-format, in this order: the file's own header first
   (`io_posix.c` and `io_win32.c` start with `<dino/core/io.h>`, which keeps headers
   self-contained), then system and standard headers, then other `<dino/...>` headers in their own
@@ -493,16 +494,16 @@ Commits before this document existed use `scope: subject` (`cli: dino init/...`)
 Issues labeled `complexity:low` are open to anyone. Don't ask whether you can take one; comment
 that you're working on it and open a (draft) PR.
 
-| Group | Labels | Meaning |
-| --- | --- | --- |
-| Type | `bug`, `bug-crash`, `bug-regression`, `enhancement`, `refactor`, `performance`, `security`, `documentation`, `breaking-change` | what kind of change |
-| Area | `sdk`, `cli`, `build`, `examples`, `ci`, `distribution`, `dependencies`, `project-management`, `code-standards` | which part of the repo |
-| Topic | `network`, `filesystem`, `threads`, `event-loop`, `job-control`, `time`, `logging` | SDK subsystem |
-| Platform | `platform:linux`, `platform:windows`, `platform:arm`, `platform:other` | where it happens |
-| Needs | `needs:repro`, `needs:response`, `needs:decision`, `needs:design`, `needs:discussion`, `needs:backport` | what's blocking it |
-| Has | `has:repro`, `has:bisected`, `has:workaround`, `has:plan` | what's already known |
-| Complexity | `complexity:low`, `complexity:high` | risk of the change |
-| Closed | `closed:invalid`, `closed:question`, `closed:wontfix` | why it was closed |
+| Group      | Labels                                                                                                                         | Meaning                |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------- |
+| Type       | `bug`, `bug-crash`, `bug-regression`, `enhancement`, `refactor`, `performance`, `security`, `documentation`, `breaking-change` | what kind of change    |
+| Area       | `sdk`, `cli`, `build`, `examples`, `ci`, `distribution`, `dependencies`, `project-management`, `code-standards`                | which part of the repo |
+| Topic      | `network`, `filesystem`, `threads`, `event-loop`, `job-control`, `time`, `logging`                                             | SDK subsystem          |
+| Platform   | `platform:linux`, `platform:windows`, `platform:arm`, `platform:other`                                                         | where it happens       |
+| Needs      | `needs:repro`, `needs:response`, `needs:decision`, `needs:design`, `needs:discussion`, `needs:backport`                        | what's blocking it     |
+| Has        | `has:repro`, `has:bisected`, `has:workaround`, `has:plan`                                                                      | what's already known   |
+| Complexity | `complexity:low`, `complexity:high`                                                                                            | risk of the change     |
+| Closed     | `closed:invalid`, `closed:question`, `closed:wontfix`                                                                          | why it was closed      |
 
 ## Versioning
 
@@ -515,12 +516,12 @@ Dionysus uses [semantic versioning](https://semver.org) and
 `DINO_VERSION_PRERELEASE`). `zig build test` fails if the two disagree. Only the release commit
 itself drops the `-dev` suffix.
 
-| Branch | Version in the tree | `dino version` reports |
-| --- | --- | --- |
-| `main` | `0.2.0-dev` | `0.2.0-dev.14+g1a2b3c4d5` (14 commits after the last tag) |
-| `release-0.1` | `0.1.1-dev` | `0.1.1-dev.3+g6e7f8a9b0` |
-| tag `v0.1.0` | `0.1.0` | `0.1.0` |
-| no tag reachable yet | `0.1.0-dev` | `0.1.0-dev+g1a2b3c4d5` |
+| Branch               | Version in the tree | `dino version` reports                                    |
+| -------------------- | ------------------- | --------------------------------------------------------- |
+| `main`               | `0.2.0-dev`         | `0.2.0-dev.14+g1a2b3c4d5` (14 commits after the last tag) |
+| `release-0.1`        | `0.1.1-dev`         | `0.1.1-dev.3+g6e7f8a9b0`                                  |
+| tag `v0.1.0`         | `0.1.0`             | `0.1.0`                                                   |
+| no tag reachable yet | `0.1.0-dev`         | `0.1.0-dev+g1a2b3c4d5`                                    |
 
 `build.zig` computes this from `git describe`. Builds without `.git` (source archives, the Docker
 build) report the plain tree version; pass `-Dversion-string=X.Y.Z` to override it. C code can

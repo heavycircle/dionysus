@@ -88,27 +88,47 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     } else {
         if (all and names.items.len != 0) return ctx.usage("--all cannot be combined with explicit targets", .{});
         opts.targets = if (all) &targets.known else try build.resolveTargets(ctx, names.items);
-        for (opts.targets) |t| try requireRunner(ctx, t);
+        for (opts.targets) |t| {
+            if (all and targets.runnerFor(t) == .unsupported) continue;
+            try requireRunner(ctx, t);
+        }
     }
 
     opts.run.tests = true;
     const results = try build.buildTargets(ctx, opts);
-    const passed = ctx.arena.alloc(bool, results.len) catch @panic("OOM");
+    const Outcome = enum { ok, failed, skipped };
+    const outcomes = ctx.arena.alloc(Outcome, results.len) catch @panic("OOM");
     var failed: usize = 0;
-    for (results, passed) |r, *ok| {
-        ok.* = r.ok;
+    var skipped: usize = 0;
+    for (results, outcomes) |r, *outcome| {
+        outcome.* = if (r.ok) .ok else .failed;
         if (ctx.interrupted != null) break;
-        if (r.ok) {
+        if (r.ok and targets.runnerFor(r.cfg.target) == .unsupported) {
+            // Only --all gets here: a named target was refused up front.
+            ctx.step("skipping {s} tests: this host can't run {s} binaries", .{ r.cfg.target.name, r.cfg.target.name });
+            outcome.* = .skipped;
+        } else if (r.ok) {
             ctx.step("testing {s}", .{r.cfg.target.name});
-            ok.* = try ctest(ctx, r.cfg.build_dir, r.cfg.target, opts, filter, timeout_s, ctest_args);
+            if (!try ctest(ctx, r.cfg.build_dir, r.cfg.target, opts, filter, timeout_s, ctest_args)) outcome.* = .failed;
         }
-        if (!ok.*) failed += 1;
+        switch (outcome.*) {
+            .failed => failed += 1,
+            .skipped => skipped += 1,
+            .ok => {},
+        }
     }
     if (ctx.interruptedCode()) |code| return code;
     if (results.len > 1) {
         ctx.print("\n", .{});
-        ctx.step("summary: {d} passed, {d} failed", .{ results.len - failed, failed });
-        for (results, passed) |r, ok| ctx.print("    {s:<8} {s}\n", .{ if (ok) "ok" else "FAILED", r.cfg.target.name });
+        ctx.step("summary: {d} passed, {d} failed, {d} skipped", .{ results.len - failed - skipped, failed, skipped });
+        for (results, outcomes) |r, outcome| {
+            const label = switch (outcome) {
+                .ok => "ok",
+                .failed => "FAILED",
+                .skipped => "skipped",
+            };
+            ctx.print("    {s:<8} {s}\n", .{ label, r.cfg.target.name });
+        }
     }
     return if (failed == 0) 0 else 1;
 }

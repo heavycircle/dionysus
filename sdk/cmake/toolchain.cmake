@@ -11,17 +11,40 @@ else()
     set(CMAKE_SYSTEM_NAME Generic)
 endif()
 
-# Left empty when cross-compiling. The triple's architecture, as `uname -m`
-# would print it: zig's x86 is i686.
+# Left empty when cross-compiling. What CMake reports when it builds on that
+# platform itself, since projects and third-party modules match on it:
+# `uname -m` on Linux, PROCESSOR_ARCHITECTURE on Windows. An architecture with
+# no entry keeps zig's name.
 string(REGEX REPLACE "-.*" "" CMAKE_SYSTEM_PROCESSOR "${ZIG_TARGET}")
-if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86")
-    set(CMAKE_SYSTEM_PROCESSOR i686)
+if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    set(dino_native_names x86_64=AMD64 aarch64=ARM64)
+else()
+    set(dino_native_names x86=i686 arm=armv7l powerpc=ppc powerpc64=ppc64 powerpc64le=ppc64le)
+endif()
+foreach(dino_pair IN LISTS dino_native_names)
+    string(REPLACE "=" ";" dino_pair "${dino_pair}")
+    list(GET dino_pair 0 dino_zig_name)
+    if(CMAKE_SYSTEM_PROCESSOR STREQUAL dino_zig_name)
+        list(GET dino_pair 1 CMAKE_SYSTEM_PROCESSOR)
+    endif()
+endforeach()
+unset(dino_native_names)
+unset(dino_pair)
+unset(dino_zig_name)
+
+# zig's default CPU for 32-bit x86 is the Pentium 4, which needs SSE2. 32-bit
+# x86 Linux means i686 (Pentium Pro and later), as Debian's and Ubuntu's i386
+# ports do; a project's own -mcpu comes later on the command line and wins.
+# Windows needs SSE2 itself, so its targets keep zig's default.
+set(dino_cpu "")
+if(ZIG_TARGET MATCHES "^x86-linux")
+    set(dino_cpu ";-mcpu=i686")
 endif()
 
 # The target rides along with the compiler command rather than CMAKE_C_FLAGS,
 # so user-supplied flags can never drop it and silently build for the host.
-set(CMAKE_C_COMPILER "zig;cc;-target;${ZIG_TARGET}" CACHE STRING "C Compiler" FORCE)
-set(CMAKE_CXX_COMPILER "zig;c++;-target;${ZIG_TARGET}" CACHE STRING "C++ Compiler" FORCE)
+set(CMAKE_C_COMPILER "zig;cc;-target;${ZIG_TARGET}${dino_cpu}" CACHE STRING "C Compiler" FORCE)
+set(CMAKE_CXX_COMPILER "zig;c++;-target;${ZIG_TARGET}${dino_cpu}" CACHE STRING "C++ Compiler" FORCE)
 # A cross compiler: CMake then identifies it by compiling alone. Otherwise its
 # compiler-ID step links a program with no flags at all, and zig builds a
 # Debug libc for it (about a minute, cold) that a Release build never uses.
@@ -56,10 +79,15 @@ dino_zig_tool(ranlib)
 # function, since the check declares it itself.
 list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES ZIG_TARGET DINO_DYNAMIC)
 
-# Statically link. _INIT values only seed the cache on the first configure, so
-# reconfiguring never duplicates them and user-supplied flags are kept.
-# DINO_DYNAMIC is only for `dino test --memcheck`: valgrind can't see the
-# allocator inside a static binary.
+# Statically link where zig can: musl and MinGW, which covers every named
+# target. Any other C library (glibc, macOS, the BSDs) must be linked
+# dynamically, and zig refuses -static for it. _INIT values only seed the
+# cache on the first configure, so reconfiguring never duplicates them and
+# user-supplied flags are kept. DINO_DYNAMIC also forces it, for `dino test
+# --memcheck`: valgrind can't see the allocator inside a static binary.
+if(NOT ZIG_TARGET MATCHES "-musl|-windows-gnu")
+    set(DINO_DYNAMIC ON)
+endif()
 if(NOT DINO_DYNAMIC)
     set(CMAKE_EXE_LINKER_FLAGS_INIT "-static")
 endif()
