@@ -8,7 +8,7 @@ extern "C"
 {
 #endif
 
-typedef uintptr_t dino_pipe_t;
+typedef struct dino_pipe *dino_pipe_t;
 
 #define DINO_INVALID_PIPE ((dino_pipe_t)0)
 

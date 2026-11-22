@@ -5,7 +5,7 @@ almost everything here: a removed or renamed name fails to build, and the error 
 
 ## To 0.7
 
-0.7 changes the API where it has to change before 1.0 freezes it.
+0.7 changes the API where it has to change before 1.0 freezes it. The compiler finds the change to handle types; the change to `dino_mutex_trylock` it doesn't.
 
 ### Failures have a reason: `dino_error()`
 
@@ -23,6 +23,22 @@ if (n < 0 && dino_error() != DINO_EAGAIN)
 ```
 
 A non-blocking `dino_socket_connect` fails with `DINO_EINPROGRESS` when it has started, and the new `dino_socket_error(sock)` says how it ended once the socket is writable.
+
+### Handle types are distinct
+
+Every handle type was `uintptr_t`, so `dino_socket_close(pipe)` or swapped arguments compiled without a warning and acted on the wrong object. Now `dino_pipe_t`, `dino_process_t`, `dino_thread_t`, `dino_mutex_t`, `dino_cond_t`, `dino_event_loop_t`, `dino_event_timer_t` and `dino_fd_set_t` are each a pointer to a struct of their own, and mixing them up is a compile error. `dino_socket_t` is still an integer holding the OS socket.
+
+What still works: comparing with `DINO_INVALID_*`, initializing a handle with `0`, and passing one through a `void *`. What breaks is keeping a handle in an integer or doing arithmetic on it:
+
+```c
+// Before
+uintptr_t saved = (uintptr_t)pipe;
+dino_pipe_close((dino_pipe_t)saved);
+
+// After: keep it in its own type, or in a void * with a cast back.
+dino_pipe_t saved = pipe;
+dino_pipe_close(saved);
+```
 
 ### `dino_mutex_trylock` returns `DINO_TIMEOUT` when the mutex is held
 
