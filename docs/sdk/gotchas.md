@@ -81,8 +81,7 @@ Tell a crash from an exit with `status.signal`, not with `status.code`: a signal
 
 ## Stack size
 
-Threads get 8 MB of stack on the Linux targets and 1 MB on Windows. A large local array that's fine
-on Linux can crash on Windows: allocate big buffers with `malloc`.
+Threads started with `dino_thread_create` get 8 MB of stack everywhere. The main thread doesn't: it has 8 MB on Linux and 16 MB on Windows, so a large local array in `main` that works on Windows can overflow on Linux. Allocate big buffers with `malloc`.
 
 ## Line endings in output
 

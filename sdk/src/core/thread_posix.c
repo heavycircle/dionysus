@@ -27,14 +27,23 @@ int dino_thread_create(dino_thread_t *thread, dino_thread_fn_t fn, void *arg)
     if (!t)
         return dino__fail(DINO_ENOMEM);
 
-    pthread_t pt;
-    int       rc = pthread_create(&pt, NULL, trampoline, t);
+    pthread_attr_t attr;
+    int            rc = pthread_attr_init(&attr);
+    if (rc == 0)
+    {
+        rc = pthread_attr_setstacksize(&attr, DINO__THREAD_STACK_BYTES);
+        pthread_t pt;
+        if (rc == 0)
+            rc = pthread_create(&pt, &attr, trampoline, t);
+        pthread_attr_destroy(&attr);
+        if (rc == 0)
+            t->os = (uintptr_t)pt;
+    }
     if (rc != 0)
     {
         free(t);
         return dino__fail_code(rc);
     }
-    t->os   = (uintptr_t)pt;
     *thread = (dino_thread_t)t;
     return 0;
 }

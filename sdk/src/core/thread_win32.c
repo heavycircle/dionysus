@@ -24,8 +24,10 @@ int dino_thread_create(dino_thread_t *thread, dino_thread_fn_t fn, void *arg)
     if (!t)
         return dino__fail(DINO_ENOMEM);
 
-    DWORD  id;
-    HANDLE handle = CreateThread(NULL, 0, trampoline, t, 0, &id);
+    DWORD id;
+    // A reservation, as the executable's own stack size is: committed as used.
+    HANDLE handle = CreateThread(
+        NULL, DINO__THREAD_STACK_BYTES, trampoline, t, STACK_SIZE_PARAM_IS_A_RESERVATION, &id);
     if (!handle)
     {
         dino__error_set_os();

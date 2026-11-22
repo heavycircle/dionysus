@@ -7,6 +7,11 @@
 
 #include <dino/core/thread.h>
 
+// Every thread's stack, the same on every platform, so code that fits on one
+// fits on the other. Left to the platforms it was 8 MB on Linux and the
+// executable's 16 MB on Windows, which also caps win32 at about 100 threads.
+#define DINO__THREAD_STACK_BYTES ((size_t)8 * 1024 * 1024)
+
 // The OS entry point has a different signature (and calling convention, on
 // 32-bit Windows) per platform, so it runs this trampoline, which calls the
 // user's plain int fn(void *). The block is shared by the thread and its

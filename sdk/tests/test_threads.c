@@ -1,3 +1,11 @@
+// Before utest.h, which declares QueryPerformanceCounter itself on Windows.
+#ifdef _WIN32
+#include <windows.h>
+#else
+#define _GNU_SOURCE // pthread_getattr_np
+#include <pthread.h>
+#endif
+
 #include <stdatomic.h>
 #include <stdint.h>
 #include <utest.h>
@@ -95,6 +103,62 @@ UTEST(thread, invalid_arguments_are_rejected)
     EXPECT_EQ(-1, dino_thread_create(NULL, NULL, NULL));
     EXPECT_EQ(-1, dino_thread_join(DINO_INVALID_THREAD, NULL));
     EXPECT_EQ(-1, dino_thread_detach(DINO_INVALID_THREAD));
+}
+
+// A thread can use most of its 8 MB, on every platform: Windows threads had
+// the executable's 16 MB and Linux ones 8 MB, so code that fit on one didn't
+// necessarily fit on the other.
+static int use_stack(void *arg)
+{
+    (void)arg;
+    volatile char big[6 * 1024 * 1024];
+    for (size_t i = 0; i < sizeof(big); i += 4096)
+        big[i] = (char)i;
+    return big[sizeof(big) - 4096] == (char)(sizeof(big) - 4096) ? 7 : 0;
+}
+
+// What the system reserved for the calling thread's stack.
+static size_t own_stack_bytes(void)
+{
+#ifdef _WIN32
+    ULONG_PTR low = 0, high = 0;
+    GetCurrentThreadStackLimits(&low, &high);
+    return (size_t)(high - low);
+#else
+    pthread_attr_t attr;
+    size_t         size = 0;
+    if (pthread_getattr_np(pthread_self(), &attr) != 0)
+        return 0;
+    pthread_attr_getstacksize(&attr, &size);
+    pthread_attr_destroy(&attr);
+    return size;
+#endif
+}
+
+static int report_stack(void *arg)
+{
+    *(size_t *)arg = own_stack_bytes();
+    return 0;
+}
+
+UTEST(thread, stack_is_eight_megabytes_everywhere)
+{
+    dino_thread_t t;
+    size_t        size = 0;
+    ASSERT_EQ(0, dino_thread_create(&t, report_stack, &size));
+    ASSERT_EQ(0, dino_thread_join(t, NULL));
+    // The system may round up, or add a guard page.
+    EXPECT_GE(size, (size_t)8 * 1024 * 1024);
+    EXPECT_LE(size, (size_t)8 * 1024 * 1024 + 64 * 1024);
+}
+
+UTEST(thread, stack_holds_six_megabytes)
+{
+    dino_thread_t t;
+    int           result = 0;
+    ASSERT_EQ(0, dino_thread_create(&t, use_stack, NULL));
+    ASSERT_EQ(0, dino_thread_join(t, &result));
+    EXPECT_EQ(7, result);
 }
 
 static atomic_int  g_go;
@@ -534,7 +598,7 @@ static void init_once(void)
     atomic_fetch_add(&g_once_runs, 1);
 }
 
-static int call_once(void *arg)
+static int run_once_from_thread(void *arg)
 {
     (void)arg;
     if (dino_once(&g_once, init_once) != 0)
@@ -547,7 +611,7 @@ UTEST(once, runs_exactly_once_across_threads)
 {
     dino_thread_t threads[NUM_THREADS * 2];
     for (int i = 0; i < NUM_THREADS * 2; i++)
-        ASSERT_EQ(0, dino_thread_create(&threads[i], call_once, NULL));
+        ASSERT_EQ(0, dino_thread_create(&threads[i], run_once_from_thread, NULL));
     for (int i = 0; i < NUM_THREADS * 2; i++)
     {
         int result = 0;

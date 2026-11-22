@@ -71,8 +71,7 @@ int main(void)
 - **Arguments must outlive the thread.** `arg` is passed as is. Don't point it at a local variable
   that goes out of scope while the thread still runs (the example's `jobs` array lives until the
   joins).
-- **Stack size** is the platform default: 8 MB on the Linux targets and 1 MB on Windows. Keep large
-  buffers on the heap so code that's fine on Linux doesn't overflow on Windows.
+- **Stack size** is 8 MB for every thread on every platform, so code that fits on one fits on the others. The main thread keeps each platform's own size (8 MB on Linux, 16 MB on Windows). On win32, each thread's 8 MB comes out of a 2 GB address space, so a program there runs out at a couple of hundred threads; keep very large buffers on the heap.
 - **Shared data** needs a [mutex](mutex.md) or C11 atomics (`<stdatomic.h>`, which work on every
   target).
 - **Process exit:** returning from `main()` ends the process, detached threads included.
