@@ -119,28 +119,28 @@ static BOOL transfer(struct dino_pipe *p, int write, void *buf, DWORD len, DWORD
     return ok;
 }
 
-int dino_pipe_read(dino_pipe_t pipe, void *buf, int len)
+int dino_pipe_read(dino_pipe_t pipe, void *buf, size_t len)
 {
-    if (pipe == DINO_INVALID_PIPE || len < 0)
+    if (pipe == DINO_INVALID_PIPE || (len > 0 && !buf))
         return dino__fail(DINO_EINVAL);
     if (len == 0)
         return 0;
 
     DWORD n;
-    if (!transfer((struct dino_pipe *)pipe, 0, buf, (DWORD)len, &n))
+    if (!transfer((struct dino_pipe *)pipe, 0, buf, (DWORD)dino__clamp_len(len), &n))
         return GetLastError() == ERROR_BROKEN_PIPE ? 0 : dino__fail_os();
     return (int)n;
 }
 
-int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
+int dino_pipe_write(dino_pipe_t pipe, const void *buf, size_t len)
 {
-    if (pipe == DINO_INVALID_PIPE || len < 0)
+    if (pipe == DINO_INVALID_PIPE || (len > 0 && !buf))
         return dino__fail(DINO_EINVAL);
     if (len == 0)
         return 0;
 
     DWORD n;
-    if (!transfer((struct dino_pipe *)pipe, 1, (void *)buf, (DWORD)len, &n))
+    if (!transfer((struct dino_pipe *)pipe, 1, (void *)buf, (DWORD)dino__clamp_len(len), &n))
         return dino__fail_os();
     return (int)n;
 }
@@ -203,11 +203,11 @@ int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
 // As dino_pipe_wait does for reads: an overlapped write, cancelled when the
 // time runs out. A cancelled write may still have sent part of buf.
 int dino__pipe_write_timeout(
-    dino_pipe_t pipe, const void *buf, int len, int timeout_ms, int *written)
+    dino_pipe_t pipe, const void *buf, size_t len, int timeout_ms, int *written)
 {
     struct dino_pipe *p = (struct dino_pipe *)pipe;
     *written            = 0;
-    if (!p || p->read_end || len < 0)
+    if (!p || p->read_end)
         return dino__fail(DINO_EINVAL);
     if (len == 0)
         return 0;
@@ -227,7 +227,7 @@ int dino__pipe_write_timeout(
     ov.hEvent       = (HANDLE)((ULONG_PTR)event | 1);
     int   timed_out = 0;
     DWORD n         = 0;
-    BOOL  ok        = WriteFile(p->handle, buf, (DWORD)len, NULL, &ov);
+    BOOL  ok        = WriteFile(p->handle, buf, (DWORD)dino__clamp_len(len), NULL, &ov);
     if (ok || GetLastError() == ERROR_IO_PENDING)
     {
         if (!ok && wait_for(event, timeout_ms) == WAIT_TIMEOUT)

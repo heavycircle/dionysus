@@ -35,8 +35,8 @@ typedef struct
      * The child's whole environment as "NAME=value" strings, ending with NULL;
      * NULL for a copy of the parent's. On Windows many programs need SYSTEMROOT.
      */
-    char *const *env;
-    dino_stdio_t stdin_mode, stdout_mode, stderr_mode;
+    const char *const *env;
+    dino_stdio_t       stdin_mode, stdout_mode, stderr_mode;
 } dino_process_spawn_opts_t;
 
 /**
@@ -91,7 +91,7 @@ typedef struct
  *         cwd isn't there, DINO_EACCES when it can't be executed, DINO_EINVAL
  *         for bad arguments or a stdio mode outside dino_stdio_t.
  */
-int dino_process_spawn(dino_process_t *process, char *const argv[],
+int dino_process_spawn(dino_process_t *process, const char *const argv[],
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes);
 
 /**
@@ -156,8 +156,8 @@ int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_
 /** Options for dino_process_run; zero-initialise and set what you need. */
 typedef struct
 {
-    const char  *cwd; /**< As in dino_process_spawn_opts_t. */
-    char *const *env; /**< As in dino_process_spawn_opts_t. */
+    const char        *cwd; /**< As in dino_process_spawn_opts_t. */
+    const char *const *env; /**< As in dino_process_spawn_opts_t. */
     /** Bytes for the child's stdin, then end of file. NULL: stdin is null. */
     const void *input;
     size_t      input_len;
@@ -196,7 +196,7 @@ typedef struct
  *         the pipes), -1 if it couldn't be started or on error.
  */
 int dino_process_run(
-    char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result);
+    const char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result);
 
 /**
  * Free what dino_process_run collected. Safe on a zeroed result.

@@ -103,8 +103,7 @@ static int feed(void *arg)
     {
         size_t chunk = f->len - sent < 65536 ? f->len - sent : 65536;
         int    n     = 0;
-        int    rc    = dino__pipe_write_timeout(
-            f->pipe, f->data + sent, (int)chunk, left_ms(f->deadline), &n);
+        int rc = dino__pipe_write_timeout(f->pipe, f->data + sent, chunk, left_ms(f->deadline), &n);
         if (rc == DINO_TIMEOUT)
             f->timed_out = 1;
         if (rc != 0 || n <= 0)
@@ -124,7 +123,7 @@ static char *take(struct collector *c, size_t *len)
 }
 
 int dino_process_run(
-    char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result)
+    const char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result)
 {
     if (!result)
         return dino__fail(DINO_EINVAL);

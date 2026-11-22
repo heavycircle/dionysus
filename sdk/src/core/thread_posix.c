@@ -16,7 +16,7 @@ static void *trampoline(void *arg)
     return NULL;
 }
 
-int dino_thread_create(dino_thread_t *thread, dino_thread_fn fn, void *arg)
+int dino_thread_create(dino_thread_t *thread, dino_thread_fn_t fn, void *arg)
 {
     *thread = DINO_INVALID_THREAD;
     if (!fn)

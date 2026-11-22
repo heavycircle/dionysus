@@ -59,7 +59,7 @@ UTEST(error, invalid_arguments)
     ASSERT_NE(DINO_INVALID_SOCKET, s);
     EXPECT_EQ(-1, dino_socket_bind(s, "not an address", PORT));
     EXPECT_EQ(DINO_EINVAL, dino_error());
-    EXPECT_EQ(-1, dino_socket_send(s, "x", -1));
+    EXPECT_EQ(-1, dino_socket_send(s, NULL, 1));
     EXPECT_EQ(DINO_EINVAL, dino_error());
     dino_socket_close(s);
 }
@@ -78,7 +78,7 @@ static int fail_elsewhere(void *arg)
 {
     int *seen = arg;
     *seen     = dino_error();
-    dino_socket_recv(DINO_INVALID_SOCKET, NULL, -1);
+    dino_socket_recv(DINO_INVALID_SOCKET, NULL, 1);
     return dino_error();
 }
 
@@ -234,9 +234,9 @@ UTEST(error, pipes)
 
 UTEST(error, processes)
 {
-    char *const    argv[] = { "dino-test-no-such-program", NULL };
-    dino_process_t process;
-    int            rc = dino_process_spawn(&process, argv, NULL, NULL);
+    const char *const argv[] = { "dino-test-no-such-program", NULL };
+    dino_process_t    process;
+    int               rc = dino_process_spawn(&process, argv, NULL, NULL);
     if (rc == 0)
     {
         // Under valgrind (dino test --memcheck): glibc reports a failed exec
@@ -307,7 +307,7 @@ UTEST(error, event_loop)
     EXPECT_EQ(-1, dino_event_add_socket(loop, DINO_INVALID_SOCKET, DINO_EVENT_READ, NULL));
     EXPECT_EQ(DINO_EINVAL, dino_error());
 
-    EXPECT_EQ(DINO_INVALID_EVENT_TIMER, dino_event_timer_add(DINO_INVALID_EVENT_LOOP, 1, 0, NULL));
+    EXPECT_EQ(DINO_INVALID_EVENT_TIMER, dino_event_add_timer(DINO_INVALID_EVENT_LOOP, 1, 0, NULL));
     EXPECT_EQ(DINO_EINVAL, dino_error());
     dino_event_t out[1];
     EXPECT_EQ(-1, dino_event_wait(loop, out, 0, 0));

@@ -224,25 +224,27 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
     return dino__fail_os();
 }
 
-int dino_socket_send(dino_socket_t sock, const void *buf, int len)
+int dino_socket_send(dino_socket_t sock, const void *buf, size_t len)
 {
-    if (len < 0 || (len > 0 && !buf))
+    if (len > 0 && !buf)
         return dino__fail(DINO_EINVAL);
-    int sent = send((SOCKET)sock, (const char *)buf, len, 0);
+    int sent = send((SOCKET)sock, (const char *)buf, dino__clamp_len(len), 0);
     return (sent == SOCKET_ERROR) ? dino__fail_os() : sent;
 }
 
-int dino_socket_recv(dino_socket_t sock, void *buf, int len)
+int dino_socket_recv(dino_socket_t sock, void *buf, size_t len)
 {
-    if (len < 0 || (len > 0 && !buf))
+    if (len > 0 && !buf)
         return dino__fail(DINO_EINVAL);
-    int received = recv((SOCKET)sock, (char *)buf, len, 0);
+    int received = recv((SOCKET)sock, (char *)buf, dino__clamp_len(len), 0);
     return (received == SOCKET_ERROR) ? dino__fail_os() : received;
 }
 
-int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, int len)
+int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, size_t len)
 {
-    int rc = setsockopt((SOCKET)sock, level, optname, (const char *)val, len);
+    if (len > (size_t)INT_MAX || (len > 0 && !val))
+        return dino__fail(DINO_EINVAL);
+    int rc = setsockopt((SOCKET)sock, level, optname, (const char *)val, (int)len);
     return (rc == SOCKET_ERROR) ? dino__fail_os() : 0;
 }
 

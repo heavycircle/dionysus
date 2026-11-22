@@ -1,6 +1,7 @@
 #ifndef DINO_CORE_NETWORK_H
 #define DINO_CORE_NETWORK_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -136,25 +137,26 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port);
  *
  * @param  sock     Socket to send information.
  * @param  buf      Buffer to send to sock.
- * @param  len      Maximum length of buf.
- * @return Number of bytes sent, or -1 if an error occurred (including a
- *         negative len). On a non-blocking socket whose send buffer is full,
- *         -1 with dino_error() of DINO_EAGAIN; DINO_EPIPE or DINO_ECONNRESET
- *         when the peer is gone.
+ * @param  len      Number of bytes in buf. One call sends at most INT_MAX
+ *                  bytes; send the rest with another call, as for any
+ *                  short send.
+ * @return Number of bytes sent, or -1 if an error occurred. On a non-blocking socket whose send
+ * buffer is full, -1 with dino_error() of DINO_EAGAIN; DINO_EPIPE or DINO_ECONNRESET when the peer
+ * is gone.
  */
-int dino_socket_send(dino_socket_t sock, const void *buf, int len);
+int dino_socket_send(dino_socket_t sock, const void *buf, size_t len);
 
 /**
  * Wrapper for recv(2) supporting Windows and POSIX APIs.
  *
  * @param  sock     Socket to receive information.
  * @param  buf      Buffer to store received information.
- * @param  len      Maximum length of buf.
+ * @param  len      Size of buf. One call receives at most INT_MAX bytes.
  * @return Number of bytes received, 0 when the peer has closed, or -1 if an
- *         error occurred (including a negative len). On a non-blocking socket
+ *         error occurred. On a non-blocking socket
  *         with nothing to read, -1 with dino_error() of DINO_EAGAIN.
  */
-int dino_socket_recv(dino_socket_t sock, void *buf, int len);
+int dino_socket_recv(dino_socket_t sock, void *buf, size_t len);
 
 typedef enum
 {
@@ -173,7 +175,7 @@ typedef enum
  * @param  len      Size of val in bytes.
  * @return 0 on success, -1 on error.
  */
-int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, int len);
+int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, size_t len);
 
 /**
  * Choose whether an IPv6 socket also handles IPv4.

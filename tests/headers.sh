@@ -7,7 +7,8 @@
 #   - everything it adds is in the SDK's namespace: macros start with DINO_,
 #     and functions, types and enum constants with dino_ or DINO_
 # and that handles of different types can't be mixed up: passing one where
-# another is expected doesn't compile.
+# another is expected doesn't compile; and that an argv of string literals
+# builds without a warning in C and C++.
 #
 # Needs zig and python3. Runs in CI's lint job:
 #
@@ -64,7 +65,7 @@ distinct_handles() {
         'dino_thread_join(process, NULL)|dino_thread_join(thread, NULL)'
         'dino_process_kill(thread)|dino_process_kill(process)'
         'dino_event_add_socket(sock, loop, 0, NULL)|dino_event_add_socket(loop, sock, 0, NULL)'
-        'dino_event_timer_del(loop, set)|dino_event_timer_del(loop, timer)'
+        'dino_event_del_timer(loop, set)|dino_event_del_timer(loop, timer)'
         'dino_fd_set_add(timer, sock)|dino_fd_set_add(set, sock)'
     )
     local ok=1 lang compiler
@@ -109,11 +110,45 @@ C
     ((ok))
 }
 
+# The documented way to run a program, a list of string literals, must build
+# without a warning in C++ and in C under -Wwrite-strings.
+literal_argv() {
+    cat >"$work/argv.c" <<'C'
+#include <stddef.h>
+#include <string.h>
+
+#include <dino/core/process.h>
+
+int run_it(void);
+int run_it(void)
+{
+    const char *const       argv[] = { "/bin/sh", "-c", "echo hi", NULL };
+    const char *const       env[]  = { "LANG=C", NULL };
+    dino_process_run_opts_t opts;
+    dino_process_result_t   result;
+    memset(&opts, 0, sizeof(opts));
+    opts.env = env;
+    int rc   = dino_process_run(argv, &opts, &result);
+    dino_process_result_free(&result);
+    return rc;
+}
+C
+    local ok=1
+    zig cc -target x86_64-linux-musl -std=c11 -Wall -Wextra -Wwrite-strings -Werror -c \
+        -o "$work/argv.o" -I "$inc" -x c "$work/argv.c" 2>"$work/err" ||
+        { echo "  literal argv warns in C:"; sed 's/^/      /' "$work/err" | head -n 5; ok=0; }
+    zig c++ -target x86_64-linux-musl -std=c++11 -Wall -Wextra -Werror -c \
+        -o "$work/argv.o" -I "$inc" -x c++ "$work/argv.c" 2>"$work/err" ||
+        { echo "  literal argv warns in C++:"; sed 's/^/      /' "$work/err" | head -n 5; ok=0; }
+    ((ok))
+}
+
 if (($# == 0)); then
     mapfile -t headers < <(cd "$inc" && find dino -name '*.h' | sort)
     printf '%s\n' "${headers[@]}" | xargs -P "$(nproc)" -n 1 "$0" || exit 1
     distinct_handles || exit 1
-    echo "all ${#headers[@]} headers ok: self-contained as C and C++, guarded, namespaced; handle types distinct"
+    literal_argv || exit 1
+    echo "all ${#headers[@]} headers ok: self-contained as C and C++, guarded, namespaced; handle types distinct; literal argv builds"
     exit 0
 fi
 
