@@ -22,10 +22,14 @@ static SHORT to_os_events(short events)
     return os;
 }
 
-static short from_os_revents(SHORT os)
+// A peer that closed or shut down its side is POLLHUP alone; a recv returns 0
+// there, so it is DINO_POLLIN as well when that was asked for, as on Linux.
+static short from_os_revents(SHORT os, short asked)
 {
     short revents = 0;
     if (os & (POLLRDNORM | POLLRDBAND))
+        revents |= DINO_POLLIN;
+    if ((os & POLLHUP) && (asked & DINO_POLLIN))
         revents |= DINO_POLLIN;
     if (os & POLLWRNORM)
         revents |= DINO_POLLOUT;
@@ -74,7 +78,7 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
     if (rc > 0)
         for (int i = 0, j = 0; i < nfds; i++)
             if (fds[i].sock != DINO_INVALID_SOCKET)
-                fds[i].revents = from_os_revents(wfds[j++].revents);
+                fds[i].revents = from_os_revents(wfds[j++].revents, fds[i].events);
 
     if (wfds != stack_buf)
         free(wfds);
@@ -158,9 +162,41 @@ int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, di
         tvp        = &tv;
     }
 
-    int rc = select(0, rfds != DINO_INVALID_FD_SET ? (fd_set *)rfds : NULL,
-        wfds != DINO_INVALID_FD_SET ? (fd_set *)wfds : NULL,
-        efds != DINO_INVALID_FD_SET ? (fd_set *)efds : NULL, tvp);
+    // Winsock reports a non-blocking connect that failed only in the exception
+    // set; POSIX reports it as writable. So the write set's sockets are also
+    // watched for exceptions, and a hit counts as writable. Only the sockets
+    // the caller put in efds are reported there.
+    fd_set *r = (fd_set *)rfds, *w = (fd_set *)wfds, *e = (fd_set *)efds;
+    fd_set  asked_w, asked_e, except;
+    FD_ZERO(&asked_w);
+    FD_ZERO(&asked_e);
+    FD_ZERO(&except);
+    if (w)
+        asked_w = *w;
+    if (e)
+        asked_e = *e;
+    for (u_int i = 0; i < asked_e.fd_count; i++)
+        FD_SET(asked_e.fd_array[i], &except);
+    for (u_int i = 0; i < asked_w.fd_count && except.fd_count < FD_SETSIZE; i++)
+        FD_SET(asked_w.fd_array[i], &except);
 
-    return (rc == SOCKET_ERROR) ? dino__fail_os() : rc;
+    int rc = select(0, r, w, except.fd_count ? &except : NULL, tvp);
+    if (rc == SOCKET_ERROR)
+        return dino__fail_os();
+
+    for (u_int i = 0; i < except.fd_count; i++)
+    {
+        SOCKET s = except.fd_array[i];
+        if (w && FD_ISSET(s, &asked_w))
+            FD_SET(s, w);
+    }
+    if (e)
+    {
+        FD_ZERO(e);
+        for (u_int i = 0; i < except.fd_count; i++)
+            if (FD_ISSET(except.fd_array[i], &asked_e))
+                FD_SET(except.fd_array[i], e);
+    }
+    // Each socket counts once per set it is reported in, as select counts.
+    return (int)((r ? r->fd_count : 0) + (w ? w->fd_count : 0) + (e ? e->fd_count : 0));
 }

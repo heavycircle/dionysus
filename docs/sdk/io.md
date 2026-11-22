@@ -73,9 +73,9 @@ With nothing to watch (`nfds` is `0`, or only unused slots) it waits out the tim
 `0`, like a sleep. Windows' `WSAPoll` would fail at once; the SDK waits there too, so a server whose
 last client left doesn't spin.
 
-A peer that closes the connection shows up as `DINO_POLLIN` on Linux (and the next `recv` returns
-0\) but as `DINO_POLLHUP` on Windows. Treat either as "read now"; `recv` returning 0 is the portable
-signal that the stream ended.
+A peer that closes the connection, or shuts down its side, shows up as `DINO_POLLIN | DINO_POLLHUP` on every platform when the socket is watched for `DINO_POLLIN`, and the next `recv` returns 0. A loop that only looks at `DINO_POLLIN` sees the end of the stream too.
+
+A signal arriving during the wait doesn't end it: on Linux the SDK waits again for whatever time is left, so `dino_poll` returns `-1` only for a real error, as on Windows.
 
 ## `dino_select`
 
@@ -102,6 +102,8 @@ dino_fd_set_destroy(set);
   Windows too.
 - **Refilling:** `dino_select` overwrites the sets with the ready sockets, so refill them before
   every call.
+- **A non-blocking connect** shows up in the write set when it finishes, whether it worked or not, on every platform (Winsock reports a failure only as an exception; the SDK moves it to the write set). Then ask `dino_socket_error(sock)` how it ended.
+- **Signals** don't end the wait early on Linux, as for `dino_poll`.
 - **Capacity:** a set holds descriptors below 1024 on Linux and at most 64 sockets on Windows.
   `dino_fd_set_add` returns `-1` for a socket that doesn't fit, `0` otherwise.
 

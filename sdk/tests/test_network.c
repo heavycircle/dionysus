@@ -1,8 +1,13 @@
 // Before utest.h, which declares QueryPerformanceCounter itself on Windows.
 #ifdef _WIN32
+#include <winsock2.h>
+
 #include <windows.h>
 #else
 #include <fcntl.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
 #endif
 
 #include <string.h>
@@ -180,6 +185,52 @@ UTEST(network, reuseaddr_never_shares_a_listening_port)
     EXPECT_EQ(-1, dino_socket_set_reuseaddr(DINO_INVALID_SOCKET, 1));
     dino_socket_close(b);
     dino_socket_close(a);
+}
+
+// Linux's SO_REUSEADDR lets a second datagram socket bind the same port and
+// take the first one's datagrams; Windows never allows it through this call.
+// On a datagram socket it does nothing, on both.
+UTEST(network, reuseaddr_never_shares_a_udp_port)
+{
+    dino_socket_t a = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    dino_socket_t b = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, a);
+    ASSERT_NE(DINO_INVALID_SOCKET, b);
+    EXPECT_EQ(0, dino_socket_set_reuseaddr(a, 1));
+    EXPECT_EQ(0, dino_socket_set_reuseaddr(b, 1));
+    ASSERT_EQ(0, dino_socket_bind(a, "127.0.0.1", PORT + 13));
+    EXPECT_EQ(-1, dino_socket_bind(b, "127.0.0.1", PORT + 13));
+    dino_socket_close(b);
+    dino_socket_close(a);
+}
+
+// UDP between two connected sockets.
+UTEST(network, udp_round_trip)
+{
+    dino_socket_t a = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    dino_socket_t b = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, a);
+    ASSERT_NE(DINO_INVALID_SOCKET, b);
+    ASSERT_EQ(0, dino_socket_bind(a, "127.0.0.1", PORT + 14));
+    ASSERT_EQ(0, dino_socket_connect(b, "127.0.0.1", PORT + 14));
+    ASSERT_EQ(5, dino_socket_send(b, "hello", 5));
+    char buf[16] = { 0 };
+    EXPECT_EQ(5, dino_socket_recv(a, buf, sizeof(buf)));
+    EXPECT_STREQ("hello", buf);
+    dino_socket_close(b);
+    dino_socket_close(a);
+}
+
+// A pass-through: the platform's own level and option, on both.
+UTEST(network, setopt_passes_options_through)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    int one = 1;
+    EXPECT_EQ(0, dino_socket_setopt(s, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one)));
+    EXPECT_EQ(-1, dino_socket_setopt(s, SOL_SOCKET, -1, &one, sizeof(one)));
+    EXPECT_EQ(-1, dino_socket_setopt(s, IPPROTO_TCP, TCP_NODELAY, NULL, sizeof(one)));
+    dino_socket_close(s);
 }
 
 UTEST(network, accept_on_unlistened_socket_fails)

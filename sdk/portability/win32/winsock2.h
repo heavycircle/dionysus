@@ -28,7 +28,7 @@ WINSOCK_API_LINKAGE __typeof__(send) send __attribute__((deprecated(
 WINSOCK_API_LINKAGE __typeof__(recv) recv __attribute__((deprecated(
     "recv() takes a char buffer and a SOCKET on Windows; use dino_socket_recv() from <dino/core/network.h>")));
 WINSOCK_API_LINKAGE __typeof__(setsockopt) setsockopt __attribute__((deprecated(
-    "setsockopt() takes different option types on Windows; use dino_socket_setopt() from <dino/core/network.h>")));
+    "setsockopt() takes a const char * value on Windows; use dino_socket_setopt() from <dino/core/network.h>, which passes the option on as given (SO_RCVTIMEO and SO_LINGER still take different types per platform)")));
 WINSOCK_API_LINKAGE __typeof__(shutdown) shutdown __attribute__((deprecated(
     "shutdown() uses different constants on Windows; use dino_socket_shutdown() from <dino/core/network.h>")));
 WINSOCK_API_LINKAGE __typeof__(closesocket) closesocket __attribute__((deprecated(

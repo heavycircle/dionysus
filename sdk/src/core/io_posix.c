@@ -1,19 +1,36 @@
 #include <dino/core/io.h>
 
+#include <errno.h>
 #include <poll.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/select.h>
 #include <sys/time.h>
 
+#include <dino/core/time.h>
+
 #include "error_internal.h"
+
+// poll and select are never restarted after a signal handler, not even one
+// installed with SA_RESTART. Retry with what is left of the timeout, as the
+// pipe waits do, so a signal isn't mistaken for an error (Windows has none).
+static int remaining(int timeout_ms, uint64_t deadline)
+{
+    if (timeout_ms < 0)
+        return -1;
+    uint64_t now = dino_time_monotonic_ns();
+    return now >= deadline ? 0 : (int)((deadline - now + 999999) / 1000000);
+}
 
 // The DINO_* values happen to equal Linux's, but translating keeps that an
 // implementation detail rather than something every target must share.
+// POLLRDHUP: a peer that closed or shut down its side reports DINO_POLLHUP
+// along with DINO_POLLIN, as on Windows, not POLLIN alone.
 static short to_os_events(short events)
 {
     short os = 0;
     if (events & DINO_POLLIN)
-        os |= POLLIN;
+        os |= POLLIN | POLLRDHUP;
     if (events & DINO_POLLOUT)
         os |= POLLOUT;
     return os;
@@ -28,7 +45,7 @@ static short from_os_revents(short os)
         revents |= DINO_POLLOUT;
     if (os & (POLLERR | POLLNVAL))
         revents |= DINO_POLLERR;
-    if (os & POLLHUP)
+    if (os & (POLLHUP | POLLRDHUP))
         revents |= DINO_POLLHUP;
     return revents;
 }
@@ -49,7 +66,11 @@ int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms)
         pfds[i].revents = 0;
     }
 
-    int rc = poll(pfds, (nfds_t)nfds, timeout_ms);
+    uint64_t deadline
+        = dino_time_monotonic_ns() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0) * 1000000;
+    int rc;
+    while ((rc = poll(pfds, (nfds_t)nfds, remaining(timeout_ms, deadline))) < 0 && errno == EINTR)
+        ;
     if (rc < 0)
         dino__error_set_os();
 
@@ -132,8 +153,30 @@ int dino_select(dino_socket_t max_fd, dino_fd_set_t rfds, dino_fd_set_t wfds, di
         tvp        = &tv;
     }
 
-    int rc = select((int)max_fd, rfds != DINO_INVALID_FD_SET ? (fd_set *)rfds : NULL,
-        wfds != DINO_INVALID_FD_SET ? (fd_set *)wfds : NULL,
-        efds != DINO_INVALID_FD_SET ? (fd_set *)efds : NULL, tvp);
+    // select leaves the sets undefined when a signal interrupts it, so each
+    // retry starts from copies of the sets as given.
+    fd_set *sets[3] = { (fd_set *)rfds, (fd_set *)wfds, (fd_set *)efds };
+    fd_set  given[3];
+    for (int i = 0; i < 3; i++)
+        if (sets[i])
+            memcpy(&given[i], sets[i], sizeof(fd_set));
+    uint64_t deadline
+        = dino_time_monotonic_ns() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0) * 1000000;
+    int rc;
+    for (;;)
+    {
+        rc = select((int)max_fd, sets[0], sets[1], sets[2], tvp);
+        if (rc >= 0 || errno != EINTR)
+            break;
+        for (int i = 0; i < 3; i++)
+            if (sets[i])
+                memcpy(sets[i], &given[i], sizeof(fd_set));
+        if (tvp)
+        {
+            int left   = remaining(timeout_ms, deadline);
+            tv.tv_sec  = left / 1000;
+            tv.tv_usec = (suseconds_t)(left % 1000) * 1000;
+        }
+    }
     return rc < 0 ? dino__fail_os() : rc;
 }

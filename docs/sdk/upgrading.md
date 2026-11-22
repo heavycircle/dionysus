@@ -106,6 +106,15 @@ printf("%d\n", result.status.code);
 
 `dino_process_kill` now reports `signal` `9` as well as `code` `DINO_EXIT_KILLED` on Windows too.
 
+### `dino_poll`, `dino_select` and sockets behave the same on Linux and Windows
+
+These change what one platform reports, without any change to the code that calls them:
+
+- **A closed peer is `DINO_POLLIN | DINO_POLLHUP`** from `dino_poll` on both platforms. Linux reported `DINO_POLLIN` alone, Windows `DINO_POLLHUP` alone, so a loop that only checked `DINO_POLLIN` spun on Windows.
+- **A failed non-blocking connect is in the write set** of `dino_select` on Windows too. Before, it was only in the exception set there, and a caller watching the write set waited out its timeout.
+- **A signal no longer ends a wait with `-1`** on Linux: `dino_poll`, `dino_select`, `dino_socket_recv`, `send` and `accept` carry on as on Windows. An interrupted `dino_socket_connect` fails with `DINO_EINPROGRESS` and finishes in the background.
+- **`dino_socket_set_reuseaddr` does nothing on a UDP socket**, as on Windows. On Linux it used to let a second socket bind the same port and take its datagrams.
+
 ### `dino_mutex_trylock` returns `DINO_TIMEOUT` when the mutex is held
 
 It returned `-1` both for a mutex another thread holds and for an invalid handle. Held elsewhere is now `DINO_TIMEOUT`, the answer of every other wait that would have had to wait, and `-1` is left for errors.

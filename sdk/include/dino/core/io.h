@@ -48,6 +48,10 @@ typedef struct dino_fd_set *dino_fd_set_t;
  * values, and DINO_POLLERR and DINO_POLLHUP are reported whether requested or
  * not. Every revents is reset, so it is 0 on timeout.
  *
+ * A peer that closed or shut down its side is DINO_POLLIN | DINO_POLLHUP on
+ * every platform when DINO_POLLIN was requested; recv then returns 0. A signal
+ * doesn't end the wait early: on Linux it waits again for the time left.
+ *
  * An entry whose sock is DINO_INVALID_SOCKET is an unused slot: it is skipped
  * and its revents is 0. With nothing to watch (nfds 0, or only unused slots)
  * it waits out the timeout and returns 0, on Windows too, where WSAPoll would
@@ -125,6 +129,10 @@ int dino_fd_set_has(dino_fd_set_t set, dino_socket_t sock);
  * Pass DINO_INVALID_FD_SET for any set you do not wish to monitor. With no
  * socket in any set it waits out the timeout and returns 0, on Windows too,
  * where select would fail.
+ *
+ * A non-blocking connect that has finished is in wfds, whether it worked or
+ * failed, on every platform; ask dino_socket_error how it ended. A signal
+ * doesn't end the wait early.
  *
  * @param  max_fd     Highest fd + 1 (Linux only).
  * @param  rfds       Read-ready set, or DINO_INVALID_FD_SET.

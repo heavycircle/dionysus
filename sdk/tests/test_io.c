@@ -1,7 +1,14 @@
+#ifndef _WIN32
+#include <pthread.h>
+#include <signal.h>
+#endif
+
 #include <utest.h>
 
+#include <dino/core/error.h>
 #include <dino/core/io.h>
 #include <dino/core/network.h>
+#include <dino/core/thread.h>
 #include <dino/core/time.h>
 
 #define PORT       18200
@@ -99,10 +106,12 @@ UTEST(poll, peer_hangup_is_reported)
     dino_socket_close(p.client);
     p.client = DINO_INVALID_SOCKET;
 
-    // Linux reports a closed peer as readable, Windows as DINO_POLLHUP.
+    // Both, on every platform: a loop that only looks at DINO_POLLIN still
+    // calls recv and sees the end of the stream.
     dino_pollfd_t pfd = { p.peer, DINO_POLLIN, 0 };
     EXPECT_EQ(1, dino_poll(&pfd, 1, TIMEOUT_MS));
-    EXPECT_TRUE(pfd.revents & (DINO_POLLIN | DINO_POLLHUP));
+    EXPECT_TRUE(pfd.revents & DINO_POLLIN);
+    EXPECT_TRUE(pfd.revents & DINO_POLLHUP);
     char buf[1];
     EXPECT_EQ(0, dino_socket_recv(p.peer, buf, sizeof(buf)));
     close_pair(&p);
@@ -257,5 +266,80 @@ UTEST(select, times_out_then_sees_data)
     dino_fd_set_destroy(rfds);
     close_pair(&p);
 }
+
+// A connect that fails is writable, on every platform: Winsock reports it only
+// as an exception, which a caller watching the write set alone never sees.
+UTEST(select, failed_connect_is_writable)
+{
+    // Nothing listens on this port.
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    ASSERT_EQ(0, dino_socket_set_nonblocking(s, 1));
+    int rc = dino_socket_connect(s, "127.0.0.1", PORT + 8);
+    ASSERT_EQ(-1, rc);
+
+    dino_fd_set_t w = dino_fd_set_create();
+    ASSERT_NE(DINO_INVALID_FD_SET, w);
+    ASSERT_EQ(0, dino_fd_set_add(w, s));
+    uint64_t start = dino_time_monotonic_ns();
+    EXPECT_EQ(1, dino_select(s + 1, DINO_INVALID_FD_SET, w, DINO_INVALID_FD_SET, TIMEOUT_MS));
+    EXPECT_LT(elapsed_ms(start), (unsigned)TIMEOUT_MS);
+    EXPECT_TRUE(dino_fd_set_has(w, s));
+    EXPECT_EQ(DINO_ECONNREFUSED, dino_socket_error(s));
+
+    dino_fd_set_destroy(w);
+    dino_socket_close(s);
+}
+
+#ifndef _WIN32
+// poll and select aren't restarted after a signal handler, not even with
+// SA_RESTART. A signal must not end a wait early with -1: Windows has none.
+static pthread_t g_waiter;
+
+static void on_signal(int sig)
+{
+    (void)sig;
+}
+
+static int signal_waiter(void *arg)
+{
+    (void)arg;
+    dino_sleep_ms(50);
+    return DINO_PLATFORM_CALL(pthread_kill(g_waiter, SIGUSR1));
+}
+
+UTEST(poll, a_signal_does_not_end_the_wait)
+{
+    struct sigaction sa = { 0 }, old;
+    sa.sa_handler       = on_signal;
+    ASSERT_EQ(0, sigaction(SIGUSR1, &sa, &old));
+    g_waiter = DINO_PLATFORM_CALL(pthread_self());
+
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, PORT + 9));
+    dino_thread_t t;
+
+    ASSERT_EQ(0, dino_thread_create(&t, signal_waiter, NULL));
+    dino_pollfd_t pfd   = { p.peer, DINO_POLLIN, 0 };
+    uint64_t      start = dino_time_monotonic_ns();
+    EXPECT_EQ(0, dino_poll(&pfd, 1, 300));
+    EXPECT_GE(elapsed_ms(start), 300u);
+    dino_thread_join(t, NULL);
+
+    dino_fd_set_t r = dino_fd_set_create();
+    ASSERT_EQ(0, dino_fd_set_add(r, p.peer));
+    ASSERT_EQ(0, dino_thread_create(&t, signal_waiter, NULL));
+    start = dino_time_monotonic_ns();
+    EXPECT_EQ(0, dino_select(p.peer + 1, r, DINO_INVALID_FD_SET, DINO_INVALID_FD_SET, 300));
+    EXPECT_GE(elapsed_ms(start), 300u);
+    dino_thread_join(t, NULL);
+    // A timeout empties the set, as select does.
+    EXPECT_FALSE(dino_fd_set_has(r, p.peer));
+
+    dino_fd_set_destroy(r);
+    close_pair(&p);
+    sigaction(SIGUSR1, &old, NULL);
+}
+#endif
 
 UTEST_MAIN()
