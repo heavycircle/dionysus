@@ -120,9 +120,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT DINO_DYNAMIC AND NOT DINO_NO_LEAK_
     endforeach()
 endif()
 
-# The SDK's own sources are compiled with the project's flags (CFLAGS, and
-# CMAKE_C_STANDARD or add_compile_options() set before project()), so they
-# don't rely on them:
+# The SDK's own sources are compiled inside the project today, so the
+# project's flags reach them (CFLAGS, and CMAKE_C_STANDARD or
+# add_compile_options() set before project()). Projects aren't promised that
+# (docs/guide/projects.md), but while it holds the sources must not rely on
+# those flags:
 # - _GNU_SOURCE: the POSIX halves need more than ISO C declares (clock_gettime,
 #   pthread mutex types, pipe2, accept4, gettid, ...), also under -std=c11.
 # - -Wno-everything drops the warnings the project enabled, so its
