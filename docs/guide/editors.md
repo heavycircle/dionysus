@@ -50,7 +50,7 @@ clangd also runs the checks in `.clang-tidy` as you type and formats with `.clan
   ```
 
 - **`.clang-format`:** the SDK's code style. `clang-format -i src/*.c` formats the files, and most
-  editors format on save with it.
+  editors format on save with it. It works with clang-format 14 and newer. Versions differ a little in how they lay out the same code, so pin one for a team (`uvx --from clang-format==19.1.7 clang-format -i src/*.c` is what the SDK itself uses).
 
 Both are ordinary files to edit as your project prefers. `dino init` never overwrites them.
 

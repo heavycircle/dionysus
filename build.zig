@@ -76,14 +76,36 @@ fn versionString(b: *std.Build) []const u8 {
 }
 
 /// Config files `dino init` writes into new projects, embedded from the repo
-/// root so user projects follow the same rules as the SDK.
+/// root so user projects follow the same rules as the SDK. .clang-format loses
+/// its "SDK only" block on the way: a key that old clang-format versions
+/// reject, for a header layout only the SDK has.
 fn templatesModule(b: *std.Build) *std.Build.Module {
     const wf = b.addWriteFiles();
     _ = wf.addCopyFile(b.path(".clang-format"), "clang-format");
     _ = wf.addCopyFile(b.path(".clang-tidy"), "clang-tidy");
     return b.createModule(.{ .root_source_file = wf.add("templates.zig",
-        \\pub const clang_format = @embedFile("clang-format");
+        \\pub const clang_format = withoutSdkOnly(@embedFile("clang-format"));
         \\pub const clang_tidy = @embedFile("clang-tidy");
+        \\
+        \\fn withoutSdkOnly(comptime full: []const u8) []const u8 {
+        \\    comptime {
+        \\        @setEvalBranchQuota(100_000);
+        \\        var out: []const u8 = "";
+        \\        var skipping = false;
+        \\        var lines = @import("std").mem.splitScalar(u8, full, '\n');
+        \\        while (lines.next()) |line| {
+        \\            if (@import("std").mem.startsWith(u8, line, "# SDK only")) {
+        \\                skipping = true;
+        \\            } else if (@import("std").mem.startsWith(u8, line, "# End of SDK only")) {
+        \\                skipping = false;
+        \\            } else if (!skipping and (line.len != 0 or lines.peek() != null)) {
+        \\                out = out ++ line ++ "\n";
+        \\            }
+        \\        }
+        \\        if (skipping) @compileError(".clang-format: '# SDK only' without '# End of SDK only'");
+        \\        return out;
+        \\    }
+        \\}
         \\
     ) });
 }
