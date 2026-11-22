@@ -10,4 +10,9 @@
 __typeof__(poll) poll __attribute__((deprecated(
     "poll() is POSIX-only (WSAPoll differs); use dino_poll() from <dino/core/io.h>")));
 
+#ifdef _GNU_SOURCE
+__typeof__(ppoll) ppoll __attribute__((deprecated(
+    "ppoll() is Linux-only; use dino_poll() from <dino/core/io.h>")));
+#endif
+
 #endif

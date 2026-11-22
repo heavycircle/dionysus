@@ -280,7 +280,7 @@ UTEST(process, environment_replaces_the_parents)
     const char *const argv[] = SHELL("echo %DINO_TEST_VAR%");
     // cmd.exe needs SYSTEMROOT; the parent's DINO_TEST_OTHER must not leak in.
     char systemroot[MAX_PATH + 16] = "SYSTEMROOT=";
-    GetEnvironmentVariableA("SYSTEMROOT", systemroot + 11, MAX_PATH);
+    dino_env_get("SYSTEMROOT", systemroot + 11, MAX_PATH);
     const char *const env[] = { "DINO_TEST_VAR=from env", systemroot, NULL };
 #else
     const char *const argv[] = SHELL("echo \"$DINO_TEST_VAR${HOME:+ home leaked}\"");

@@ -27,4 +27,13 @@ __typeof__(setsockopt) setsockopt __attribute__((deprecated(
 __typeof__(shutdown) shutdown __attribute__((deprecated(
     "shutdown() uses different constants on Windows; use dino_socket_shutdown() from <dino/core/network.h>")));
 
+__typeof__(sendto) sendto __attribute__((deprecated(
+    "sendto() needs WSAStartup on Windows; use dino_socket_sendto() from <dino/core/network.h>")));
+__typeof__(recvfrom) recvfrom __attribute__((deprecated(
+    "recvfrom() needs WSAStartup on Windows; use dino_socket_recvfrom() from <dino/core/network.h>")));
+#ifdef _GNU_SOURCE
+__typeof__(accept4) accept4 __attribute__((deprecated(
+    "accept4() is Linux-only; use dino_socket_accept() from <dino/core/network.h>")));
+#endif
+
 #endif

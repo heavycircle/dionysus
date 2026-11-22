@@ -1,7 +1,9 @@
 // clang-format off: clang -verify reads each call's expectation from that call's own line.
 // Headers that exist on Linux and Windows (winpthreads, MinGW's unistd.h).
 #include <pthread.h>
+#include <sched.h>
 #include <stddef.h>
+#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 #include <vendor_lib.h>
@@ -44,6 +46,9 @@ void raw_common(void)
     pthread_cond_destroy(&c);                    // expected-warning {{use dino_cond_destroy()}}
     pthread_mutex_destroy(&m);                   // expected-warning {{use dino_mutex_destroy()}}
     pthread_once(&once, init_once);              // expected-warning {{use dino_once()}}
+    sched_yield();                               // expected-warning {{use dino_thread_yield()}}
+    struct timeval tv;
+    gettimeofday(&tv, NULL);                     // expected-warning {{use dino_time_unix_ms()}}
 
     // The per-call escape hatch: no warning, and none expected.
     DINO_PLATFORM_CALL(sleep(2));
@@ -53,6 +58,10 @@ void raw_common(void)
     // Flagged calls inside a system header's inline functions stay quiet.
     vendor_lock(&m);
     (void)vendor_nap();
+    // A system header's macro expands in the project's code, where clang
+    // reports it: documented, with DINO_PLATFORM_CALL as the way out.
+    (void)VENDOR_NAP_MACRO(); // expected-warning {{sleep() counts whole seconds}}
+    (void)DINO_PLATFORM_CALL(VENDOR_NAP_MACRO());
 
     // Calls without a dino replacement stay quiet.
     (void)pthread_self();

@@ -87,7 +87,10 @@ UTEST(leakcheck, user_and_group_lookups)
 // On the 32-bit targets these calls go by other names (__localtime64, ...).
 UTEST(leakcheck, long_time_zone_name)
 {
-    ASSERT_EQ(0, setenv("TZ", "/usr/share/zoneinfo/America/Argentina/ComodRivadavia", 1));
+    // libc's own setenv, whose copy is what the check must count.
+    ASSERT_EQ(0,
+        DINO_PLATFORM_CALL(
+            setenv("TZ", "/usr/share/zoneinfo/America/Argentina/ComodRivadavia", 1)));
     time_t    now = time(NULL);
     struct tm tm;
     char      text[64];

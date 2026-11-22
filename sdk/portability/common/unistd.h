@@ -11,20 +11,24 @@
 __typeof__(pipe) pipe __attribute__((deprecated(
     "pipe() is POSIX-only; use dino_pipe_create() from <dino/core/pipe.h>")));
 __typeof__(fork) fork __attribute__((deprecated(
-    "fork() doesn't exist on Windows; use dino_process_spawn() from <dino/core/process.h>")));
+    "fork() doesn't exist on Windows; to run a program use dino_process_spawn() from <dino/core/process.h>")));
 __typeof__(execv) execv __attribute__((deprecated(
-    "execv() is POSIX-only; use dino_process_spawn() from <dino/core/process.h>")));
+    "execv() is POSIX-only and replaces the process, which Windows can't do; spawn with dino_process_spawn() from <dino/core/process.h> and exit")));
 __typeof__(execvp) execvp __attribute__((deprecated(
-    "execvp() is POSIX-only; use dino_process_spawn() from <dino/core/process.h>")));
+    "execvp() is POSIX-only and replaces the process, which Windows can't do; spawn with dino_process_spawn() from <dino/core/process.h> and exit")));
 __typeof__(execve) execve __attribute__((deprecated(
-    "execve() is POSIX-only; use dino_process_spawn() from <dino/core/process.h>")));
+    "execve() is POSIX-only and replaces the process, which Windows can't do; spawn with dino_process_spawn() from <dino/core/process.h> and exit")));
 __typeof__(execl) execl __attribute__((deprecated(
-    "execl() is POSIX-only; use dino_process_spawn() from <dino/core/process.h>")));
+    "execl() is POSIX-only and replaces the process, which Windows can't do; spawn with dino_process_spawn() from <dino/core/process.h> and exit")));
 __typeof__(execlp) execlp __attribute__((deprecated(
-    "execlp() is POSIX-only; use dino_process_spawn() from <dino/core/process.h>")));
+    "execlp() is POSIX-only and replaces the process, which Windows can't do; spawn with dino_process_spawn() from <dino/core/process.h> and exit")));
 __typeof__(execle) execle __attribute__((deprecated(
-    "execle() is POSIX-only; use dino_process_spawn() from <dino/core/process.h>")));
+    "execle() is POSIX-only and replaces the process, which Windows can't do; spawn with dino_process_spawn() from <dino/core/process.h> and exit")));
+__typeof__(getpid) getpid __attribute__((deprecated(
+    "getpid() is _getpid() on Windows; use dino_process_current_id() from <dino/core/process.h>")));
 #ifdef _GNU_SOURCE
+__typeof__(gettid) gettid __attribute__((deprecated(
+    "gettid() is Linux-only; use dino_thread_current_id() from <dino/core/thread.h>")));
 __typeof__(pipe2) pipe2 __attribute__((deprecated(
     "pipe2() is Linux-only; use dino_pipe_create() from <dino/core/pipe.h>")));
 #endif

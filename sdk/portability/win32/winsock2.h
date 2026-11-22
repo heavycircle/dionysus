@@ -35,6 +35,18 @@ WINSOCK_API_LINKAGE __typeof__(closesocket) closesocket __attribute__((deprecate
     "closesocket() is Windows-only; use dino_socket_close() from <dino/core/network.h>")));
 WINSOCK_API_LINKAGE __typeof__(select) select __attribute__((deprecated(
     "select() ignores its first argument and takes SOCKET sets on Windows; use dino_select() from <dino/core/io.h>")));
+WINSOCK_API_LINKAGE __typeof__(ioctlsocket) ioctlsocket __attribute__((deprecated(
+    "ioctlsocket() is Windows-only; use dino_socket_set_nonblocking() from <dino/core/network.h>")));
+WINSOCK_API_LINKAGE __typeof__(sendto) sendto __attribute__((deprecated(
+    "sendto() needs WSAStartup on Windows; use dino_socket_sendto() from <dino/core/network.h>")));
+WINSOCK_API_LINKAGE __typeof__(recvfrom) recvfrom __attribute__((deprecated(
+    "recvfrom() fails on a datagram larger than the buffer on Windows; use dino_socket_recvfrom() from <dino/core/network.h>")));
+WINSOCK_API_LINKAGE __typeof__(WSAGetLastError) WSAGetLastError __attribute__((deprecated(
+    "WSAGetLastError() is Windows-only; use dino_error() from <dino/core/error.h>")));
+WINSOCK_API_LINKAGE __typeof__(WSASocketA) WSASocketA __attribute__((deprecated(
+    "WSASocketA() is Windows-only; use dino_socket_create() from <dino/core/network.h>")));
+WINSOCK_API_LINKAGE __typeof__(WSASocketW) WSASocketW __attribute__((deprecated(
+    "WSASocketW() is Windows-only; use dino_socket_create() from <dino/core/network.h>")));
 #if _WIN32_WINNT >= 0x0600
 WINSOCK_API_LINKAGE __typeof__(WSAPoll) WSAPoll __attribute__((deprecated(
     "WSAPoll() is Windows-only; use dino_poll() from <dino/core/io.h>")));
