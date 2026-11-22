@@ -111,6 +111,7 @@ pub fn exec(ctx: *Ctx, argv: []const []const u8, options: ExecOptions) Error!u8 
     guard.forwardTo(child.id.?);
     const term = child.wait(ctx.io) catch |e| return ctx.fail("waiting for {s}: {t}", .{ argv[0], e });
     if (guard.received()) |sig| ctx.interrupted = sig;
+    if (guard.forwarded()) |sig| signals.signalDescendants(ctx.io, ctx.arena, sig);
     return exitCode(term);
 }
 

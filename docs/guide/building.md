@@ -86,11 +86,7 @@ dino run -- --verbose input.txt   # arguments for the program go after --
   host runs i386 binaries directly; an aarch64 host runs arm binaries directly only if its CPU can
   run 32-bit ARM code (many newer ones, and Apple silicon, can't), and uses `qemu-arm` otherwise.
 - **Exit code:** `dino run` exits with the program's exit code.
-- **Signals:** dino waits for the program to exit. Ctrl-C and Ctrl-\\ at the terminal reach the
-  program directly, once; `SIGTERM`, `SIGHUP` and a `SIGINT` sent to dino with `kill` are passed
-  on to it. On Windows, Ctrl-C and Ctrl-Break reach the program and dino ignores them. The same
-  holds while `dino build` and `dino test` run CMake and CTest, and once interrupted they stop
-  instead of going on to the next target.
+- **Signals:** dino waits for the program to exit. Ctrl-C and Ctrl-\\ at the terminal, and the hangup of a closed terminal, reach the program directly, once. A signal sent to dino alone (`kill`, a supervisor's `SIGTERM`) is passed on to the program, and once the program has exited, to anything it left running, so an interrupted `dino build` doesn't leave make and the compilers working in the background. dino doesn't wait for those to finish. A signal that was ignored when dino started (`nohup dino build`, a background job in a script) stays ignored, by dino and by what it runs. On Windows, Ctrl-C and Ctrl-Break reach the program and dino ignores them. The same holds while `dino build` and `dino test` run CMake and CTest, and once interrupted they stop instead of going on to the next target.
 - **wine output:** wine's own `fixme:` chatter is silenced unless you set `WINEDEBUG` yourself.
 - **Several executables:** pick one with `--exe <name>`. Test executables (from `dino_test()`) are
   never picked automatically, only by name.
