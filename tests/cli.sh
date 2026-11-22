@@ -96,6 +96,29 @@ case_help() {
     done
 }
 
+# doctor checks what it calls ok: a zig of another version, or one that fails
+# or can't be started, is a problem, and the rest of the report still comes.
+case_doctor_checks_zig() {
+    mkdir -p "$work/doctor/bin" && cd "$work/doctor" || return 1
+    dino doctor >out 2>&1 || { cat out; return 1; }
+    grep -q '\[ ok \] zig ' out || { cat out; return 1; }
+    grep -q ' valgrind ' out || { cat out; return 1; }
+
+    local script
+    for script in '#!/bin/sh\necho 0.13.0\n' '#!/bin/sh\nexit 3\n' '#!/no/such/interpreter\n'; do
+        # shellcheck disable=SC2059
+        printf "$script" >bin/zig
+        chmod +x bin/zig
+        PATH=$work/doctor/bin:$PATH dino doctor >out 2>&1 && { cat out; return 1; }
+        grep -q '\[MISS\] zig ' out || { cat out; return 1; }
+        grep -q '\] cmake ' out || { cat out; return 1; }
+        grep -q '^1 problem(s) found' out || { cat out; return 1; }
+    done
+    printf '#!/bin/sh\necho 0.13.0\n' >bin/zig
+    PATH=$work/doctor/bin:$PATH dino doctor >out 2>&1
+    grep -q 'zig .*0\.13\.0.*dino needs Zig' out
+}
+
 # A target named twice, even by its triple, is built once.
 case_duplicate_targets() {
     project duplicates
