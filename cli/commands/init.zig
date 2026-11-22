@@ -216,3 +216,12 @@ test projectName {
     try std.testing.expectEqualStrings("my_app-2", projectName(arena, "my app-2"));
     try std.testing.expectEqualStrings("app", projectName(arena, ""));
 }
+
+test "the .clang-format for projects has no key that needs clang-format 19" {
+    try std.testing.expect(std.mem.indexOf(u8, templates.clang_format, "MainIncludeChar") == null);
+    try std.testing.expect(std.mem.indexOf(u8, templates.clang_format, "SDK only") == null);
+    // The rest is there, to the last line.
+    try std.testing.expect(std.mem.startsWith(u8, templates.clang_format, "BasedOnStyle: WebKit\n"));
+    try std.testing.expect(std.mem.indexOf(u8, templates.clang_format, "\nIncludeIsMainRegex:") != null);
+    try std.testing.expect(std.mem.endsWith(u8, templates.clang_format, "    Priority: 1\n"));
+}
