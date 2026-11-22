@@ -18,6 +18,7 @@
 
 #include <utest.h>
 
+#include <dino/core/error.h>
 #include <dino/core/fs.h>
 #include <dino/core/runtime.h>
 
@@ -166,6 +167,92 @@ UTEST(file_size, larger_than_4_gib)
     EXPECT_EQ(0, dino_file_size(path, &got));
     EXPECT_EQ(size, got);
     remove(path);
+}
+
+static int write_file(const char *path, const char *text)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return -1;
+    fputs(text, f);
+    return fclose(f);
+}
+
+// The save pattern: write a temporary file, rename it over the old one.
+// Windows' own rename() fails from the second save on.
+UTEST(file_rename, replaces_an_existing_file)
+{
+    ASSERT_EQ(0, write_file("dino_rename_old.txt", "old"));
+    ASSERT_EQ(0, write_file("dino_rename_new.txt", "newer"));
+    EXPECT_EQ(0, dino_file_rename("dino_rename_new.txt", "dino_rename_old.txt"));
+    uint64_t size = 0;
+    EXPECT_EQ(0, dino_file_size("dino_rename_old.txt", &size));
+    EXPECT_EQ(5u, size);
+    EXPECT_EQ(-1, dino_file_size("dino_rename_new.txt", &size));
+    remove("dino_rename_old.txt");
+}
+
+UTEST(file_rename, missing_source_and_null_arguments_fail)
+{
+    EXPECT_EQ(-1, dino_file_rename("dino_rename_missing.txt", "dino_rename_to.txt"));
+    EXPECT_EQ(DINO_ENOENT, dino_error());
+    EXPECT_EQ(-1, dino_file_rename(NULL, "x"));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(-1, dino_file_rename("x", NULL));
+}
+
+UTEST(file_remove, removes_a_file_and_an_empty_directory)
+{
+    ASSERT_EQ(0, write_file("dino_remove.txt", "x"));
+    EXPECT_EQ(0, dino_file_remove("dino_remove.txt"));
+    uint64_t size;
+    EXPECT_EQ(-1, dino_file_size("dino_remove.txt", &size));
+    EXPECT_EQ(-1, dino_file_remove("dino_remove.txt"));
+    EXPECT_EQ(DINO_ENOENT, dino_error());
+#ifdef _WIN32
+    ASSERT_TRUE(CreateDirectoryW(L"dino_remove_dir", NULL));
+#else
+    ASSERT_EQ(0, mkdir("dino_remove_dir", 0700));
+#endif
+    EXPECT_EQ(0, dino_file_remove("dino_remove_dir"));
+    EXPECT_EQ(-1, dino_file_remove(NULL));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+}
+
+#ifdef _WIN32
+// Linux only asks whether the directory is writable; Windows' DeleteFile
+// refuses a read-only file unless the attribute is cleared first.
+UTEST(file_remove, removes_a_read_only_file)
+{
+    ASSERT_EQ(0, write_file("dino_remove_ro.txt", "x"));
+    ASSERT_TRUE(SetFileAttributesW(L"dino_remove_ro.txt", FILE_ATTRIBUTE_READONLY));
+    EXPECT_EQ(0, dino_file_remove("dino_remove_ro.txt"));
+    EXPECT_EQ(INVALID_FILE_ATTRIBUTES, GetFileAttributesW(L"dino_remove_ro.txt"));
+}
+#endif
+
+// Plain fopen and the SDK agree on a non-ASCII path everywhere: on Windows
+// through the UTF-8 manifest dino_test() links.
+UTEST(file_rename, a_utf8_path_means_the_same_to_fopen_and_the_sdk)
+{
+#ifdef _WIN32
+    ASSERT_EQ((UINT)CP_UTF8, GetACP());
+#endif
+    const char *name    = "dino_caf\xc3\xa9.txt";
+    const char *renamed = "dino_\xc3\xbc\x62\x65r.txt";
+    ASSERT_EQ(0, write_file(name, "abc"));
+    uint64_t size = 0;
+    EXPECT_EQ(0, dino_file_size(name, &size));
+    EXPECT_EQ(3u, size);
+#ifdef _WIN32
+    EXPECT_NE(INVALID_FILE_ATTRIBUTES, GetFileAttributesW(L"dino_café.txt"));
+#endif
+    EXPECT_EQ(0, dino_file_rename(name, renamed));
+    FILE *f = fopen(renamed, "rb");
+    EXPECT_TRUE(f != NULL);
+    if (f)
+        fclose(f);
+    EXPECT_EQ(0, dino_file_remove(renamed));
 }
 
 UTEST(fs_init, keeps_stdio_open_and_is_repeatable)

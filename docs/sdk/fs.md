@@ -3,8 +3,7 @@
 `#include <dino/core/fs.h>` · `dino_core`
 
 Most file work needs nothing from the SDK: `fopen`, `fread`, `fwrite` and `fclose` from `stdio.h`
-behave the same on every target (see [dino vs libc](libc.md)). This module covers two things that
-don't.
+behave the same on every target (see [dino vs libc](libc.md)), with UTF-8 paths on Windows too (see [UTF-8 on Windows](#utf-8-on-windows)). This module covers what doesn't: file sizes over 2 GB, renaming over a file and removing one, and stdio for programs the kernel starts.
 
 ## File sizes over 2 GB
 
@@ -45,6 +44,34 @@ int main(void)
 
 A symbolic link reports the size of the file it points to, on Windows as on Linux. A link to a
 directory, or one whose target is gone, fails as the directory or the missing file would.
+
+## Renaming and removing
+
+The C library's `rename` and `remove` differ on Windows: `rename` fails when the destination exists, so the usual save (write `conf.tmp`, then rename it over `conf`) works once and then fails every time, and `remove` refuses a read-only file. Use these instead:
+
+```c
+FILE *f = fopen("conf.tmp", "wb");
+/* ... write it, check fclose ... */
+if (dino_file_rename("conf.tmp", "conf") != 0)
+    fprintf(stderr, "save failed: %s\n", dino_error_message(dino_error()));
+```
+
+| Function                     | Does                                                                                  | Returns                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------- |
+| `dino_file_rename(from, to)` | Rename a file or directory, replacing a file already at `to`. Within one file system. | `0`, `-1`                                   |
+| `dino_file_remove(path)`     | Remove a file, read-only ones included, or an empty directory.                        | `0`, `-1` (`DINO_ENOENT` if it isn't there) |
+
+- **Open files on Windows** can't be renamed or removed while open, by this program or another, unless they were opened with delete sharing, which `fopen` doesn't do. Close the file first.
+- **Replacing a directory** with `dino_file_rename` works on Linux when the destination is an empty directory; Windows refuses. Rename directories only to new names.
+
+## UTF-8 on Windows
+
+Executables made with `dino_executable()` and `dino_test()` run with UTF-8 as their Windows code page, so `argv`, `fopen`, `getenv` and `printf` take and give UTF-8, as on Linux and as the SDK's own functions do. Two things make that work:
+
+- **A manifest** linked into each Windows executable (`activeCodePage`), which Windows 10 version 1903 and later honor. Older Windows ignores it, and the C library's functions use the system's ANSI code page there; the SDK's functions take UTF-8 either way.
+- **The console's code page** is set to UTF-8 while the program runs, so what it prints shows correctly, and put back as it was when it exits.
+
+A project that links a manifest of its own sets `DINO_NO_UTF8_MANIFEST` (an executable can have only one), and adds `<activeCodePage>UTF-8</activeCodePage>` to its own manifest to keep this. Executables made with plain `add_executable()` don't get it.
 
 ## Stdio for programs the kernel starts
 

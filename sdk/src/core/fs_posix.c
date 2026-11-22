@@ -5,6 +5,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdio.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -24,6 +25,20 @@ int dino_file_size(const char *path, uint64_t *size)
         return dino__fail(DINO_EINVAL);
     *size = (uint64_t)st.st_size;
     return 0;
+}
+
+int dino_file_rename(const char *from, const char *to)
+{
+    if (!from || !to)
+        return dino__fail(DINO_EINVAL);
+    return rename(from, to) == 0 ? 0 : dino__fail_os();
+}
+
+int dino_file_remove(const char *path)
+{
+    if (!path)
+        return dino__fail(DINO_EINVAL);
+    return remove(path) == 0 ? 0 : dino__fail_os();
 }
 
 // dino_fs_init with the device to use, so that a test can take it away.

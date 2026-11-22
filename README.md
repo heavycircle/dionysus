@@ -30,8 +30,8 @@ build/arm/hello (7.5 KiB)
 build/arm64/hello (7.5 KiB)
 build/i386/hello (5.9 KiB)
 build/ppc/hello (9.2 KiB)
-build/win32/hello.exe (66.5 KiB)
-build/win64/hello.exe (57.0 KiB)
+build/win32/hello.exe (67.5 KiB)
+build/win64/hello.exe (57.5 KiB)
 build/x86_64/hello (7.3 KiB)
 ```
 
