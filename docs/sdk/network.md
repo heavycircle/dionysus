@@ -43,7 +43,7 @@ int main(void)
 
     const char *msg = "ping";
     char        buf[16] = { 0 };
-    dino_socket_send(client, msg, (int)strlen(msg));
+    dino_socket_send(client, msg, strlen(msg));
     int n = dino_socket_recv(conn, buf, sizeof(buf) - 1); // one small message arrives whole on loopback
     dino_socket_send(conn, buf, n);
     memset(buf, 0, sizeof(buf));

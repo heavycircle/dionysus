@@ -18,7 +18,7 @@ typedef struct dino_thread *dino_thread_t;
  * @param  arg  The argument given to dino_thread_create.
  * @return A result for dino_thread_join.
  */
-typedef int (*dino_thread_fn)(void *arg);
+typedef int (*dino_thread_fn_t)(void *arg);
 
 /**
  * Start a thread running fn(arg).
@@ -32,7 +32,7 @@ typedef int (*dino_thread_fn)(void *arg);
  * @param  arg     Argument passed to fn.
  * @return 0 on success, -1 on failure.
  */
-int dino_thread_create(dino_thread_t *thread, dino_thread_fn fn, void *arg);
+int dino_thread_create(dino_thread_t *thread, dino_thread_fn_t fn, void *arg);
 
 /**
  * Wait for a thread to finish and release it. The handle is invalid afterwards.

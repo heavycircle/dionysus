@@ -51,7 +51,7 @@ static void strip_cr(char *s)
 }
 
 // Runs argv with stdout piped; returns its exit code (or -1) and its output.
-static int run(char *const argv[], const dino_process_spawn_opts_t *base, char *out, int size)
+static int run(const char *const argv[], const dino_process_spawn_opts_t *base, char *out, int size)
 {
     dino_process_spawn_opts_t opts = base ? *base : (dino_process_spawn_opts_t) { 0 };
     opts.stdout_mode               = DINO_STDIO_PIPE;
@@ -70,8 +70,8 @@ static int run(char *const argv[], const dino_process_spawn_opts_t *base, char *
 
 UTEST(process, exit_code_is_reported)
 {
-    char *const    argv[] = SHELL("exit 7");
-    dino_process_t p;
+    const char *const argv[] = SHELL("exit 7");
+    dino_process_t    p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
     ASSERT_NE(DINO_INVALID_PROCESS, p);
     EXPECT_NE(0u, dino_process_id(p));
@@ -82,8 +82,8 @@ UTEST(process, exit_code_is_reported)
 
 UTEST(process, stdout_is_captured)
 {
-    char *const argv[] = SHELL("echo hello");
-    char        out[64];
+    const char *const argv[] = SHELL("echo hello");
+    char              out[64];
     EXPECT_EQ(0, run(argv, NULL, out, sizeof(out)));
     EXPECT_STREQ("hello\n", out);
 }
@@ -91,9 +91,9 @@ UTEST(process, stdout_is_captured)
 UTEST(process, stdin_and_stderr_pipes)
 {
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-cat", NULL };
+    const char *const argv[] = { self_path, "--child-cat", NULL };
 #else
-    char *const argv[] = { "/bin/sh", "-c", "cat; echo oops >&2", NULL };
+    const char *const argv[] = { "/bin/sh", "-c", "cat; echo oops >&2", NULL };
 #endif
     dino_process_spawn_opts_t opts = { 0 };
     opts.stdin_mode                = DINO_STDIO_PIPE;
@@ -123,9 +123,9 @@ UTEST(process, stdin_and_stderr_pipes)
 UTEST(process, null_stdio)
 {
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-cat", NULL };
+    const char *const argv[] = { self_path, "--child-cat", NULL };
 #else
-    char *const argv[] = { "/bin/sh", "-c", "cat", NULL };
+    const char *const argv[] = { "/bin/sh", "-c", "cat", NULL };
 #endif
     // stdin at end of file at once, so the copy ends; its output goes nowhere.
     dino_process_spawn_opts_t opts = { 0 };
@@ -150,7 +150,7 @@ UTEST(process, pipes_survive_a_parent_with_closed_stdio)
     close(0);
     close(1);
 
-    char *const               argv[] = { "/bin/sh", "-c", "echo err >&2", NULL };
+    const char *const         argv[] = { "/bin/sh", "-c", "echo err >&2", NULL };
     dino_process_spawn_opts_t opts   = { 0 };
     opts.stdout_mode                 = DINO_STDIO_NULL;
     opts.stderr_mode                 = DINO_STDIO_PIPE;
@@ -178,11 +178,11 @@ UTEST(process, pipes_survive_a_parent_with_closed_stdio)
 UTEST(process, working_directory)
 {
 #ifdef _WIN32
-    char *const argv[] = SHELL("cd");
-    const char *dir = "C:\\", *expected = "C:\\\n";
+    const char *const argv[] = SHELL("cd");
+    const char       *dir = "C:\\", *expected = "C:\\\n";
 #else
-    char *const argv[] = SHELL("pwd");
-    const char *dir = "/", *expected = "/\n";
+    const char *const argv[] = SHELL("pwd");
+    const char       *dir = "/", *expected = "/\n";
 #endif
     dino_process_spawn_opts_t opts = { 0 };
     opts.cwd                       = dir;
@@ -201,8 +201,8 @@ UTEST(process, child_gets_only_the_standard_streams)
     ASSERT_GE(fd, 3);
     char cmd[128];
     snprintf(cmd, sizeof(cmd), "[ -e /proc/self/fd/%d ] && echo inherited || echo closed", fd);
-    char *const argv[] = SHELL(cmd);
-    char        out[64];
+    const char *const argv[] = SHELL(cmd);
+    char              out[64];
     EXPECT_EQ(0, run(argv, NULL, out, sizeof(out)));
     EXPECT_STREQ("closed\n", out);
     close(fd);
@@ -228,13 +228,13 @@ UTEST(process, relative_program_is_found_from_cwd)
     char *ext = strrchr(prog, '.');
     if (ext)
         *ext = '\0';
-    char *const argv[]   = { prog, "--child-echo", "ok", NULL };
-    opts.cwd             = parent;
-    const char *expected = "[ok]\n";
+    const char *const argv[] = { prog, "--child-echo", "ok", NULL };
+    opts.cwd                 = parent;
+    const char *expected     = "[ok]\n";
 #else
-    char *const argv[]   = { "./sh", "-c", "echo ok", NULL };
-    opts.cwd             = "/bin";
-    const char *expected = "ok\n";
+    const char *const argv[] = { "./sh", "-c", "echo ok", NULL };
+    opts.cwd                 = "/bin";
+    const char *expected     = "ok\n";
 #endif
     char out[256];
     EXPECT_EQ(0, run(argv, &opts, out, sizeof(out)));
@@ -259,7 +259,7 @@ UTEST(process, dot_relative_program_is_found_from_cwd)
     ASSERT_NE(0u, GetCurrentDirectoryA(sizeof(here), here));
     ASSERT_NE(0u, GetTempPathA(sizeof(elsewhere), elsewhere));
 
-    char *const               argv[] = { prog, "--child-echo", "ok", NULL };
+    const char *const         argv[] = { prog, "--child-echo", "ok", NULL };
     dino_process_spawn_opts_t opts   = { 0 };
     opts.cwd                         = dir;
     char out[256]                    = "";
@@ -275,14 +275,14 @@ UTEST(process, dot_relative_program_is_found_from_cwd)
 UTEST(process, environment_replaces_the_parents)
 {
 #ifdef _WIN32
-    char *const argv[] = SHELL("echo %DINO_TEST_VAR%");
+    const char *const argv[] = SHELL("echo %DINO_TEST_VAR%");
     // cmd.exe needs SYSTEMROOT; the parent's DINO_TEST_OTHER must not leak in.
     char systemroot[MAX_PATH + 16] = "SYSTEMROOT=";
     GetEnvironmentVariableA("SYSTEMROOT", systemroot + 11, MAX_PATH);
-    char *const env[] = { "DINO_TEST_VAR=from env", systemroot, NULL };
+    const char *const env[] = { "DINO_TEST_VAR=from env", systemroot, NULL };
 #else
-    char *const argv[] = SHELL("echo \"$DINO_TEST_VAR${HOME:+ home leaked}\"");
-    char *const env[]  = { "DINO_TEST_VAR=from env", NULL };
+    const char *const argv[] = SHELL("echo \"$DINO_TEST_VAR${HOME:+ home leaked}\"");
+    const char *const env[]  = { "DINO_TEST_VAR=from env", NULL };
 #endif
     dino_process_spawn_opts_t opts = { 0 };
     opts.env                       = env;
@@ -296,12 +296,13 @@ UTEST(process, arguments_arrive_unchanged)
     // Spaces, empty strings, quotes and backslashes: everything the MSVCRT
     // quoting rules must survive on Windows.
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-echo", "plain", "two words", "", "quote\"inside",
-        "trailing\\", "back\\\\slash \"q\"", "tab\tin", "\xc3\xa9t\xc3\xa9", NULL };
+    const char *const argv[]
+        = { self_path, "--child-echo", "plain", "two words", "", "quote\"inside", "trailing\\",
+              "back\\\\slash \"q\"", "tab\tin", "\xc3\xa9t\xc3\xa9", NULL };
 #else
-    char *const argv[] = { "/bin/sh", "-c", "printf '[%s]\\n' \"$@\"", "sh", "plain", "two words",
-        "", "quote\"inside", "trailing\\", "back\\\\slash \"q\"", "tab\tin", "\xc3\xa9t\xc3\xa9",
-        NULL };
+    const char *const argv[] = { "/bin/sh", "-c", "printf '[%s]\\n' \"$@\"", "sh", "plain",
+        "two words", "", "quote\"inside", "trailing\\", "back\\\\slash \"q\"", "tab\tin",
+        "\xc3\xa9t\xc3\xa9", NULL };
 #endif
     char out[512];
     EXPECT_EQ(0, run(argv, NULL, out, sizeof(out)));
@@ -320,21 +321,21 @@ UTEST(process, batch_file_arguments_cant_run_commands)
     fputs("@echo off\r\necho [%1]\r\n", f);
     fclose(f);
 
-    char        out[512];
-    char *const plain[] = { "dino_test_args.cmd", "a&echo INJECTED", NULL };
+    char              out[512];
+    const char *const plain[] = { "dino_test_args.cmd", "a&echo INJECTED", NULL };
     EXPECT_EQ(0, run(plain, NULL, out, sizeof(out)));
     EXPECT_STREQ("[\"a&echo INJECTED\"]\n", out);
 
-    char *const specials[] = { "dino_test_args.CMD", "^(x)|y<z> !v!", NULL };
+    const char *const specials[] = { "dino_test_args.CMD", "^(x)|y<z> !v!", NULL };
     EXPECT_EQ(0, run(specials, NULL, out, sizeof(out)));
     EXPECT_STREQ("[\"^(x)|y<z> !v!\"]\n", out);
 
     // What quoting can't protect is refused.
-    dino_process_t p;
-    char *const    quote[]   = { "dino_test_args.cmd", "a\" & echo INJECTED & \"", NULL };
-    char *const    percent[] = { "dino_test_args.cmd", "%PATH%", NULL };
-    char *const    newline[] = { "dino_test_args.cmd", "a\necho INJECTED", NULL };
-    char *const    dotted[]  = { "dino_test_args.cmd. ", "\"", NULL };
+    dino_process_t    p;
+    const char *const quote[]   = { "dino_test_args.cmd", "a\" & echo INJECTED & \"", NULL };
+    const char *const percent[] = { "dino_test_args.cmd", "%PATH%", NULL };
+    const char *const newline[] = { "dino_test_args.cmd", "a\necho INJECTED", NULL };
+    const char *const dotted[]  = { "dino_test_args.cmd. ", "\"", NULL };
     EXPECT_EQ(-1, dino_process_spawn(&p, quote, NULL, NULL));
     EXPECT_EQ(-1, dino_process_spawn(&p, percent, NULL, NULL));
     EXPECT_EQ(-1, dino_process_spawn(&p, newline, NULL, NULL));
@@ -346,9 +347,9 @@ UTEST(process, batch_file_arguments_cant_run_commands)
 UTEST(process, kill_ends_a_running_child)
 {
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-sleep", NULL };
+    const char *const argv[] = { self_path, "--child-sleep", NULL };
 #else
-    char *const argv[] = SHELL("exec sleep 60");
+    const char *const argv[] = SHELL("exec sleep 60");
 #endif
     dino_process_t p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
@@ -363,9 +364,9 @@ UTEST(process, kill_ends_a_running_child)
 UTEST(process, kill_after_the_child_exited_succeeds)
 {
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-echo", NULL };
+    const char *const argv[] = { self_path, "--child-echo", NULL };
 #else
-    char *const argv[] = SHELL("exit 0");
+    const char *const argv[] = SHELL("exit 0");
 #endif
     dino_process_t p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
@@ -378,15 +379,15 @@ UTEST(process, kill_after_the_child_exited_succeeds)
 
 UTEST(process, signal_is_reported_as_128_plus_its_number)
 {
-    char *const argv[] = SHELL("kill -TERM $$");
-    char        out[8];
+    const char *const argv[] = SHELL("kill -TERM $$");
+    char              out[8];
     EXPECT_EQ(128 + 15, run(argv, NULL, out, sizeof(out)));
 }
 #endif
 
 UTEST(process, missing_program_fails_to_spawn)
 {
-    char *const               argv[] = { "dino-test-no-such-program", NULL };
+    const char *const         argv[] = { "dino-test-no-such-program", NULL };
     dino_process_t            p      = (dino_process_t)1;
     dino_process_spawn_opts_t opts   = { 0 };
     dino_process_pipes_t      pipes;
@@ -413,13 +414,13 @@ UTEST(process, missing_program_fails_to_spawn)
 
 UTEST(process, invalid_arguments_are_rejected)
 {
-    dino_process_t p;
-    char *const    empty[] = { NULL };
+    dino_process_t    p;
+    const char *const empty[] = { NULL };
     EXPECT_EQ(-1, dino_process_spawn(&p, NULL, NULL, NULL));
     EXPECT_EQ(-1, dino_process_spawn(&p, empty, NULL, NULL));
 
     // Asking for a pipe without somewhere to put it.
-    char *const               argv[] = SHELL("exit 0");
+    const char *const         argv[] = SHELL("exit 0");
     dino_process_spawn_opts_t opts   = { 0 };
     opts.stdout_mode                 = DINO_STDIO_PIPE;
     EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
@@ -447,9 +448,9 @@ UTEST(process, invalid_arguments_are_rejected)
 UTEST(process, wait_timeout_times_out_then_reaps)
 {
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-sleep", NULL };
+    const char *const argv[] = { self_path, "--child-sleep", NULL };
 #else
-    char *const argv[] = SHELL("exec sleep 60");
+    const char *const argv[] = SHELL("exec sleep 60");
 #endif
     dino_process_t p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
@@ -467,8 +468,8 @@ UTEST(process, wait_timeout_times_out_then_reaps)
 
 UTEST(process, wait_timeout_returns_the_exit_code)
 {
-    char *const    argv[] = SHELL("exit 5");
-    dino_process_t p;
+    const char *const argv[] = SHELL("exit 5");
+    dino_process_t    p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
     int code = -1;
     EXPECT_EQ(0, dino_process_wait_timeout(p, 10000, &code));
@@ -479,9 +480,9 @@ UTEST(process, wait_timeout_returns_the_exit_code)
 UTEST(process, wait_timeout_returns_when_the_child_exits)
 {
 #ifdef _WIN32
-    char *const argv[] = SHELL("ping -n 1 127.0.0.1 >NUL & exit 6");
+    const char *const argv[] = SHELL("ping -n 1 127.0.0.1 >NUL & exit 6");
 #else
-    char *const argv[] = SHELL("sleep 0.2; exit 6");
+    const char *const argv[] = SHELL("sleep 0.2; exit 6");
 #endif
     dino_process_t p;
     ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
@@ -502,9 +503,9 @@ UTEST(process, wait_timeout_returns_when_the_child_exits)
 UTEST(process, run_reads_both_outputs_without_deadlock)
 {
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-flood", NULL };
+    const char *const argv[] = { self_path, "--child-flood", NULL };
 #else
-    char *const argv[]
+    const char *const argv[]
         = SHELL("i=0; while [ $i -lt 2000 ]; do "
                 "echo 0123456789012345678901234567890123456789012345678901234567890; "
                 "echo abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij >&2; "
@@ -528,9 +529,9 @@ UTEST(process, run_reads_both_outputs_without_deadlock)
 UTEST(process, run_feeds_input_while_reading)
 {
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-cat", NULL };
+    const char *const argv[] = { self_path, "--child-cat", NULL };
 #else
-    char *const argv[] = { "/bin/sh", "-c", "cat; echo oops >&2", NULL };
+    const char *const argv[] = { "/bin/sh", "-c", "cat; echo oops >&2", NULL };
 #endif
     // Larger than a pipe in both directions.
     enum
@@ -558,7 +559,7 @@ UTEST(process, run_feeds_input_while_reading)
 UTEST(process, run_survives_a_child_that_ignores_its_input)
 {
     // Exits without reading; the writer's EPIPE must not kill this process.
-    char *const argv[] = SHELL("exit 0");
+    const char *const argv[] = SHELL("exit 0");
     enum
     {
         SIZE = 1 << 20
@@ -578,9 +579,9 @@ UTEST(process, run_survives_a_child_that_ignores_its_input)
 UTEST(process, run_kills_after_the_timeout)
 {
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-sleep", NULL };
+    const char *const argv[] = { self_path, "--child-sleep", NULL };
 #else
-    char *const argv[] = SHELL("echo started; exec sleep 60");
+    const char *const argv[] = SHELL("echo started; exec sleep 60");
 #endif
     dino_process_run_opts_t opts = { 0 };
     opts.timeout_ms              = 200;
@@ -600,12 +601,12 @@ UTEST(process, run_kills_after_the_timeout)
 UTEST(process, run_stops_reading_at_the_timeout_when_a_grandchild_holds_the_output)
 {
 #ifdef _WIN32
-    char *const argv[] = { self_path, "--child-start-linger", NULL };
+    const char *const argv[] = { self_path, "--child-start-linger", NULL };
     // A process can take most of a second to start under wine.
     int timeout = 1500;
 #else
-    char *const argv[]  = SHELL("sleep 3 & echo hi");
-    int         timeout = 300;
+    const char *const argv[]  = SHELL("sleep 3 & echo hi");
+    int               timeout = 300;
 #endif
     dino_process_run_opts_t opts = { 0 };
     opts.timeout_ms              = timeout;
@@ -626,7 +627,7 @@ UTEST(process, run_stops_writing_at_the_timeout_when_a_grandchild_holds_the_inpu
 {
     // Through fd 3: sh gives a background job /dev/null as stdin before its own
     // redirections apply.
-    char *const argv[] = SHELL("exec 3<&0; sleep 3 <&3 3<&- >/dev/null 2>&1 & exit 0");
+    const char *const argv[] = SHELL("exec 3<&0; sleep 3 <&3 3<&- >/dev/null 2>&1 & exit 0");
     enum
     {
         SIZE = 1 << 20
@@ -649,7 +650,7 @@ UTEST(process, run_stops_writing_at_the_timeout_when_a_grandchild_holds_the_inpu
 
 UTEST(process, run_reports_a_missing_program)
 {
-    char *const           argv[] = { "dino-test-no-such-program", NULL };
+    const char *const     argv[] = { "dino-test-no-such-program", NULL };
     dino_process_result_t r;
     int                   rc = dino_process_run(argv, NULL, &r);
     // See missing_program_fails_to_spawn: under valgrind glibc can't tell.
@@ -665,7 +666,7 @@ UTEST(process, current_id_is_the_childs_parent)
 {
     EXPECT_NE(0u, dino_process_current_id());
 #ifndef _WIN32
-    char *const           argv[] = SHELL("echo $PPID");
+    const char *const     argv[] = SHELL("echo $PPID");
     dino_process_result_t r;
     ASSERT_EQ(0, dino_process_run(argv, NULL, &r));
     EXPECT_EQ(dino_process_current_id(), strtoull(r.out, NULL, 10));
@@ -719,8 +720,8 @@ static int child_main(const char *mode)
     if (strcmp(mode, "--child-start-linger") == 0)
     {
         // The grandchild inherits this process's stdout and outlives it.
-        char *const    argv[] = { self_path, "--child-linger", NULL };
-        dino_process_t p;
+        const char *const argv[] = { self_path, "--child-linger", NULL };
+        dino_process_t    p;
         if (dino_process_spawn(&p, argv, NULL, NULL) != 0)
             return 1;
         puts("hi");

@@ -57,7 +57,7 @@ static int close_inherited(posix_spawn_file_actions_t *actions)
     return rc;
 }
 
-int dino_process_spawn(dino_process_t *process, char *const argv[],
+int dino_process_spawn(dino_process_t *process, const char *const argv[],
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
 {
     *process = DINO_INVALID_PROCESS;
@@ -133,8 +133,11 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
     // posix_spawnp reports a program that can't be run here, not as exit 127:
     // DINO_ENOENT for one that isn't found, DINO_EACCES for one that can't be
     // executed, and the same two for a cwd that can't be entered.
-    rc = posix_spawnp(
-        &pid, argv[0], &actions, &attr, argv, opts && opts->env ? opts->env : environ);
+    // posix_spawnp takes char *const[] for history's sake (as execv does) and
+    // never writes through it.
+    char *const *args = (char *const *)(uintptr_t)argv;
+    char *const *env  = opts && opts->env ? (char *const *)(uintptr_t)opts->env : environ;
+    rc                = posix_spawnp(&pid, argv[0], &actions, &attr, args, env);
     if (rc == 0)
     {
         *process = TO_HANDLE(pid);

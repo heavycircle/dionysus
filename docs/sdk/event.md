@@ -50,7 +50,7 @@ int main(void)
     dino_event_add_socket(loop, client, DINO_EVENT_READ, (void *)(intptr_t)CLIENT);
 
     // Fail rather than hang if something goes wrong.
-    dino_event_timer_t deadline = dino_event_timer_add(loop, 5000, 0, (void *)(intptr_t)DEADLINE);
+    dino_event_timer_t deadline = dino_event_add_timer(loop, 5000, 0, (void *)(intptr_t)DEADLINE);
 
     dino_socket_t conn = DINO_INVALID_SOCKET;
     char          reply[16] = { 0 };
@@ -91,7 +91,7 @@ int main(void)
     }
     printf("reply: %s\n", reply);
 
-    dino_event_timer_del(loop, deadline);
+    dino_event_del_timer(loop, deadline);
     dino_event_del_socket(loop, client);
     dino_event_del_socket(loop, conn);
     dino_event_del_socket(loop, listener);
@@ -137,8 +137,8 @@ whenever they happen. Two cases still differ by platform:
 | `dino_event_add_pipe`, `_mod_pipe`, `_del_pipe`              | The same for the read end of a [pipe](pipe.md), `READ` only.                             |
 | `dino_event_add_process(loop, process, ud)`                  | Report `DINO_EVENT_EXIT` once when a [process](process.md) ends.                         |
 | `dino_event_del_process(loop, process)`                      | Stop watching it. Must come before `dino_process_wait`.                                  |
-| `dino_event_timer_add(loop, delay_ms, interval_ms, ud)`      | A timer firing after `delay_ms`, then every `interval_ms` (`0`: once). Returns a handle. |
-| `dino_event_timer_del(loop, timer)`                          | Delete a timer, fired or not. Every timer must be deleted (or the loop destroyed).       |
+| `dino_event_add_timer(loop, delay_ms, interval_ms, ud)`      | A timer firing after `delay_ms`, then every `interval_ms` (`0`: once). Returns a handle. |
+| `dino_event_del_timer(loop, timer)`                          | Delete a timer, fired or not. Every timer must be deleted (or the loop destroyed).       |
 | `dino_event_wait(loop, out, max, timeout_ms)`                | Wait. Returns how many items it wrote to `out`, `0` on timeout, `-1` on error.           |
 | `dino_event_wake(loop)`                                      | Make a wait return a `DINO_EVENT_WAKE` item, from any thread.                            |
 
@@ -157,7 +157,7 @@ there, is an error), except the create functions, which return a handle or its i
   thread, and rearm each with `dino_event_mod_socket` once that thread has handled it. Without
   `ONESHOT`, one ready socket wakes every waiting thread on Linux but only one on Windows.
   On Windows a socket or pipe that was reported is watched again only when a thread next calls `dino_event_wait`; a thread already blocked in a wait doesn't pick it up. If the thread that got the event never waits again, nobody is told about that item again.
-- **Deleting while another thread waits:** after a `del` (or `dino_event_timer_del`) returns, no wait
+- **Deleting while another thread waits:** after a `del` (or `dino_event_del_timer`) returns, no wait
   that starts later reports the item. A wait already running in another thread may still return
   one last event for it, so a thread that frees an item's userdata must make sure no other thread
   is mid-wait, for example by deleting from the thread that waits.
@@ -166,9 +166,9 @@ there, is an error), except the create functions, which return a handle or its i
 
 - **Never early:** a timer never fires before its delay. A repeating timer that falls behind (nobody
   waited for a while) fires once and skips the periods it missed.
-- **Freeing:** a fired one-shot timer stays allocated until `dino_event_timer_del` or the loop is
+- **Freeing:** a fired one-shot timer stays allocated until `dino_event_del_timer` or the loop is
   destroyed.
-- **Delete each timer once, through its own loop.** `dino_event_timer_del` with another loop returns `-1` and leaves the timer alone. Deleting a timer twice is undefined: the first delete frees it.
+- **Delete each timer once, through its own loop.** `dino_event_del_timer` with another loop returns `-1` and leaves the timer alone. Deleting a timer twice is undefined: the first delete frees it.
 - **Busy loops:** when timers and sockets are both ready and don't all fit in `out`, waits take
   turns at filling it first. A socket that stays readable delays a timer by one wait at most, and a
   timer that's due at every wait still leaves room for I/O, even with `max` of 1.

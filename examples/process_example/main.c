@@ -15,7 +15,7 @@
 // The simple case: run to completion, collecting stdout and stderr.
 static int run_and_collect(void)
 {
-    char *const argv[] = SHELL("echo hello from the child&& echo a warning 1>&2&& exit 3");
+    const char *const argv[] = SHELL("echo hello from the child&& echo a warning 1>&2&& exit 3");
     dino_process_run_opts_t opts = { 0 };
     dino_process_result_t   result;
     opts.timeout_ms = 10000;
@@ -36,7 +36,7 @@ static int run_and_collect(void)
 // Streaming: spawn with a pipe and read the output as it arrives.
 static int spawn_and_stream(void)
 {
-    char *const               argv[] = SHELL("echo hello from the child&& exit 3");
+    const char *const         argv[] = SHELL("echo hello from the child&& exit 3");
     dino_process_spawn_opts_t opts   = { 0 };
     opts.stdout_mode                 = DINO_STDIO_PIPE;
 

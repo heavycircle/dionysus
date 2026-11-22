@@ -142,7 +142,7 @@ static int run_clients(dino_event_loop_t loop)
     }
     printf("[Client] %d connections open\n", opened);
 
-    dino_event_timer_t deadline = dino_event_timer_add(loop, DEADLINE_MS, 0, NULL);
+    dino_event_timer_t deadline = dino_event_add_timer(loop, DEADLINE_MS, 0, NULL);
     int                done = 0, matched = 0;
     dino_event_t       events[64];
     while (done < opened)
@@ -170,7 +170,7 @@ static int run_clients(dino_event_loop_t loop)
             dino_event_del_socket(loop, c->sock);
         }
     }
-    dino_event_timer_del(loop, deadline);
+    dino_event_del_timer(loop, deadline);
     for (int i = 0; i < CONNECTIONS; i++)
     {
         if (conns[i].sock != DINO_INVALID_SOCKET)

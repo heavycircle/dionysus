@@ -1,6 +1,7 @@
 #ifndef DINO_CORE_PIPE_H
 #define DINO_CORE_PIPE_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -38,11 +39,12 @@ int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end);
  *
  * @param  pipe  Reading end.
  * @param  buf   Destination.
- * @param  len   Maximum number of bytes to read.
+ * @param  len   Maximum number of bytes to read. One call reads at most
+ *               INT_MAX bytes.
  * @return Bytes read, 0 at end of file (every write end is closed) or when len
  *         is 0, -1 on error.
  */
-int dino_pipe_read(dino_pipe_t pipe, void *buf, int len);
+int dino_pipe_read(dino_pipe_t pipe, void *buf, size_t len);
 
 /**
  * Write up to len bytes, blocking while the pipe is full.
@@ -54,11 +56,12 @@ int dino_pipe_read(dino_pipe_t pipe, void *buf, int len);
  *
  * @param  pipe  Writing end.
  * @param  buf   Source.
- * @param  len   Number of bytes to write.
+ * @param  len   Number of bytes to write. One call writes at most INT_MAX
+ *               bytes; write the rest with another call.
  * @return Bytes written, -1 on error; dino_error() (dino/core/error.h) is
  *         DINO_EPIPE when every read end is closed.
  */
-int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len);
+int dino_pipe_write(dino_pipe_t pipe, const void *buf, size_t len);
 
 /**
  * Wait until a read won't block: data is available or every write end has

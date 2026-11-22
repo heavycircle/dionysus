@@ -34,9 +34,9 @@ pick the shell per platform.
 
 int main(void)
 {
-    char *const       argv[] = SHELL("echo out&& echo err 1>&2&& exit 3");
-    dino_process_run_opts_t   opts   = { 0 };
-    dino_process_result_t result;
+    const char *const       argv[] = SHELL("echo out&& echo err 1>&2&& exit 3");
+    dino_process_run_opts_t opts   = { 0 };
+    dino_process_result_t   result;
     opts.timeout_ms = 10000; // killed if it takes longer
 
     int rc = dino_process_run(argv, &opts, &result);

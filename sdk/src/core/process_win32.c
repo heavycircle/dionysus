@@ -93,7 +93,7 @@ static wchar_t *widen(const char *s, int len)
     return w;
 }
 
-static wchar_t *command_line(char *const argv[])
+static wchar_t *command_line(const char *const argv[])
 {
     struct buf b = { 0 };
     for (int i = 0; argv[i]; i++)
@@ -125,7 +125,7 @@ static int is_batch(const char *path)
 // Every argument is quoted, which makes the operators literal. What quoting
 // can't protect is refused: " ends the quoted part, % expands variables even
 // inside it, and a line break ends the command. /c strips the outer quotes.
-static wchar_t *batch_command_line(char *const argv[], wchar_t **application)
+static wchar_t *batch_command_line(const char *const argv[], wchar_t **application)
 {
     for (int i = 0; argv[i]; i++)
         if (strpbrk(argv[i], "\"%\r\n"))
@@ -211,7 +211,7 @@ static wchar_t *find_in(const wchar_t *dir, const char *program)
     return found;
 }
 
-static wchar_t *environment_block(char *const env[])
+static wchar_t *environment_block(const char *const env[])
 {
     struct buf b = { 0 };
     for (int i = 0; env[i]; i++)
@@ -273,7 +273,7 @@ static HANDLE child_handle(int i, dino_stdio_t mode, dino_process_pipes_t *pipes
     return open_null();
 }
 
-int dino_process_spawn(dino_process_t *process, char *const argv[],
+int dino_process_spawn(dino_process_t *process, const char *const argv[],
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
 {
     *process = DINO_INVALID_PROCESS;

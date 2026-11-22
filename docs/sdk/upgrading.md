@@ -5,7 +5,7 @@ almost everything here: a removed or renamed name fails to build, and the error 
 
 ## To 0.7
 
-0.7 changes the API where it has to change before 1.0 freezes it. The compiler finds the change to handle types; the change to `dino_mutex_trylock` it doesn't.
+0.7 changes the API where it has to change before 1.0 freezes it. The compiler finds the changes to handle types, `argv` and the renamed names; the changes to `dino_mutex_trylock` and to negative lengths it doesn't.
 
 ### Failures have a reason: `dino_error()`
 
@@ -39,6 +39,44 @@ dino_pipe_close((dino_pipe_t)saved);
 dino_pipe_t saved = pipe;
 dino_pipe_close(saved);
 ```
+
+### Lengths are `size_t`
+
+`dino_socket_send`, `dino_socket_recv`, `dino_pipe_read`, `dino_pipe_write` and `dino_socket_setopt` take their length as `size_t`, like `strlen` and `sizeof`, so the casts can go. A length over 2 GB used to wrap: a 4 GB + 16 byte buffer was sent as 16 bytes. Now one call moves at most `INT_MAX` bytes and returns how many it moved, which callers already handle, since a transfer may always be short. Return values are still `int`.
+
+```c
+// Before
+dino_socket_send(sock, msg, (int)strlen(msg));
+
+// After
+dino_socket_send(sock, msg, strlen(msg));
+```
+
+A negative length used to fail with `-1`. Now it converts to a huge `size_t`, as it would for `memcpy`: pass lengths from `size_t` variables.
+
+### `argv` and `env` are `const char *const`
+
+`dino_process_spawn`, `dino_process_run` and the `env` field of both option structs take `const char *const` arrays, so a list of string literals compiles without a warning in C++ and under `-Wwrite-strings`.
+
+```c
+// Before: warns in C++, and in C with -Wwrite-strings
+char *const argv[] = { "/bin/sh", "-c", "echo hi", NULL };
+
+// After
+const char *const argv[] = { "/bin/sh", "-c", "echo hi", NULL };
+```
+
+Arrays declared `char *const argv[]` must change: C doesn't convert them to the new type without a warning. To forward `main`'s `argv` in C, cast it: `dino_process_spawn(&p, (const char *const *)argv, NULL, NULL)`. C++ needs no cast.
+
+### Two renames
+
+| Before                 | After                  |
+| ---------------------- | ---------------------- |
+| `dino_thread_fn`       | `dino_thread_fn_t`     |
+| `dino_event_timer_add` | `dino_event_add_timer` |
+| `dino_event_timer_del` | `dino_event_del_timer` |
+
+`dino_thread_fn` was the only type without `_t`, and the timer calls now read like `dino_event_add_socket`. The old names are gone; the compiler points at each use.
 
 ### `dino_mutex_trylock` returns `DINO_TIMEOUT` when the mutex is held
 
@@ -89,7 +127,7 @@ consistent across the SDK, so 1.0 starts clean.
 
 ### Renamed types
 
-Every name in `process.h` now starts with `dino_process_`, and every type in `network.h` with
+Every type in `process.h` now starts with `dino_process_`, and every type in `network.h` with
 `dino_socket_`. Rename them in your code; their contents are unchanged.
 
 | 0.5                      | 0.6                          |

@@ -34,5 +34,5 @@ int kv_serve_one(struct kv *db, dino_socket_t sock)
     kv_execute(db, request, response, KV_LINE_MAX);
     size_t len      = strlen(response);
     response[len++] = '\n';
-    return dino_socket_send(sock, response, (int)len) == (int)len ? 0 : -1;
+    return dino_socket_send(sock, response, len) == (int)len ? 0 : -1;
 }

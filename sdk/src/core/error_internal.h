@@ -1,6 +1,9 @@
 #ifndef DINO_CORE_ERROR_INTERNAL_H
 #define DINO_CORE_ERROR_INTERNAL_H
 
+#include <limits.h>
+#include <stddef.h>
+
 #include <dino/core/error.h>
 
 // Internal to the SDK. Every path on which a public function fails records a
@@ -22,6 +25,13 @@ static inline int dino__fail(int code)
 {
     dino__error_set(code);
     return -1;
+}
+
+// A length for one system call: at most INT_MAX, so that the count it returns
+// fits the int every transfer function returns. A transfer may be short anyway.
+static inline int dino__clamp_len(size_t len)
+{
+    return len > (size_t)INT_MAX ? INT_MAX : (int)len;
 }
 
 // For calls that return their error instead of setting errno (pthreads,

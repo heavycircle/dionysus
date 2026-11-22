@@ -102,7 +102,7 @@ static void remove_at(struct dino__event_timers *t, size_t i)
     sift_up(t, t->heap[i]->index);
 }
 
-dino_event_timer_t dino_event_timer_add(
+dino_event_timer_t dino_event_add_timer(
     dino_event_loop_t loop, uint32_t delay_ms, uint32_t interval_ms, void *userdata)
 {
     if (loop == DINO_INVALID_EVENT_LOOP)
@@ -146,7 +146,7 @@ dino_event_timer_t dino_event_timer_add(
     return (dino_event_timer_t)tm;
 }
 
-int dino_event_timer_del(dino_event_loop_t loop, dino_event_timer_t timer)
+int dino_event_del_timer(dino_event_loop_t loop, dino_event_timer_t timer)
 {
     if (loop == DINO_INVALID_EVENT_LOOP || timer == DINO_INVALID_EVENT_TIMER)
         return dino__fail(DINO_EINVAL);

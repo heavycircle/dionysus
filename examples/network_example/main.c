@@ -34,7 +34,7 @@ static dino_socket_t connect_to(int port)
 
 static int send_msg(const char *who, dino_socket_t sock, const char *msg)
 {
-    int ok = dino_socket_send(sock, msg, (int)strlen(msg)) == (int)strlen(msg);
+    int ok = dino_socket_send(sock, msg, strlen(msg)) == (int)strlen(msg);
     printf("[%s] Sent: %s%s\n", who, msg, ok ? "" : " (FAILED)");
     return ok;
 }

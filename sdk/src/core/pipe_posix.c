@@ -37,21 +37,21 @@ int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
     return 0;
 }
 
-int dino_pipe_read(dino_pipe_t pipe, void *buf, int len)
+int dino_pipe_read(dino_pipe_t pipe, void *buf, size_t len)
 {
-    if (pipe == DINO_INVALID_PIPE || len < 0)
+    if (pipe == DINO_INVALID_PIPE || (len > 0 && !buf))
         return dino__fail(DINO_EINVAL);
 
     ssize_t n;
     do
-        n = read(TO_FD(pipe), buf, (size_t)len);
+        n = read(TO_FD(pipe), buf, (size_t)dino__clamp_len(len));
     while (n < 0 && errno == EINTR);
     return n < 0 ? dino__fail_os() : (int)n;
 }
 
-int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
+int dino_pipe_write(dino_pipe_t pipe, const void *buf, size_t len)
 {
-    if (pipe == DINO_INVALID_PIPE || len < 0)
+    if (pipe == DINO_INVALID_PIPE || (len > 0 && !buf))
         return dino__fail(DINO_EINVAL);
 
     // A write to a pipe with no reader raises SIGPIPE, which would end the
@@ -68,7 +68,7 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
 
     ssize_t n;
     do
-        n = write(TO_FD(pipe), buf, (size_t)len);
+        n = write(TO_FD(pipe), buf, (size_t)dino__clamp_len(len));
     while (n < 0 && errno == EINTR);
     // Now: the signal calls below have an errno of their own.
     int reason = n < 0 ? dino__error_from_os() : 0;
@@ -86,10 +86,10 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
 // After POLLOUT a pipe has room for at least PIPE_BUF bytes, so a write that
 // size can't block.
 int dino__pipe_write_timeout(
-    dino_pipe_t pipe, const void *buf, int len, int timeout_ms, int *written)
+    dino_pipe_t pipe, const void *buf, size_t len, int timeout_ms, int *written)
 {
     *written = 0;
-    if (pipe == DINO_INVALID_PIPE || len < 0)
+    if (pipe == DINO_INVALID_PIPE)
         return dino__fail(DINO_EINVAL);
 
     struct pollfd pfd = { TO_FD(pipe), POLLOUT, 0 };
@@ -115,7 +115,7 @@ int dino__pipe_write_timeout(
     if (pfd.revents & POLLNVAL)
         return dino__fail(DINO_EINVAL);
     // With no reader left (POLLERR) the write fails with EPIPE.
-    int n = dino_pipe_write(pipe, buf, len < PIPE_BUF ? len : PIPE_BUF);
+    int n = dino_pipe_write(pipe, buf, len < (size_t)PIPE_BUF ? len : (size_t)PIPE_BUF);
     if (n < 0)
         return -1;
     *written = n;

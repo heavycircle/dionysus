@@ -31,7 +31,7 @@ typedef struct dino_event_loop *dino_event_loop_t;
 
 #define DINO_INVALID_EVENT_LOOP ((dino_event_loop_t)0)
 
-/** A timer in a loop, from dino_event_timer_add. */
+/** A timer in a loop, from dino_event_add_timer. */
 typedef struct dino_event_timer *dino_event_timer_t;
 
 #define DINO_INVALID_EVENT_TIMER ((dino_event_timer_t)0)
@@ -198,7 +198,7 @@ int dino_event_wake(dino_event_loop_t loop);
  * behind (nobody waited for a while) fires once and skips the periods it
  * missed, rather than firing for each.
  *
- * Every timer, one-shot included, stays allocated until dino_event_timer_del
+ * Every timer, one-shot included, stays allocated until dino_event_del_timer
  * or dino_event_loop_destroy.
  *
  * @param  loop         Loop to add to.
@@ -207,7 +207,7 @@ int dino_event_wake(dino_event_loop_t loop);
  * @param  userdata     Returned with the timer's events.
  * @return Timer handle, or DINO_INVALID_EVENT_TIMER on failure.
  */
-dino_event_timer_t dino_event_timer_add(
+dino_event_timer_t dino_event_add_timer(
     dino_event_loop_t loop, uint32_t delay_ms, uint32_t interval_ms, void *userdata);
 
 /**
@@ -215,11 +215,11 @@ dino_event_timer_t dino_event_timer_add(
  * reports it, as for dino_event_del_socket.
  *
  * @param  loop   Loop it was added to.
- * @param  timer  Timer from dino_event_timer_add, not yet deleted: deleting
+ * @param  timer  Timer from dino_event_add_timer, not yet deleted: deleting
  *                one twice is undefined.
  * @return 0 on success, -1 on error, including a timer of another loop.
  */
-int dino_event_timer_del(dino_event_loop_t loop, dino_event_timer_t timer);
+int dino_event_del_timer(dino_event_loop_t loop, dino_event_timer_t timer);
 
 #ifdef __cplusplus
 }

@@ -250,8 +250,8 @@ UTEST(pipe, invalid_arguments_are_rejected)
 
     dino_pipe_t r, w;
     ASSERT_EQ(0, dino_pipe_create(&r, &w));
-    EXPECT_EQ(-1, dino_pipe_read(r, buf, -1));
-    EXPECT_EQ(-1, dino_pipe_write(w, buf, -1));
+    EXPECT_EQ(-1, dino_pipe_read(r, NULL, 4));
+    EXPECT_EQ(-1, dino_pipe_write(w, NULL, 4));
     EXPECT_EQ(0, dino_pipe_write(w, buf, 0));
     EXPECT_EQ(0, dino_pipe_read(r, buf, 0));
     dino_pipe_close(r);
