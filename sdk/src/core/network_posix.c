@@ -1,6 +1,7 @@
 #include <dino/core/network.h>
 
 #include <arpa/inet.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
 #include <string.h>
@@ -156,7 +157,13 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
     struct sockaddr_storage addr;
     dino_socklen_t          len = sizeof(addr);
 
-    int client = accept4((int)sock, (struct sockaddr *)&addr, &len, SOCK_CLOEXEC);
+    // A signal handler interrupts these calls unless it was installed with
+    // SA_RESTART, and always when a socket timeout is set. Windows has no
+    // signals: retry, as the pipe calls do.
+    int client;
+    do
+        client = accept4((int)sock, (struct sockaddr *)&addr, &len, SOCK_CLOEXEC);
+    while (client == INVALID_SOCKET && errno == EINTR);
     if (client == INVALID_SOCKET)
     {
         dino__error_set_os();
@@ -174,8 +181,14 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
         return dino__fail(DINO_EINVAL);
 
     int res = connect((int)sock, (struct sockaddr *)&addr, len);
-
-    return (res == SOCKET_ERROR) ? dino__fail_os() : 0;
+    if (res != SOCKET_ERROR)
+        return 0;
+    // An interrupted connect isn't undone: it goes on in the background and
+    // ends as a non-blocking one does (dino_socket_error once writable).
+    // Calling connect again would fail with EALREADY.
+    if (errno == EINTR)
+        return dino__fail(DINO_EINPROGRESS);
+    return dino__fail_os();
 }
 
 int dino_socket_send(dino_socket_t sock, const void *buf, size_t len)
@@ -185,7 +198,10 @@ int dino_socket_send(dino_socket_t sock, const void *buf, size_t len)
     // instead of raising SIGPIPE, which would end the process.
     if (len > 0 && !buf)
         return dino__fail(DINO_EINVAL);
-    int sent = (int)send((int)sock, (const char *)buf, (size_t)dino__clamp_len(len), MSG_NOSIGNAL);
+    int sent;
+    do
+        sent = (int)send((int)sock, (const char *)buf, (size_t)dino__clamp_len(len), MSG_NOSIGNAL);
+    while (sent == SOCKET_ERROR && errno == EINTR);
     return (sent == SOCKET_ERROR) ? dino__fail_os() : sent;
 }
 
@@ -193,7 +209,10 @@ int dino_socket_recv(dino_socket_t sock, void *buf, size_t len)
 {
     if (len > 0 && !buf)
         return dino__fail(DINO_EINVAL);
-    int received = (int)recv((int)sock, (char *)buf, (size_t)dino__clamp_len(len), 0);
+    int received;
+    do
+        received = (int)recv((int)sock, (char *)buf, (size_t)dino__clamp_len(len), 0);
+    while (received == SOCKET_ERROR && errno == EINTR);
     return (received == SOCKET_ERROR) ? dino__fail_os() : received;
 }
 
@@ -205,8 +224,17 @@ int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *v
     return (rc == SOCKET_ERROR) ? dino__fail_os() : 0;
 }
 
+// Stream sockets only. On a datagram socket Linux's SO_REUSEADDR lets a second
+// socket bind the same port and take its datagrams, which Windows never
+// allows through this call; there it does nothing, as on Windows.
 int dino_socket_set_reuseaddr(dino_socket_t sock, int enable)
 {
+    int       type;
+    socklen_t len = sizeof(type);
+    if (getsockopt((int)sock, SOL_SOCKET, SO_TYPE, &type, &len) != 0)
+        return dino__fail_os();
+    if (type != SOCK_STREAM)
+        return 0;
     int flag = enable ? 1 : 0;
     return dino_socket_setopt(sock, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
 }

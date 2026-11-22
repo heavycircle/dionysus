@@ -166,7 +166,11 @@ typedef enum
 } dino_socket_shutdown_t;
 
 /**
- * Low-level socket option setter. Level and optname use platform values.
+ * Low-level socket option setter. Level and optname use platform values, and
+ * the value is passed on as given: options whose type differs by platform
+ * (SO_RCVTIMEO and SO_SNDTIMEO take a struct timeval on Linux and a DWORD of
+ * milliseconds on Windows; SO_LINGER) still need code per platform. What it
+ * does remove is setsockopt's const char * value type on Windows.
  *
  * @param  sock     Socket to configure.
  * @param  level    Protocol level (e.g. SOL_SOCKET, IPPROTO_TCP).
@@ -198,7 +202,13 @@ int dino_socket_set_v6only(dino_socket_t sock, int enable);
  *
  * It never lets a second socket bind a port another socket is listening on.
  * Windows allows the restart case by default and its SO_REUSEADDR would allow
- * that takeover, so there it only checks sock and succeeds.
+ * that takeover, so there it only checks sock and succeeds. On a datagram
+ * socket it does nothing, on every platform: Linux's SO_REUSEADDR would let a
+ * second socket bind the same port and receive its datagrams.
+ *
+ * Two TCP sockets that both use it can still bind the same port on Linux as
+ * long as neither listens; the second listen fails. On Windows the second
+ * bind fails.
  *
  * @param  sock    Socket to configure.
  * @param  enable  Non-zero to enable, 0 to disable.
