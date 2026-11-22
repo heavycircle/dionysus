@@ -11,6 +11,9 @@
 
 typedef int dino_socklen_t;
 
+// SIO_UDP_CONNRESET from mstcpip.h, which not every MinGW ships.
+#define DINO__SIO_UDP_CONNRESET _WSAIOW(IOC_VENDOR, 12)
+
 #ifndef WSA_FLAG_NO_HANDLE_INHERIT
 #define WSA_FLAG_NO_HANDLE_INHERIT 0x80
 #endif
@@ -124,6 +127,16 @@ dino_socket_t dino_socket_create(
         closesocket(s);
         return DINO_INVALID_SOCKET;
     }
+    // Windows reports an ICMP port-unreachable for an earlier datagram as
+    // WSAECONNRESET from the next receive on an unconnected UDP socket, so a
+    // server would fail whenever one client went away. Linux reports it only
+    // on connected ones; SIO_UDP_CONNRESET off makes Windows agree.
+    if (os_type == SOCK_DGRAM)
+    {
+        BOOL  report = FALSE;
+        DWORD bytes;
+        WSAIoctl(s, DINO__SIO_UDP_CONNRESET, &report, sizeof(report), NULL, 0, &bytes, NULL, NULL);
+    }
 
     return (dino_socket_t)s;
 }
@@ -167,6 +180,41 @@ static int dino_sockaddr(
         return 0;
     }
     return -1;
+}
+
+// The reverse of dino_sockaddr: the numeric form it accepts back.
+static int dino_sockaddr_format(const struct sockaddr_storage *addr, dino_socket_addr_t *out)
+{
+    memset(out, 0, sizeof(*out));
+    const void *raw;
+    if (addr->ss_family == AF_INET)
+    {
+        const struct sockaddr_in *v4 = (const struct sockaddr_in *)addr;
+        raw                          = &v4->sin_addr;
+        out->port                    = ntohs(v4->sin_port);
+    }
+    else if (addr->ss_family == AF_INET6)
+    {
+        const struct sockaddr_in6 *v6 = (const struct sockaddr_in6 *)addr;
+        raw                           = &v6->sin6_addr;
+        out->port                     = ntohs(v6->sin6_port);
+    }
+    else
+    {
+        return dino__fail(DINO_ENOTSUP);
+    }
+    return inet_ntop(addr->ss_family, raw, out->ip, sizeof(out->ip)) ? 0 : dino__fail_os();
+}
+
+// A datagram larger than the buffer fails with WSAEMSGSIZE after filling it;
+// Linux returns it cut to fit, which is what the SDK promises.
+static int received_or_fail(int received, size_t len)
+{
+    if (received != SOCKET_ERROR)
+        return received;
+    if (WSAGetLastError() == WSAEMSGSIZE)
+        return dino__clamp_len(len);
+    return dino__fail_os();
 }
 
 int dino_socket_bind(dino_socket_t sock, const char *ip, int port)
@@ -244,7 +292,56 @@ int dino_socket_recv(dino_socket_t sock, void *buf, size_t len)
     if (len > 0 && !buf)
         return dino__fail(DINO_EINVAL);
     int received = recv((SOCKET)sock, (char *)buf, dino__clamp_len(len), 0);
-    return (received == SOCKET_ERROR) ? dino__fail_os() : received;
+    return received_or_fail(received, len);
+}
+
+int dino_socket_sendto(dino_socket_t sock, const void *buf, size_t len, const char *ip, int port)
+{
+    struct sockaddr_storage addr;
+    dino_socklen_t          addr_len;
+    if ((len > 0 && !buf) || dino_sockaddr(&addr, &addr_len, ip, port) != 0)
+        return dino__fail(DINO_EINVAL);
+    int sent = sendto((SOCKET)sock, (const char *)buf, dino__clamp_len(len), 0,
+        (struct sockaddr *)&addr, addr_len);
+    return (sent == SOCKET_ERROR) ? dino__fail_os() : sent;
+}
+
+int dino_socket_recvfrom(dino_socket_t sock, void *buf, size_t len, dino_socket_addr_t *from)
+{
+    if (len > 0 && !buf)
+        return dino__fail(DINO_EINVAL);
+    struct sockaddr_storage addr;
+    dino_socklen_t          addr_len = sizeof(addr);
+    int                     received = recvfrom(
+        (SOCKET)sock, (char *)buf, dino__clamp_len(len), 0, (struct sockaddr *)&addr, &addr_len);
+    received = received_or_fail(received, len);
+    if (received < 0)
+        return -1;
+    if (from && dino_sockaddr_format(&addr, from) != 0)
+        return -1;
+    return received;
+}
+
+int dino_socket_local_addr(dino_socket_t sock, dino_socket_addr_t *addr)
+{
+    if (!addr)
+        return dino__fail(DINO_EINVAL);
+    struct sockaddr_storage raw;
+    dino_socklen_t          len = sizeof(raw);
+    if (getsockname((SOCKET)sock, (struct sockaddr *)&raw, &len) == SOCKET_ERROR)
+        return dino__fail_os();
+    return dino_sockaddr_format(&raw, addr);
+}
+
+int dino_socket_peer_addr(dino_socket_t sock, dino_socket_addr_t *addr)
+{
+    if (!addr)
+        return dino__fail(DINO_EINVAL);
+    struct sockaddr_storage raw;
+    dino_socklen_t          len = sizeof(raw);
+    if (getpeername((SOCKET)sock, (struct sockaddr *)&raw, &len) == SOCKET_ERROR)
+        return dino__fail_os();
+    return dino_sockaddr_format(&raw, addr);
 }
 
 int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, size_t len)

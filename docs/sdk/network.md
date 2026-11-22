@@ -69,6 +69,10 @@ int main(void)
 | `dino_socket_connect(sock, ip, port)`                | Connect to a remote address.                                                                                                                                                                 | `0`, `-1` on failure                                    |
 | `dino_socket_send(sock, buf, len)`                   | Send up to `len` bytes. Never raises `SIGPIPE`.                                                                                                                                              | bytes sent, `-1` on error                               |
 | `dino_socket_recv(sock, buf, len)`                   | Receive up to `len` bytes.                                                                                                                                                                   | bytes received, `0` when the peer closed, `-1` on error |
+| `dino_socket_sendto(sock, buf, len, ip, port)`       | Send one datagram to `ip` and `port` from an unconnected UDP socket.                                                                                                                         |
+| `dino_socket_recvfrom(sock, buf, len, &from)`        | Receive one datagram and who sent it (`from` may be `NULL`). A datagram larger than `buf` is cut to fit.                                                                                     |
+| `dino_socket_local_addr(sock, &addr)`                | The address and port the socket is bound to: the port `bind` picked for port `0`.                                                                                                            |
+| `dino_socket_peer_addr(sock, &addr)`                 | The other end of a connected socket, such as an accepted client.                                                                                                                             |
 | `dino_socket_shutdown(sock, how)`                    | Stop reading (`DINO_SHUT_RD`), writing (`DINO_SHUT_WR`) or both (`DINO_SHUT_RDWR`).                                                                                                          | `0`, `-1`                                               |
 | `dino_socket_set_v6only(sock, enable)`               | IPv6 sockets only: `0` makes one dual-stack, so bound to `"::"` it also accepts IPv4 peers. They start v6-only.                                                                              | `0`, `-1`                                               |
 | `dino_socket_set_reuseaddr(sock, enable)`            | So a server can rebind its port right after restarting (`SO_REUSEADDR` on Linux; Windows allows it already, and its `SO_REUSEADDR` would let another socket take the port, so it isn't set). | `0`, `-1`                                               |
@@ -88,7 +92,24 @@ int main(void)
   accepts IPv4 peers (shown as `::ffff:a.b.c.d`). Linux and Windows default differently; the SDK
   sets it either way.
 - **Ports** are plain integers in host byte order, `0` to `65535`; anything else fails with `-1`.
-  Bind to port `0` for any free port.
+  Bind to port `0` for any free port, and read back which with `dino_socket_local_addr`.
+- **Reported addresses** come back as a `dino_socket_addr_t`: `ip`, the numeric form, and `port`. Both go straight back into `bind`, `connect` or `sendto`.
+
+## UDP
+
+A UDP server binds, then answers each datagram from the address `recvfrom` reports:
+
+```c
+dino_socket_addr_t from;
+char               buf[512];
+int                n = dino_socket_recvfrom(sock, buf, sizeof buf, &from);
+if (n >= 0)
+    dino_socket_sendto(sock, buf, (size_t)n, from.ip, from.port);
+```
+
+- **One datagram per call.** `recvfrom` and `recv` return a single datagram; one larger than the buffer is cut to fit and the rest is lost, on both platforms.
+- **Connected UDP** also works: after `dino_socket_connect`, `send` and `recv` talk to that one peer only.
+- **A client that went away** doesn't break the server. Windows would report the ICMP "port unreachable" for an earlier datagram as an error from the next receive; the SDK turns that off, so it behaves as Linux does.
 
 ## Pitfalls
 

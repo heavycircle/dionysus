@@ -159,6 +159,72 @@ int dino_socket_send(dino_socket_t sock, const void *buf, size_t len);
  */
 int dino_socket_recv(dino_socket_t sock, void *buf, size_t len);
 
+/** Room for any address dino_socket_addr_t holds, with its terminating NUL. */
+#define DINO_IP_STRLEN 64
+
+/**
+ * An address and port, as the functions below report them: ip is the
+ * numeric form ("127.0.0.1", "::1"), which dino_socket_bind,
+ * dino_socket_connect and dino_socket_sendto take back unchanged.
+ */
+typedef struct
+{
+    char ip[DINO_IP_STRLEN];
+    int  port;
+} dino_socket_addr_t;
+
+/**
+ * Wrapper for sendto(2): send one datagram to ip and port, from an unconnected
+ * UDP socket, without connecting it.
+ *
+ * @param  sock     Socket to send from.
+ * @param  buf      The datagram.
+ * @param  len      Number of bytes in buf. A datagram larger than the
+ *                  protocol allows fails.
+ * @param  ip       IPv4 or IPv6 address literal, matching the socket's domain.
+ * @param  port     Port to send to, 0 to 65535.
+ * @return Number of bytes sent, or -1 if an error occurred, if ip is not a
+ *         valid address or if port is out of range.
+ */
+int dino_socket_sendto(dino_socket_t sock, const void *buf, size_t len, const char *ip, int port);
+
+/**
+ * Wrapper for recvfrom(2): receive one datagram and who sent it, to answer
+ * with dino_socket_sendto(sock, ..., from->ip, from->port).
+ *
+ * A datagram larger than buf is cut to fit and the rest discarded, on every
+ * platform (Windows would otherwise fail the call).
+ *
+ * @param  sock     Socket to receive on.
+ * @param  buf      Buffer for the datagram.
+ * @param  len      Size of buf. One call receives at most INT_MAX bytes.
+ * @param  from     Set to the sender's address and port; may be NULL.
+ * @return Number of bytes received, or -1 if an error occurred. On a
+ *         non-blocking socket with nothing to read, -1 with dino_error() of
+ *         DINO_EAGAIN.
+ */
+int dino_socket_recvfrom(dino_socket_t sock, void *buf, size_t len, dino_socket_addr_t *from);
+
+/**
+ * Wrapper for getsockname(2): the address and port the socket is bound to,
+ * such as the port picked by dino_socket_bind(sock, ip, 0).
+ *
+ * @param  sock     A bound or connected socket.
+ * @param  addr     Set to its local address and port.
+ * @return 0 on success, -1 on failure.
+ */
+int dino_socket_local_addr(dino_socket_t sock, dino_socket_addr_t *addr);
+
+/**
+ * Wrapper for getpeername(2): the address and port of the other end of a
+ * connected socket, such as one from dino_socket_accept.
+ *
+ * @param  sock     A connected socket.
+ * @param  addr     Set to the peer's address and port.
+ * @return 0 on success, -1 on failure (DINO_ENOTCONN when not connected).
+ */
+int dino_socket_peer_addr(dino_socket_t sock, dino_socket_addr_t *addr);
+
 typedef enum
 {
     DINO_SHUT_RD   = 0,
