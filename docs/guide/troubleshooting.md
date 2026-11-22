@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with `dino doctor`: it checks every tool `dino` uses and says what's missing. Below are the
+Start with `dino doctor`: it checks the tools `dino` uses and says what's missing or the wrong version. Below are the
 messages you're most likely to meet, what they mean, and what to do.
 
 ## Setup

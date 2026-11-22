@@ -11,12 +11,16 @@ pub const usage =
     \\
     \\Check that the tools dino needs are installed and that every library
     \\in DINO_LIBRARY_PATH can be used. Exits non-zero if a required tool is
-    \\missing or a library entry is broken; emulators are optional and only
-    \\needed by `dino run` for foreign targets.
+    \\missing, doesn't run or has the wrong version, or a library entry is
+    \\broken. Emulators and valgrind are optional: `dino run` and `dino test`
+    \\need the first for foreign targets, `dino test --memcheck` the second.
     \\
 ;
 
 const min_cmake: std.SemanticVersion = .{ .major = 3, .minor = 20, .patch = 0 };
+/// The Zig that built dino is the one it is developed and tested with
+/// (minimum_zig_version in build.zig.zon).
+const tested_zig = builtin.zig_version;
 
 pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     for (raw) |arg| {
@@ -30,16 +34,32 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
 
     ctx.print("Required:\n", .{});
     if (ctx.findProgram("zig")) |zig| {
-        report(ctx, true, "zig", ctx.sprint("{s} ({s})", .{ firstLine(try versionOf(ctx, &.{ zig, "version" })), zig }));
+        if (versionOf(ctx, &.{ zig, "version" })) |version| {
+            const line = firstLine(version);
+            const ok = zigVersionOk(line);
+            report(ctx, ok, "zig", if (ok)
+                ctx.sprint("{s} ({s})", .{ line, zig })
+            else
+                ctx.sprint("{s} ({s}); dino needs Zig {d}.{d}", .{ line, zig, tested_zig.major, tested_zig.minor }));
+            if (!ok) problems += 1;
+        } else {
+            report(ctx, false, "zig", ctx.sprint("{s} is there, but `zig version` failed", .{zig}));
+            problems += 1;
+        }
     } else {
         report(ctx, false, "zig", "not found; download from https://ziglang.org/download/");
         problems += 1;
     }
     if (ctx.findProgram("cmake")) |cmake| {
-        const line = firstLine(try versionOf(ctx, &.{ cmake, "--version" }));
-        const ok = cmakeVersionOk(line);
-        report(ctx, ok, "cmake", if (ok) ctx.sprint("{s} ({s})", .{ line, cmake }) else ctx.sprint("{s}; {d}.{d} or newer is required", .{ line, min_cmake.major, min_cmake.minor }));
-        if (!ok) problems += 1;
+        if (versionOf(ctx, &.{ cmake, "--version" })) |version| {
+            const line = firstLine(version);
+            const ok = cmakeVersionOk(line);
+            report(ctx, ok, "cmake", if (ok) ctx.sprint("{s} ({s})", .{ line, cmake }) else ctx.sprint("{s}; {d}.{d} or newer is required", .{ line, min_cmake.major, min_cmake.minor }));
+            if (!ok) problems += 1;
+        } else {
+            report(ctx, false, "cmake", ctx.sprint("{s} is there, but `cmake --version` failed", .{cmake}));
+            problems += 1;
+        }
     } else {
         report(ctx, false, "cmake", ctx.sprint("not found; install CMake {d}.{d} or newer", .{ min_cmake.major, min_cmake.minor }));
         problems += 1;
@@ -79,9 +99,24 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
                 report(ctx, true, t.name, p)
             else
                 report(ctx, false, t.name, ctx.sprint("{s} not found (qemu-user)", .{name})),
-            .wine => if (ctx.findProgram("wine")) |p| report(ctx, true, t.name, p) else report(ctx, false, t.name, "wine not found"),
+            // Whether this wine can run 32-bit programs can't be told from
+            // its files (a separate wine32, or a WoW64 build), so say that it
+            // matters rather than call win32 fine.
+            .wine => if (ctx.findProgram("wine")) |p|
+                report(ctx, true, t.name, if (t.arch == .x86) ctx.sprint("{s} (needs its 32-bit support, which isn't checked)", .{p}) else p)
+            else
+                report(ctx, false, t.name, "wine not found"),
             .unsupported => report(ctx, false, t.name, "cannot run on this host"),
         }
+    }
+
+    ctx.print("\nFor `dino test --memcheck` (optional):\n", .{});
+    if (targets.runnerFor(targets.memcheck) != .native) {
+        report(ctx, false, "valgrind", "needs an x86_64 Linux host");
+    } else if (ctx.findProgram("valgrind")) |p| {
+        report(ctx, true, "valgrind", p);
+    } else {
+        report(ctx, false, "valgrind", "not found");
     }
 
     ctx.print("\n", .{});
@@ -97,13 +132,43 @@ fn report(ctx: *Ctx, ok: bool, name: []const u8, detail: []const u8) void {
     ctx.print("  [{s}] {s:<10} {s}\n", .{ if (ok) " ok " else "MISS", name, detail });
 }
 
-fn versionOf(ctx: *Ctx, argv: []const []const u8) Ctx.Error![]const u8 {
-    const result = try ctx.capture(argv);
+/// What the tool prints for its version, or null when it can't be started or
+/// fails: a tool that is there but doesn't run is a finding like any other,
+/// and the rest of the report still matters.
+fn versionOf(ctx: *Ctx, argv: []const []const u8) ?[]const u8 {
+    const result = std.process.run(ctx.arena, ctx.io, .{
+        .argv = argv,
+        .stdout_limit = .limited(1 << 20),
+        .stderr_limit = .limited(1 << 20),
+    }) catch return null;
+    if (Ctx.exitCode(result.term) != 0) return null;
     return std.mem.trim(u8, result.stdout, " \r\n");
 }
 
 fn firstLine(text: []const u8) []const u8 {
     return text[0 .. std.mem.indexOfScalar(u8, text, '\n') orelse text.len];
+}
+
+/// `zig version` prints "0.17.1", or "0.18.0-dev.123+abcdef" for a development
+/// build. Zig changes its language and build system between minor versions,
+/// so another minor version is not expected to work; a patch release is.
+fn zigVersionOk(line: []const u8) bool {
+    const v = std.SemanticVersion.parse(line) catch return false;
+    return v.major == tested_zig.major and v.minor == tested_zig.minor and v.pre == null;
+}
+
+test zigVersionOk {
+    var buffer: [32]u8 = undefined;
+    const same = try std.fmt.bufPrint(&buffer, "{d}.{d}.{d}", .{ tested_zig.major, tested_zig.minor, tested_zig.patch });
+    try std.testing.expect(zigVersionOk(same));
+    const patched = try std.fmt.bufPrint(&buffer, "{d}.{d}.{d}", .{ tested_zig.major, tested_zig.minor, tested_zig.patch + 1 });
+    try std.testing.expect(zigVersionOk(patched));
+    const next = try std.fmt.bufPrint(&buffer, "{d}.{d}.0", .{ tested_zig.major, tested_zig.minor + 1 });
+    try std.testing.expect(!zigVersionOk(next));
+    const dev = try std.fmt.bufPrint(&buffer, "{d}.{d}.0-dev.12+abcdef123", .{ tested_zig.major, tested_zig.minor });
+    try std.testing.expect(!zigVersionOk(dev));
+    try std.testing.expect(!zigVersionOk(""));
+    try std.testing.expect(!zigVersionOk("zig: command failed"));
 }
 
 /// Parses "cmake version 3.31.6" (and vendor suffixes like "-dirty").
