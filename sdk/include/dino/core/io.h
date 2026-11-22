@@ -32,7 +32,7 @@ typedef struct
  * The internal layout differs between Linux (128-byte bitmask) and
  * Windows ({count, SOCKET[64]}), so the type must remain opaque.
  */
-typedef uintptr_t dino_fd_set_t;
+typedef struct dino_fd_set *dino_fd_set_t;
 
 #define DINO_INVALID_FD_SET ((dino_fd_set_t)0)
 

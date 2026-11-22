@@ -356,9 +356,7 @@ where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same w
 
 ### Design rules
 
-- **Handles are opaque.** Each resource type is a `typedef uintptr_t dino_<thing>_t` so the same
-  header works on both platforms, with a `DINO_INVALID_<THING>` sentinel (for example
-  `DINO_INVALID_SOCKET`, `DINO_INVALID_MUTEX`).
+- **Handles are opaque, and each type is its own C type**, so passing one where another is expected doesn't compile (`tests/headers.sh` checks it). A handle is a pointer to an undefined struct, `typedef struct dino_<thing> *dino_<thing>_t`, with `NULL` as its `DINO_INVALID_<THING>`. Where a platform has no struct behind it (a POSIX pipe's descriptor, a pid), the value is carried in the pointer type through `uintptr_t` and never dereferenced. The one exception is `dino_socket_t`, an integer holding the OS socket so that it can be passed to platform calls, with `DINO_INVALID_SOCKET` as all bits set.
 - **Names:** `dino_<module>_<verb>` for functions and `dino_<module>_<thing>_t` for types
   (`dino_socket_send`, `dino_process_spawn_opts_t`), `DINO_` for macros and constants. Nothing
   outside these prefixes; `tests/headers.sh` checks it.

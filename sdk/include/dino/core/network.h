@@ -8,6 +8,12 @@ extern "C"
 {
 #endif
 
+/**
+ * A socket: the operating system's own, the descriptor on Linux and the
+ * SOCKET on Windows, so it can be passed to platform calls. Unlike the other
+ * handles it is an integer; they are pointer types, so none of them can be
+ * passed where a socket is expected.
+ */
 typedef uintptr_t dino_socket_t;
 
 #define DINO_INVALID_SOCKET ((dino_socket_t)(~0))

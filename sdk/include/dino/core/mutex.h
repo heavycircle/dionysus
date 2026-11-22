@@ -8,7 +8,7 @@ extern "C"
 {
 #endif
 
-typedef uintptr_t dino_mutex_t;
+typedef struct dino_mutex *dino_mutex_t;
 
 #define DINO_INVALID_MUTEX ((dino_mutex_t)0)
 
@@ -57,7 +57,7 @@ int dino_mutex_trylock(dino_mutex_t mutex);
 
 /* ---- Condition variables ---- */
 
-typedef uintptr_t dino_cond_t;
+typedef struct dino_cond *dino_cond_t;
 
 #define DINO_INVALID_COND ((dino_cond_t)0)
 

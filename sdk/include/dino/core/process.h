@@ -11,7 +11,7 @@ extern "C"
 {
 #endif
 
-typedef uintptr_t dino_process_t;
+typedef struct dino_process *dino_process_t;
 
 #define DINO_INVALID_PROCESS ((dino_process_t)0)
 

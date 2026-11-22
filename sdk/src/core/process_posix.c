@@ -20,6 +20,11 @@
 
 extern char **environ;
 
+// A process handle is its pid, carried in the pointer type: nothing is
+// allocated and it is never dereferenced. A pid is never 0.
+#define TO_HANDLE(pid)  ((dino_process_t)(uintptr_t)(pid))
+#define TO_PID(process) ((pid_t)(uintptr_t)(process))
+
 static int decode_status(int status)
 {
     return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
@@ -132,7 +137,7 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
         &pid, argv[0], &actions, &attr, argv, opts && opts->env ? opts->env : environ);
     if (rc == 0)
     {
-        *process = (dino_process_t)pid;
+        *process = TO_HANDLE(pid);
         started  = 1;
     }
 
@@ -157,7 +162,7 @@ int dino_process_wait(dino_process_t process, int *exit_code)
     if (process == DINO_INVALID_PROCESS)
         return dino__fail(DINO_EINVAL);
     int status;
-    while (waitpid((pid_t)process, &status, 0) < 0)
+    while (waitpid(TO_PID(process), &status, 0) < 0)
         if (errno != EINTR)
             return dino__fail_os();
     if (exit_code)
@@ -169,19 +174,19 @@ int dino_process_kill(dino_process_t process)
 {
     if (process == DINO_INVALID_PROCESS)
         return dino__fail(DINO_EINVAL);
-    return kill((pid_t)process, SIGKILL) == 0 ? 0 : dino__fail_os();
+    return kill(TO_PID(process), SIGKILL) == 0 ? 0 : dino__fail_os();
 }
 
 uint64_t dino_process_id(dino_process_t process)
 {
-    return (uint64_t)process;
+    return (uint64_t)TO_PID(process);
 }
 
 int dino__pidfd_open(dino_process_t process)
 {
 #ifdef SYS_pidfd_open
     // The kernel always sets close-on-exec on a pidfd.
-    return (int)syscall(SYS_pidfd_open, (pid_t)process, 0);
+    return (int)syscall(SYS_pidfd_open, TO_PID(process), 0);
 #else
     (void)process;
     errno = ENOSYS;
@@ -191,7 +196,7 @@ int dino__pidfd_open(dino_process_t process)
 
 intptr_t dino__process_to_os(dino_process_t process)
 {
-    return (intptr_t)process;
+    return (intptr_t)TO_PID(process);
 }
 
 // 1 once the child has exited, 0 on timeout, -1 if pidfds aren't available.
@@ -231,8 +236,8 @@ int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_
     for (;;)
     {
         int   status;
-        pid_t rc = waitpid((pid_t)process, &status, WNOHANG);
-        if (rc == (pid_t)process)
+        pid_t rc = waitpid(TO_PID(process), &status, WNOHANG);
+        if (rc == TO_PID(process))
         {
             if (exit_code)
                 *exit_code = decode_status(status);

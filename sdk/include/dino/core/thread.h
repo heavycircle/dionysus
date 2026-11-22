@@ -8,7 +8,7 @@ extern "C"
 {
 #endif
 
-typedef uintptr_t dino_thread_t;
+typedef struct dino_thread *dino_thread_t;
 
 #define DINO_INVALID_THREAD ((dino_thread_t)0)
 

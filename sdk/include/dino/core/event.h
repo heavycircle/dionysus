@@ -27,12 +27,12 @@ extern "C"
  * Every function may be called from any thread, including while another thread
  * is blocked in dino_event_wait, except dino_event_loop_destroy.
  */
-typedef uintptr_t dino_event_loop_t;
+typedef struct dino_event_loop *dino_event_loop_t;
 
 #define DINO_INVALID_EVENT_LOOP ((dino_event_loop_t)0)
 
 /** A timer in a loop, from dino_event_timer_add. */
-typedef uintptr_t dino_event_timer_t;
+typedef struct dino_event_timer *dino_event_timer_t;
 
 #define DINO_INVALID_EVENT_TIMER ((dino_event_timer_t)0)
 

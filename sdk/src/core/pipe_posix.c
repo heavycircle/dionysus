@@ -16,9 +16,10 @@
 #include <unistd.h>
 
 // Handles are fd + 1, so fd 0 (possible when stdin was closed) isn't
-// DINO_INVALID_PIPE.
-#define TO_HANDLE(fd) ((dino_pipe_t)(fd) + 1)
-#define TO_FD(pipe)   ((int)((pipe) - 1))
+// DINO_INVALID_PIPE. The value only travels in the pointer type; nothing is
+// allocated and it is never dereferenced.
+#define TO_HANDLE(fd) ((dino_pipe_t)(uintptr_t)((fd) + 1))
+#define TO_FD(pipe)   ((int)((uintptr_t)(pipe) - 1))
 
 int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
 {
