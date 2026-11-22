@@ -91,6 +91,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         for (opts.targets) |t| try requireRunner(ctx, t);
     }
 
+    opts.run.tests = true;
     const results = try build.buildTargets(ctx, opts);
     const passed = ctx.arena.alloc(bool, results.len) catch @panic("OOM");
     var failed: usize = 0;

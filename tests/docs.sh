@@ -109,7 +109,9 @@ fi
 
 echo "programs (${#programs[@]}):"
 for target in "${targets[@]}"; do
-    if ! dino build "$target" -C "$proj" >"$work/build.log" 2>&1; then
+    # dino build leaves dino_test() programs out; dino_tests builds them.
+    if ! { dino build "$target" -C "$proj" && cmake --build "$proj/build/$target" --target dino_tests; } \
+        >"$work/build.log" 2>&1; then
         echo "  $target: build failed"
         grep -E "error|warning:" "$work/build.log" | sed "s#$proj/##; s/^/    /" | head -n 30
         failed=1

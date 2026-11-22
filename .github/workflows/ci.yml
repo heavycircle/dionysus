@@ -210,6 +210,9 @@ jobs:
           cp -r sdk/tests "$RUNNER_TEMP/tests"
           DINO_SDK_PATH=$PWD/sdk zig-out/bin/dino build win64 win32 -C "$RUNNER_TEMP/tests"
           for target in win64 win32; do
+              # dino build leaves the dino_test() executables out; dino test
+              # would also run them, which this runner can't.
+              cmake --build "$RUNNER_TEMP/tests/build/$target" --target dino_tests
               mkdir -p "$RUNNER_TEMP/windows/$target"
               cp "$RUNNER_TEMP/tests/build/$target"/test_*.exe "$RUNNER_TEMP/windows/$target/"
           done

@@ -14,7 +14,8 @@ pub const usage =
     \\
     \\Configure and build the CMake project in the current directory with the
     \\dino toolchain. Output goes to build/<target>/. With no target, builds for
-    \\the host.
+    \\the host. Test executables (dino_test()) are left out; `dino test`
+    \\builds them.
     \\
     \\Options:
     \\    --all               Build every known target (see `dino targets`)
@@ -145,7 +146,10 @@ pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
 
         result.executables = try cmake.executables(ctx, cfg);
         result.ok = true;
-        for (result.executables) |exe| ctx.print("    {s} ({s})\n", .{ exe.path, size(ctx, exe.path) });
+        for (result.executables) |exe| {
+            if (exe.is_test and !opts.run.tests) continue;
+            ctx.print("    {s} ({s})\n", .{ exe.path, size(ctx, exe.path) });
+        }
     }
     return results;
 }

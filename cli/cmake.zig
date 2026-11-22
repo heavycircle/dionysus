@@ -116,6 +116,9 @@ test cacheValue {
 pub const RunOptions = struct {
     verbose: bool = false,
     jobs: ?u32 = null,
+    /// Build the dino_test() executables too, which `all` leaves out
+    /// (cmake/Dino.cmake): `dino test` does, `dino build` and `dino run` don't.
+    tests: bool = false,
 };
 
 pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
@@ -176,6 +179,7 @@ pub fn build(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     const jobs = opts.jobs orelse @as(u32, @intCast(std.Thread.getCpuCount() catch 1));
     var argv: std.ArrayList([]const u8) = .empty;
     argv.appendSlice(ctx.arena, &.{ "cmake", "--build", cfg.build_dir, "--parallel", ctx.sprint("{d}", .{jobs}) }) catch @panic("OOM");
+    if (opts.tests) argv.appendSlice(ctx.arena, &.{ "--target", "all", tests_target }) catch @panic("OOM");
     if (opts.verbose) {
         argv.append(ctx.arena, "--verbose") catch @panic("OOM");
         ctx.print("$ {s}\n", .{commandLine(ctx, argv.items)});
@@ -221,6 +225,8 @@ const library_build_dir = "_dino_libs/";
 
 /// The FOLDER dino_test() puts test targets in (cmake/Dino.cmake).
 const test_folder = "dino_tests";
+/// The target that builds every dino_test() executable (cmake/Dino.cmake).
+const tests_target = "dino_tests";
 
 const parse_options: std.json.ParseOptions = .{ .ignore_unknown_fields = true };
 

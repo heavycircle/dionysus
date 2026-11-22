@@ -5,6 +5,7 @@
 # nothing but bash (Git Bash on a Windows runner) and the executables:
 #
 #   dino build win64 -C sdk/tests
+#   cmake --build sdk/tests/build/win64 --target dino_tests
 #   tests/windows.sh sdk/tests/build/win64
 #
 # Words after the directory are put in front of each executable, which is how
