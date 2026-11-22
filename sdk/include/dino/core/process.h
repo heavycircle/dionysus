@@ -18,6 +18,26 @@ typedef struct dino_process *dino_process_t;
 /** Exit code of a process ended by dino_process_kill, on every platform. */
 #define DINO_EXIT_KILLED 137
 
+/**
+ * How a process ended, the same way on every platform: signal says whether it
+ * exited or was ended by a signal or a crash, code is the number to pass on.
+ */
+typedef struct
+{
+    /** The exit code the program passed to exit() or returned from main().
+     *  When signal is set: 128 + signal on POSIX, as a shell reports it, and
+     *  the operating system's own code on Windows (an NTSTATUS such as
+     *  0xC0000005, negative as an int). DINO_EXIT_KILLED after
+     *  dino_process_kill, on both. */
+    int code;
+    /** 0 if the program exited. Otherwise what ended it, as the number
+     *  <signal.h> gives: on POSIX the signal; on Windows the signal matching
+     *  the crash (SIGSEGV for an access violation or a stack overflow, SIGILL,
+     *  SIGFPE, SIGINT for Ctrl-C, SIGABRT for any other crash). 9 (SIGKILL's
+     *  number) after dino_process_kill, on both. */
+    int signal;
+} dino_process_status_t;
+
 /** What a child's stdin, stdout or stderr is connected to. */
 typedef enum
 {
@@ -107,13 +127,12 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
  * although the child ran. The child's process ID is then free to be reused,
  * so don't call dino_process_kill on the handle after that.
  *
- * @param  process    Handle from dino_process_spawn.
- * @param  exit_code  Receives how it ended: its exit code; 128 + the signal
- *                    number if a signal ended it (POSIX); DINO_EXIT_KILLED
- *                    after dino_process_kill. May be NULL.
+ * @param  process  Handle from dino_process_spawn.
+ * @param  status   Receives how it ended (see dino_process_status_t). May be
+ *                  NULL.
  * @return 0 on success, -1 on error.
  */
-int dino_process_wait(dino_process_t process, int *exit_code);
+int dino_process_wait(dino_process_t process, dino_process_status_t *status);
 
 /**
  * End a process immediately (SIGKILL / TerminateProcess). It can't clean up.
@@ -146,10 +165,11 @@ uint64_t dino_process_id(dino_process_t process);
  *
  * @param  process     Handle from dino_process_spawn.
  * @param  timeout_ms  Milliseconds to wait; -1 to wait forever; 0 to check.
- * @param  exit_code   As for dino_process_wait; may be NULL.
+ * @param  status      As for dino_process_wait; may be NULL.
  * @return 0 when it ended, DINO_TIMEOUT when the time ran out, -1 on error.
  */
-int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_code);
+int dino_process_wait_timeout(
+    dino_process_t process, int timeout_ms, dino_process_status_t *status);
 
 /* ---- Run to completion ---- */
 
@@ -174,7 +194,8 @@ typedef struct
     size_t out_len;
     char  *err; /**< Everything written to stderr, NUL-terminated. */
     size_t err_len;
-    int    exit_code; /**< As from dino_process_wait; DINO_EXIT_KILLED if killed. */
+    /** As from dino_process_wait; { -1, 0 } if it couldn't be waited for. */
+    dino_process_status_t status;
 } dino_process_result_t;
 
 /**

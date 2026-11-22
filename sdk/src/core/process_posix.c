@@ -25,9 +25,19 @@ extern char **environ;
 #define TO_HANDLE(pid)  ((dino_process_t)(uintptr_t)(pid))
 #define TO_PID(process) ((pid_t)(uintptr_t)(process))
 
-static int decode_status(int status)
+static dino_process_status_t decode_status(int status)
 {
-    return WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
+    dino_process_status_t s = { 0, 0 };
+    if (WIFEXITED(status))
+    {
+        s.code = WEXITSTATUS(status);
+    }
+    else
+    {
+        s.signal = WTERMSIG(status);
+        s.code   = 128 + s.signal;
+    }
+    return s;
 }
 
 // Windows passes a child only the handles it lists. Here every descriptor
@@ -160,7 +170,7 @@ done:
     return started ? 0 : dino__fail(reason);
 }
 
-int dino_process_wait(dino_process_t process, int *exit_code)
+int dino_process_wait(dino_process_t process, dino_process_status_t *out)
 {
     if (process == DINO_INVALID_PROCESS)
         return dino__fail(DINO_EINVAL);
@@ -168,8 +178,8 @@ int dino_process_wait(dino_process_t process, int *exit_code)
     while (waitpid(TO_PID(process), &status, 0) < 0)
         if (errno != EINTR)
             return dino__fail_os();
-    if (exit_code)
-        *exit_code = decode_status(status);
+    if (out)
+        *out = decode_status(status);
     return 0;
 }
 
@@ -220,16 +230,16 @@ static int wait_pidfd(dino_process_t process, int timeout_ms)
     return rc < 0 ? -1 : rc > 0;
 }
 
-int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_code)
+int dino_process_wait_timeout(dino_process_t process, int timeout_ms, dino_process_status_t *out)
 {
     if (process == DINO_INVALID_PROCESS)
         return dino__fail(DINO_EINVAL);
     if (timeout_ms < 0)
-        return dino_process_wait(process, exit_code);
+        return dino_process_wait(process, out);
 
     int exited = wait_pidfd(process, timeout_ms);
     if (exited == 1)
-        return dino_process_wait(process, exit_code);
+        return dino_process_wait(process, out);
     if (exited == 0)
         return DINO_TIMEOUT;
 
@@ -242,8 +252,8 @@ int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_
         pid_t rc = waitpid(TO_PID(process), &status, WNOHANG);
         if (rc == TO_PID(process))
         {
-            if (exit_code)
-                *exit_code = decode_status(status);
+            if (out)
+                *out = decode_status(status);
             return 0;
         }
         if (rc < 0 && errno != EINTR)

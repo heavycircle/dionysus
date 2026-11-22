@@ -242,9 +242,9 @@ UTEST(error, processes)
         // Under valgrind (dino test --memcheck): glibc reports a failed exec
         // through CLONE_VFORK, which valgrind turns into a fork, so the failure
         // arrives as a child exiting 127, as a shell would report it.
-        int code = -1;
-        ASSERT_EQ(0, dino_process_wait(process, &code));
-        EXPECT_EQ(127, code);
+        dino_process_status_t status = { -1, 0 };
+        ASSERT_EQ(0, dino_process_wait(process, &status));
+        EXPECT_EQ(127, status.code);
     }
     else
     {

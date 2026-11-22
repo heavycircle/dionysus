@@ -8,8 +8,7 @@ that matter are handled for you:
 
 - **Arguments** reach the child exactly as given. Windows has no argument array, only one command
   line, so the SDK quotes each argument by the rules the child's C runtime uses to split it again. The exception is a Windows program that reads its command line itself; `cmd.exe` is one, as described under the function table below.
-- **Exit codes** come back the same way: the code the program exited with, `128 + signal` if a signal
-  ended it (Linux), and `DINO_EXIT_KILLED` (137) after `dino_process_kill` on both platforms.
+- **How it ended** comes back the same way, as a `dino_process_status_t`: `signal` is `0` when the program exited and `code` is its exit code. A signal on Linux, or a crash on Windows, sets `signal` to the matching `<signal.h>` number (`SIGSEGV` for an access violation, ...), so `if (status.signal)` is a portable crash test. After `dino_process_kill`, both platforms report `signal` `9` and `code` `DINO_EXIT_KILLED` (137).
 - **Inheritance:** the child gets only its stdin, stdout and stderr, never the parent's other files,
   sockets or pipes. That includes descriptors you opened yourself without close-on-exec: on Linux
   the SDK closes them in the child by listing `/proc/self/fd`. Two gaps remain there: one another
@@ -40,11 +39,11 @@ int main(void)
     opts.timeout_ms = 10000; // killed if it takes longer
 
     int rc = dino_process_run(argv, &opts, &result);
-    printf("rc %d, exit code %d\n", rc, result.exit_code);
+    printf("rc %d, exit code %d\n", rc, result.status.code);
     printf("stdout: %s", result.out);
     printf("stderr: %s", result.err);
 
-    int ok = rc == 0 && result.exit_code == 3 && strncmp(result.out, "out", 3) == 0
+    int ok = rc == 0 && result.status.code == 3 && strncmp(result.out, "out", 3) == 0
         && strncmp(result.err, "err", 3) == 0;
     dino_process_result_free(&result);
     return ok ? 0 : 1;
@@ -62,13 +61,13 @@ everything it writes to stdout and stderr, and waits for it to exit.
   `timeout_ms` (`0`: no limit; otherwise it gives up after that long, killing the child if it's
   still running).
 - **Results:** `dino_process_result_t` has `out`/`out_len`, `err`/`err_len` (both NUL-terminated) and
-  `exit_code`.
+  `status`, how the child ended.
 - **Return value:** `0` when the child ran to the end, `DINO_TIMEOUT` when it was killed for taking
   too long (`result` still holds what it wrote first), or `-1` if it couldn't be started. Call
   `dino_process_result_free` in every case.
 - **Background processes:** a process the child started that keeps stdout, stderr or stdin open
   keeps `dino_process_run` waiting after the child exits. With a timeout it stops at the deadline
-  and returns `DINO_TIMEOUT`, with what was read so far and the child's own `exit_code`. Without
+  and returns `DINO_TIMEOUT`, with what was read so far and the child's own `status`. Without
   one it waits as long as they stay open, as a shell's `$(...)` does.
 
 ## Talking to a running program: `dino_process_spawn`
@@ -90,17 +89,17 @@ while ((n = dino_pipe_read(pipes.out, buf, sizeof(buf))) > 0)
     fwrite(buf, 1, n, stdout);
 dino_pipe_close(pipes.out);
 
-int code;
-dino_process_wait(child, &code);
+dino_process_status_t status;
+dino_process_wait(child, &status);
 ```
 
-| Function                                          | Does                                                                                                   | Returns                             |
-| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------- |
-| `dino_process_spawn(&p, argv, opts, &pipes)`      | Start `argv[0]` with arguments. `opts` and `pipes` may be `NULL`.                                      | `0`, `-1` if it couldn't be started |
-| `dino_process_wait(p, &code)`                     | Wait for it to end, store how it ended, release it.                                                    | `0`, `-1`                           |
-| `dino_process_wait_timeout(p, timeout_ms, &code)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid. | `0`, `DINO_TIMEOUT`, `-1`           |
-| `dino_process_kill(p)`                            | End it now (`SIGKILL` / `TerminateProcess`); `0` if it already exited. Still wait for it afterwards.   | `0`, `-1`                           |
-| `dino_process_id(p)`                              | Its OS process ID, for logs.                                                                           | the ID                              |
+| Function                                            | Does                                                                                                   | Returns                             |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------- |
+| `dino_process_spawn(&p, argv, opts, &pipes)`        | Start `argv[0]` with arguments. `opts` and `pipes` may be `NULL`.                                      | `0`, `-1` if it couldn't be started |
+| `dino_process_wait(p, &status)`                     | Wait for it to end, store how it ended, release it.                                                    | `0`, `-1`                           |
+| `dino_process_wait_timeout(p, timeout_ms, &status)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid. | `0`, `DINO_TIMEOUT`, `-1`           |
+| `dino_process_kill(p)`                              | End it now (`SIGKILL` / `TerminateProcess`); `0` if it already exited. Still wait for it afterwards.   | `0`, `-1`                           |
+| `dino_process_id(p)`                                | Its OS process ID, for logs.                                                                           | the ID                              |
 
 - **`argv[0]`:** a path, or a bare name looked up on `PATH`. Windows also adds `.exe` and looks in a
   few system directories first. A relative path such as `./tool` or `bin/tool` is found from `cwd`

@@ -128,7 +128,7 @@ int dino_process_run(
     if (!result)
         return dino__fail(DINO_EINVAL);
     memset(result, 0, sizeof(*result));
-    result->exit_code = -1;
+    result->status.code = -1;
 
     dino_process_spawn_opts_t spawn = { 0 };
     spawn.cwd                       = opts ? opts->cwd : NULL;
@@ -163,11 +163,11 @@ int dino_process_run(
         dino_process_kill(process);
         status = -1;
     }
-    int rc = dino_process_wait_timeout(process, timeout, &result->exit_code);
+    int rc = dino_process_wait_timeout(process, timeout, &result->status);
     if (rc == DINO_TIMEOUT)
     {
         dino_process_kill(process);
-        rc     = dino_process_wait(process, &result->exit_code);
+        rc     = dino_process_wait(process, &result->status);
         status = status ? status : DINO_TIMEOUT;
     }
     if (rc != 0)
