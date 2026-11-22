@@ -15,6 +15,8 @@ to know where the SDK is:
 Everything else is plain CMake, so any CMake guide applies. This page covers what most projects
 need.
 
+`dino_core`, `dino_util` and `dino_testing` are names to link against and nothing more. Don't set properties on them (`target_compile_options(dino_core ...)`) or rely on their being built inside your project's build directory: a later dino may build them elsewhere.
+
 ## Sources
 
 The `dino init` template builds every `.c` file under `src/`:
@@ -130,12 +132,9 @@ In C, `_WIN32` is defined for both Windows targets and `__linux__` for the Linux
 
 ## Compiler flags and the SDK
 
-The SDK is compiled as part of the project, with the project's `CFLAGS` and CMake settings.
+The SDK is built with dino's own flags. A project's `CFLAGS`, C standard and other CMake settings apply to the project's code and to the SDK's headers it includes; whether they also reach the SDK's own sources is not something a project may rely on.
 
-- **Language standard:** any C standard works, strict ISO C included (`CFLAGS=-std=c11`, or
-  `CMAKE_C_STANDARD 11` with `CMAKE_C_EXTENSIONS OFF`). The SDK asks for the POSIX declarations it
-  needs itself. Set before `project()`, `CMAKE_C_STANDARD` applies to the SDK too; set after it,
-  only to the project's own targets, since `project()` is where dino adds the SDK.
+- **Language standard:** any C standard works for a project, strict ISO C included (`CFLAGS=-std=c11`, or `CMAKE_C_STANDARD 11` with `CMAKE_C_EXTENSIONS OFF`): the SDK's headers are checked to compile under it.
 - **Warnings:** the project's warning flags don't apply to the SDK's own sources, which build with
   `-Wall -Wextra` of their own and never fail the build, so `CFLAGS="-Wconversion -Werror"` checks
   the project's code without tripping over the SDK's. The SDK's headers are compiled with the

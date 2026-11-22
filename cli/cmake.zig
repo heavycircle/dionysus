@@ -23,6 +23,9 @@ pub const Config = struct {
     source_dir: []const u8,
     build_dir: []const u8,
     sdk: []const u8,
+    /// What `zig version` printed. Objects built by another zig are not
+    /// reused: a change starts the target over, as a new SDK does.
+    zig: []const u8 = "",
     target: Target,
     mode: Mode,
     /// Absolute paths of the DINO_LIBRARY_PATH libraries.
@@ -77,19 +80,29 @@ pub fn stamp(ctx: *Ctx, cfg: Config) []const u8 {
     return ctx.sprint("{x:0>16}\n", .{hasher.final()});
 }
 
-/// The stamp file holds the stamp, then the SDK the build dir was configured
-/// against. It is empty while a configure runs, and stays empty if it fails.
-const Recorded = struct { stamp: []const u8, sdk: []const u8 };
+/// The stamp file holds the stamp, then the SDK and the zig version the build
+/// dir was configured with. It is empty while a configure runs, and stays empty
+/// if it fails.
+const Recorded = struct { stamp: []const u8, sdk: []const u8, zig: []const u8 };
 
 fn recorded(ctx: *Ctx, cfg: Config) Recorded {
     const bytes = Io.Dir.cwd().readFileAlloc(ctx.io, ctx.join(&.{ cfg.build_dir, stamp_file }), ctx.arena, .limited(64 << 10)) catch "";
     var lines = std.mem.splitScalar(u8, bytes, '\n');
     const first = lines.first();
-    return .{ .stamp = first, .sdk = lines.next() orelse "" };
+    const sdk = lines.next() orelse "";
+    return .{ .stamp = first, .sdk = sdk, .zig = lines.next() orelse "" };
+}
+
+/// Configured with another SDK or another zig: CMake keeps the compiler it
+/// found and the objects it built, so only starting over takes the new one.
+fn toolchainChanged(ctx: *Ctx, cfg: Config) bool {
+    const r = recorded(ctx, cfg);
+    return !std.mem.eql(u8, r.sdk, cfg.sdk) or !std.mem.eql(u8, r.zig, cfg.zig);
 }
 
 pub fn needsConfigure(ctx: *Ctx, cfg: Config) bool {
     if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }))) return true;
+    if (toolchainChanged(ctx, cfg)) return true;
     const s = stamp(ctx, cfg);
     return !std.mem.eql(u8, recorded(ctx, cfg).stamp, s[0 .. s.len - 1]);
 }
@@ -134,7 +147,7 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     // made with another SDK keeps its compiler and flags. A failed configure
     // may have left the cache half-written, so it starts over too.
     const stamp_path = ctx.join(&.{ cfg.build_dir, stamp_file });
-    if (!std.mem.eql(u8, recorded(ctx, cfg).sdk, cfg.sdk)) {
+    if (toolchainChanged(ctx, cfg)) {
         cwd.deleteFile(ctx.io, ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" })) catch |e| switch (e) {
             error.FileNotFound => {},
             else => return ctx.fail("removing the CMake cache in {s}: {t}", .{ cfg.build_dir, e }),
@@ -161,7 +174,7 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     if (opts.verbose) ctx.print("$ {s}\n", .{commandLine(ctx, argv.items)});
     if (try ctx.exec(argv.items, .{}) != 0) return false;
 
-    cwd.writeFile(ctx.io, .{ .sub_path = stamp_path, .data = ctx.sprint("{s}{s}\n", .{ stamp(ctx, cfg), cfg.sdk }) }) catch |e|
+    cwd.writeFile(ctx.io, .{ .sub_path = stamp_path, .data = ctx.sprint("{s}{s}\n{s}\n", .{ stamp(ctx, cfg), cfg.sdk, cfg.zig }) }) catch |e|
         return ctx.fail("writing {s}: {t}", .{ stamp_path, e });
     return true;
 }
