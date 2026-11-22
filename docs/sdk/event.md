@@ -113,14 +113,13 @@ and a client each with their own loop, holding 1000 connections at once.
 | `DINO_EVENT_READ`    | data to read, a connection to accept, or end of stream        | the item's    |
 | `DINO_EVENT_WRITE`   | a send won't block, or a non-blocking `connect` finished      | the item's    |
 | `DINO_EVENT_ERROR`   | an error on the socket; always reported                       | the item's    |
-| `DINO_EVENT_HANGUP`  | the peer closed or shut down; always reported                 | the item's    |
+| `DINO_EVENT_HANGUP`  | the peer closed or shut down its side: a read returns 0       | the item's    |
 | `DINO_EVENT_TIMER`   | a timer fired                                                 | the timer's   |
 | `DINO_EVENT_EXIT`    | a watched process ended                                       | the process's |
 | `DINO_EVENT_WAKE`    | another thread called `dino_event_wake`                       | `NULL`        |
 | `DINO_EVENT_ONESHOT` | (interest only) report once, then disarm until the next `mod` |               |
 
-`READ` and `WRITE` are reported only for a socket watched for them. `ERROR` and `HANGUP` come
-whenever they happen. Two cases still differ by platform:
+`READ` and `WRITE` are reported only for a socket watched for them. `ERROR` comes whenever it happens. `HANGUP` comes with `READ` when the socket is watched for it, so a handler that only looks at `READ` still finds the end of the stream with a `recv` that returns `0`. A socket watched for neither `READ` nor `WRITE` reports a reset (`ERROR | HANGUP`) but not a peer that only closed or shut down its side: that lasts, and would end every wait at once. Two cases still differ by platform:
 
 - A refused non-blocking `connect` reports `WRITE | ERROR`, and on Linux `HANGUP` too.
 - A socket that is neither connected, connecting nor listening reports `HANGUP` at once on Linux
@@ -179,7 +178,7 @@ there, is an error), except the create functions, which return a handle or its i
 
 - **Pipes:** only read ends can be watched, and only for `DINO_EVENT_READ`. Windows has no
   "room to write" signal for pipes. A pipe reports `READ` while data is waiting, then `READ` with
-  `HANGUP` once every write end has closed.
+  `HANGUP` once every write end has closed and what was written before is read, so a handler that stops at `HANGUP` loses nothing.
 - **One loop per pipe end:** on Windows a pipe end belongs to the first loop it joins for as long as
   it exists. Keep each pipe end in one loop.
 - **Processes:** `dino_event_add_process` reports the exit once. Then `dino_event_del_process` it and

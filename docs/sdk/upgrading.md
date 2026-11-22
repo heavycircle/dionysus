@@ -5,7 +5,7 @@ almost everything here: a removed or renamed name fails to build, and the error 
 
 ## To 0.7
 
-0.7 changes the API where it has to change before 1.0 freezes it. The compiler finds the changes to handle types, `argv` and the renamed names; the changes to `dino_mutex_trylock` and to negative lengths it doesn't.
+0.7 changes the API where it has to change before 1.0 freezes it. The compiler finds the changes to handle types, `argv` and the renamed names; the changes to `dino_mutex_trylock`, to negative lengths and to event flags it doesn't.
 
 ### Failures have a reason: `dino_error()`
 
@@ -77,6 +77,14 @@ Arrays declared `char *const argv[]` must change: C doesn't convert them to the 
 | `dino_event_timer_del` | `dino_event_del_timer` |
 
 `dino_thread_fn` was the only type without `_t`, and the timer calls now read like `dino_event_add_socket`. The old names are gone; the compiler points at each use.
+
+### Event flags at the end of a stream are the same on every platform
+
+Three differences between Linux and Windows are gone; each changes what one platform reports:
+
+- **A socket at the end of the stream, or reset, reports `READ`** with `HANGUP` (and `ERROR` for a reset) on Windows too, when it is watched for `READ`. Before, Windows reported `HANGUP` alone, so a handler that only looked at `READ` never saw the connection close.
+- **A pipe reports `HANGUP` only once it is drained** on Linux too. Before, Linux reported `READ | HANGUP` as soon as the last writer closed, with data still waiting, so a handler that stopped at `HANGUP` lost the tail of the output.
+- **A socket watched for neither `READ` nor `WRITE` no longer reports a peer's close or shutdown**, only a reset. Before, a half-closed peer ended every wait at once for as long as the socket stayed in the loop.
 
 ### `dino_mutex_trylock` returns `DINO_TIMEOUT` when the mutex is held
 

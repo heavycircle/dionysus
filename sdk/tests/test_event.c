@@ -160,6 +160,27 @@ UTEST_F(event, hangup_when_the_peer_closes)
     dino_socket_close(utest_fixture->p.client);
     utest_fixture->p.client = DINO_INVALID_SOCKET;
 
+    // READ too: a recv returns 0 now, and a handler that only looks at READ
+    // must see the end of the stream on every platform.
+    ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
+    EXPECT_TRUE(out[0].events & DINO_EVENT_HANGUP);
+    EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
+    char c;
+    EXPECT_EQ(0, dino_socket_recv(utest_fixture->p.peer, &c, 1));
+}
+
+// With no READ or WRITE interest, a peer's FIN is not reported: it lasts, and
+// would end every wait at once for as long as the socket is in the loop.
+UTEST_F(event, half_closed_peer_is_quiet_without_interest)
+{
+    dino_event_t out[8];
+    ASSERT_EQ(0, dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, 0, NULL));
+    ASSERT_EQ(0, dino_socket_shutdown(utest_fixture->p.client, DINO_SHUT_WR));
+    EXPECT_EQ(0, dino_event_wait(utest_fixture->loop, out, 8, 200));
+
+    // Asked for again, it is there.
+    ASSERT_EQ(0,
+        dino_event_mod_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
     ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
     EXPECT_TRUE(out[0].events & DINO_EVENT_HANGUP);
 }
@@ -806,6 +827,35 @@ UTEST(event, pipe_hangup_when_the_writer_closes)
     EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
     char c;
     EXPECT_EQ(0, dino_pipe_read(r, &c, 1));
+
+    dino_event_del_pipe(loop, r);
+    dino_pipe_close(r);
+    dino_event_loop_destroy(loop);
+}
+
+// HANGUP means a read returns 0, on every platform: not while data written
+// before the last writer closed is still waiting.
+UTEST(event, pipe_hangup_waits_until_the_data_is_read)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+    ASSERT_EQ(4, dino_pipe_write(w, "tail", 4));
+    ASSERT_EQ(0, dino_pipe_close(w));
+
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 1000));
+    EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
+    EXPECT_FALSE(out[0].events & DINO_EVENT_HANGUP);
+    char buf[8];
+    EXPECT_EQ(4, dino_pipe_read(r, buf, sizeof(buf)));
+
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 1000));
+    EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
+    EXPECT_TRUE(out[0].events & DINO_EVENT_HANGUP);
+    EXPECT_EQ(0, dino_pipe_read(r, buf, sizeof(buf)));
 
     dino_event_del_pipe(loop, r);
     dino_pipe_close(r);

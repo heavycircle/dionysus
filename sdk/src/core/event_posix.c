@@ -117,11 +117,14 @@ void dino_event_loop_destroy(dino_event_loop_t handle)
 }
 
 // EPOLLRDHUP: a peer that only shut down its sending side still reports
-// HANGUP, as AFD's DISCONNECT does on Windows.
+// HANGUP, as AFD's DISCONNECT does on Windows. Only with READ or WRITE: the
+// condition lasts, so with no interest it would end every wait at once, for as
+// long as the socket is in the loop. Errors and resets are reported anyway.
 static int ctl(int epfd, int op, int fd, uint32_t events, void *userdata)
 {
     struct epoll_event ev = { 0 };
-    ev.events             = EPOLLRDHUP;
+    if (events & (DINO_EVENT_READ | DINO_EVENT_WRITE))
+        ev.events = EPOLLRDHUP;
     if (events & DINO_EVENT_READ)
         ev.events |= EPOLLIN;
     if (events & DINO_EVENT_WRITE)
@@ -205,10 +208,14 @@ static uint32_t from_epoll(uint32_t ev, int is_pipe)
         events |= DINO_EVENT_WRITE;
     if (ev & EPOLLERR)
         events |= DINO_EVENT_ERROR;
-    // A pipe whose writers are gone reports EPOLLHUP alone, but a read won't
-    // block there (it returns 0): that's READ, as on Windows.
-    if (ev & EPOLLHUP)
-        events |= is_pipe ? DINO_EVENT_READ | DINO_EVENT_HANGUP : DINO_EVENT_HANGUP;
+    // A pipe whose writers are gone reports EPOLLHUP at once, with EPOLLIN
+    // while data is still buffered. HANGUP waits until it is drained, as on
+    // Windows, so it always means a read returns 0; until then it is READ.
+    // Drained, EPOLLHUP comes alone, and a read won't block there: READ too.
+    if (is_pipe && (ev & EPOLLHUP))
+        events |= (ev & EPOLLIN) ? DINO_EVENT_READ : DINO_EVENT_READ | DINO_EVENT_HANGUP;
+    else if (ev & EPOLLHUP)
+        events |= DINO_EVENT_HANGUP;
     if (ev & EPOLLRDHUP)
         events |= DINO_EVENT_HANGUP;
     return events;
