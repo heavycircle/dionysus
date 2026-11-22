@@ -71,6 +71,17 @@ A target has a single build directory shared by both modes, so switching between
 release reconfigures and rebuilds that target. CMake's other build types (`RelWithDebInfo`,
 `MinSizeRel`) can be selected with `-- -DCMAKE_BUILD_TYPE=...`.
 
+### What release optimizes for
+
+Release compiles your code and the SDK for size (`-Oz`). The C library's memory functions and allocator are built for whatever the link asks for, and that differs by platform:
+
+- **Linux targets link for speed** (`-O2`): `memcpy` and `memset` run at glibc's speed, for under a kilobyte more per program. Linked for size they were about 20 times slower (a 4 KiB `memcpy`: 1077 ns against 50 ns).
+- **Windows targets link for size** (`-Oz`): linking for speed there adds about 14 KB of MinGW runtime to every program, a quarter of a hello world.
+
+Choose for a project with `DINO_LINK_FOR`, `speed` or `size`, set before `project()` or passed as `dino build -- -DDINO_LINK_FOR=size`; a change takes effect on the next build.
+
+Some of the C library is slow at any setting: `strlen`, `strcmp`, `memchr` and `strstr` in the static musl that dino links work a byte at a time, several times slower than glibc's on long strings. Code that spends its time there may want its own routines. System calls, file and network I/O, and starting a program (several times faster than a dynamically linked one) are not slower.
+
 ## Running
 
 `dino run` builds one target, then runs the project's executable:

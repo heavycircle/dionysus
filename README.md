@@ -26,13 +26,13 @@ dino build --all
 ```
 
 ```
-build/arm/hello (6.0 KiB)
-build/arm64/hello (6.3 KiB)
-build/i386/hello (4.9 KiB)
-build/ppc/hello (7.7 KiB)
+build/arm/hello (7.5 KiB)
+build/arm64/hello (7.5 KiB)
+build/i386/hello (5.9 KiB)
+build/ppc/hello (9.2 KiB)
 build/win32/hello.exe (66.5 KiB)
 build/win64/hello.exe (57.0 KiB)
-build/x86_64/hello (5.8 KiB)
+build/x86_64/hello (7.3 KiB)
 ```
 
 Linux builds are static ELF executables linked against musl; Windows builds are PE executables linked against MinGW-w64. (The Windows sizes are a known regression, #26.)

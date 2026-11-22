@@ -92,16 +92,16 @@ dino build --all
 
 ```
 ==> arm (arm-linux-musleabihf, release)
-    build/arm/hello (6.0 KiB)
+    build/arm/hello (7.5 KiB)
     build/arm/test_main (37.2 KiB)
 ==> arm64 (aarch64-linux-musl, release)
-    build/arm64/hello (6.3 KiB)
+    build/arm64/hello (7.5 KiB)
 ...
 ==> win64 (x86_64-windows-gnu, release)
     build/win64/hello.exe (57.0 KiB)
     build/win64/test_main.exe (63.0 KiB)
 ==> x86_64 (x86_64-linux-musl, release)
-    build/x86_64/hello (5.8 KiB)
+    build/x86_64/hello (7.3 KiB)
     build/x86_64/test_main (36.2 KiB)
 
 ==> summary: 7 succeeded, 0 failed

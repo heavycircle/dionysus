@@ -152,11 +152,12 @@ set(DINO_NO_PLATFORM_WARNINGS ON)
 project(app C)
 ```
 
-| Option                      | Effect                                                                       |
-| --------------------------- | ---------------------------------------------------------------------------- |
-| `DINO_NO_AUTO_RUNTIME`      | don't run the SDK's setup before `main()` (see [runtime](../sdk/runtime.md)) |
-| `DINO_NO_LEAK_CHECK`        | don't link the leak check into `dino_test()` executables                     |
-| `DINO_NO_PLATFORM_WARNINGS` | don't warn about platform calls that have a `dino_*` replacement             |
+| Option                      | Effect                                                                                                                                                     |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DINO_NO_AUTO_RUNTIME`      | don't run the SDK's setup before `main()` (see [runtime](../sdk/runtime.md))                                                                               |
+| `DINO_NO_LEAK_CHECK`        | don't link the leak check into `dino_test()` executables                                                                                                   |
+| `DINO_NO_PLATFORM_WARNINGS` | don't warn about platform calls that have a `dino_*` replacement                                                                                           |
+| `DINO_LINK_FOR`             | `speed` or `size`: what a Release build links for (see [Building](building.md#what-release-optimizes-for)); `speed` on Linux, `size` on Windows by default |
 
 ## Using the SDK from an existing project
 

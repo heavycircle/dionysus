@@ -17,6 +17,27 @@ function(dino_executable name)
     target_link_libraries(${name} PRIVATE dino_util)
 endfunction()
 
+# What a Release build's link optimizes for. zig builds the C library's own
+# memcpy, memset and allocator for the link command's -O level, and the
+# compile flags say -Oz: linked that way, memcpy is some 20 times slower.
+# "speed" links at -O2, for under a kilobyte on the Linux targets; "size"
+# keeps -Oz, which saves about 14 KB of MinGW runtime on Windows. A generator
+# expression, not an _INIT flag, so a change takes effect on the next build.
+if(ZIG_TARGET MATCHES "windows")
+    set(_dino_link_default size)
+else()
+    set(_dino_link_default speed)
+endif()
+set(DINO_LINK_FOR "${_dino_link_default}" CACHE STRING
+    "What Release builds link for: speed (-O2) or size (-Oz)")
+set_property(CACHE DINO_LINK_FOR PROPERTY STRINGS speed size)
+unset(_dino_link_default)
+if(DINO_LINK_FOR STREQUAL "speed")
+    add_link_options("$<$<CONFIG:Release>:-O2>")
+elseif(NOT DINO_LINK_FOR STREQUAL "size")
+    message(FATAL_ERROR "DINO_LINK_FOR is '${DINO_LINK_FOR}'; use speed or size")
+endif()
+
 # The first project() is the top-level one, so `ctest` and `dino test` find the
 # tests at the root of the build directory.
 enable_testing()
