@@ -3,6 +3,12 @@
 What changed in the SDK between versions, and how to update code that uses it. The compiler finds
 almost everything here: a removed or renamed name fails to build, and the error points at the line.
 
+## To 0.8
+
+### UDP: `sendto`, `recvfrom` and socket addresses
+
+New: `dino_socket_sendto`, `dino_socket_recvfrom`, `dino_socket_local_addr` and `dino_socket_peer_addr`, with `dino_socket_addr_t` (see [Network](network.md#udp)). Two Windows behaviors now match Linux: a datagram larger than the buffer is returned cut to fit instead of failing, and an unconnected UDP socket no longer fails a receive with `DINO_ECONNRESET` after sending to a port nobody listens on.
+
 ## To 0.7
 
 0.7 changes the API where it has to change before 1.0 freezes it. The compiler finds the changes to handle types, `argv`, process status and the renamed names; the changes to `dino_mutex_trylock`, to negative lengths and to event flags it doesn't.

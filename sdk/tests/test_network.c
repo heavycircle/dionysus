@@ -13,6 +13,7 @@
 #include <string.h>
 #include <utest.h>
 
+#include <dino/core/error.h>
 #include <dino/core/network.h>
 #include <dino/core/thread.h>
 #include <dino/core/time.h>
@@ -231,6 +232,136 @@ UTEST(network, udp_round_trip)
     EXPECT_STREQ("hello", buf);
     dino_socket_close(b);
     dino_socket_close(a);
+}
+
+// Port 0 picks a free port, which local_addr reads back.
+UTEST(network, local_addr_reports_the_port_bind_picked)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    ASSERT_EQ(0, dino_socket_bind(s, "127.0.0.1", 0));
+    dino_socket_addr_t me;
+    ASSERT_EQ(0, dino_socket_local_addr(s, &me));
+    EXPECT_STREQ("127.0.0.1", me.ip);
+    EXPECT_GT(me.port, 0);
+    EXPECT_LE(me.port, 65535);
+    dino_socket_close(s);
+}
+
+// A UDP server answers whoever sent the datagram, from recvfrom's address.
+static void udp_answer(int *utest_result, dino_socket_domain_t domain, const char *ip)
+{
+    dino_socket_t server = dino_socket_create(domain, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    dino_socket_t client = dino_socket_create(domain, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, server);
+    ASSERT_NE(DINO_INVALID_SOCKET, client);
+    ASSERT_EQ(0, dino_socket_bind(server, ip, 0));
+    ASSERT_EQ(0, dino_socket_bind(client, ip, 0));
+    dino_socket_addr_t server_addr, client_addr, from;
+    ASSERT_EQ(0, dino_socket_local_addr(server, &server_addr));
+    ASSERT_EQ(0, dino_socket_local_addr(client, &client_addr));
+
+    ASSERT_EQ(4, dino_socket_sendto(client, "ping", 4, server_addr.ip, server_addr.port));
+    char buf[16] = { 0 };
+    ASSERT_EQ(4, dino_socket_recvfrom(server, buf, sizeof(buf), &from));
+    EXPECT_STREQ("ping", buf);
+    EXPECT_STREQ(client_addr.ip, from.ip);
+    EXPECT_EQ(client_addr.port, from.port);
+
+    ASSERT_EQ(4, dino_socket_sendto(server, "pong", 4, from.ip, from.port));
+    memset(buf, 0, sizeof(buf));
+    ASSERT_EQ(4, dino_socket_recvfrom(client, buf, sizeof(buf), &from));
+    EXPECT_STREQ("pong", buf);
+    EXPECT_STREQ(server_addr.ip, from.ip);
+    EXPECT_EQ(server_addr.port, from.port);
+    dino_socket_close(client);
+    dino_socket_close(server);
+}
+
+UTEST(network, udp_server_answers_the_sender_ipv4)
+{
+    udp_answer(utest_result, DINO_AF_INET, "127.0.0.1");
+}
+
+UTEST(network, udp_server_answers_the_sender_ipv6)
+{
+    udp_answer(utest_result, DINO_AF_INET6, "::1");
+}
+
+// Windows would fail the call; both platforms return the datagram cut to fit.
+UTEST(network, a_datagram_larger_than_the_buffer_is_cut_to_fit)
+{
+    dino_socket_t a = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    dino_socket_t b = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_EQ(0, dino_socket_bind(a, "127.0.0.1", 0));
+    dino_socket_addr_t to;
+    ASSERT_EQ(0, dino_socket_local_addr(a, &to));
+    ASSERT_EQ(10, dino_socket_sendto(b, "0123456789", 10, to.ip, to.port));
+    ASSERT_EQ(10, dino_socket_sendto(b, "abcdefghij", 10, to.ip, to.port));
+    char buf[4] = { 0 };
+    EXPECT_EQ(4, dino_socket_recvfrom(a, buf, sizeof(buf), NULL));
+    EXPECT_EQ(0, memcmp(buf, "0123", 4));
+    EXPECT_EQ(4, dino_socket_recv(a, buf, sizeof(buf)));
+    EXPECT_EQ(0, memcmp(buf, "abcd", 4));
+    dino_socket_close(b);
+    dino_socket_close(a);
+}
+
+// A datagram to a port nobody listens on doesn't make the next receive fail
+// (Windows reports the ICMP error there unless told not to).
+UTEST(network, a_datagram_to_a_closed_port_doesnt_fail_the_next_receive)
+{
+    dino_socket_t gone   = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    dino_socket_t server = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    dino_socket_t client = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_EQ(0, dino_socket_bind(gone, "127.0.0.1", 0));
+    ASSERT_EQ(0, dino_socket_bind(server, "127.0.0.1", 0));
+    dino_socket_addr_t gone_addr, server_addr;
+    ASSERT_EQ(0, dino_socket_local_addr(gone, &gone_addr));
+    ASSERT_EQ(0, dino_socket_local_addr(server, &server_addr));
+    dino_socket_close(gone);
+
+    ASSERT_EQ(1, dino_socket_sendto(server, "x", 1, gone_addr.ip, gone_addr.port));
+    dino_sleep_ms(50);
+    ASSERT_EQ(1, dino_socket_sendto(client, "y", 1, server_addr.ip, server_addr.port));
+    char buf[4] = { 0 };
+    EXPECT_EQ(1, dino_socket_recvfrom(server, buf, sizeof(buf), NULL));
+    EXPECT_EQ('y', buf[0]);
+    dino_socket_close(client);
+    dino_socket_close(server);
+}
+
+// The peer of an accepted socket is the client's own local address.
+UTEST(network, peer_addr_of_an_accepted_socket_is_the_client)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, DINO_AF_INET, "127.0.0.1", PORT + 20));
+    dino_socket_addr_t peer, client;
+    ASSERT_EQ(0, dino_socket_peer_addr(p.peer, &peer));
+    ASSERT_EQ(0, dino_socket_local_addr(p.client, &client));
+    EXPECT_STREQ(client.ip, peer.ip);
+    EXPECT_EQ(client.port, peer.port);
+    ASSERT_EQ(0, dino_socket_peer_addr(p.client, &peer));
+    EXPECT_EQ(PORT + 20, peer.port);
+    close_pair(&p);
+}
+
+UTEST(network, address_calls_check_their_arguments)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    dino_socket_addr_t addr;
+    EXPECT_EQ(-1, dino_socket_peer_addr(s, &addr));
+    EXPECT_EQ(DINO_ENOTCONN, dino_error());
+    EXPECT_EQ(-1, dino_socket_local_addr(s, NULL));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(-1, dino_socket_sendto(s, "x", 1, "localhost", 1));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(-1, dino_socket_sendto(s, "x", 1, "127.0.0.1", 70000));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(-1, dino_socket_recvfrom(s, NULL, 1, &addr));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    dino_socket_close(s);
 }
 
 // A pass-through: the platform's own level and option, on both.
