@@ -23,9 +23,9 @@ typedef int (*dino_thread_fn_t)(void *arg);
 /**
  * Start a thread running fn(arg).
  *
- * Its stack is the platform default: 8 MB on the Linux targets (zig raises
- * musl's default) and 1 MB on Windows. Every thread must be either joined or
- * detached exactly once.
+ * Its stack is 8 MB on every platform. The program's main thread keeps its
+ * platform's own size (8 MB on Linux, 16 MB on Windows). Every thread must be
+ * either joined or detached exactly once.
  *
  * @param  thread  Receives the handle, or DINO_INVALID_THREAD on failure.
  * @param  fn      Function to run.
