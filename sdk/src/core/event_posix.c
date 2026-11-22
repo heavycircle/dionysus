@@ -331,14 +331,16 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
         = dino_time_monotonic_ns() + (uint64_t)(timeout_ms > 0 ? timeout_ms : 0) * 1000000;
     for (;;)
     {
-        int n    = timers_first ? dino__event_timers_collect(&loop->timers, out, max) : 0;
-        int left = dino__event_remaining_ms(timeout_ms, deadline);
-        int cap  = max - n < BATCH ? max - n : BATCH;
-        int got  = 0;
+        int left, wait;
+        int n = dino__event_timers_step(
+            &loop->timers, out, timers_first ? max : 0, timeout_ms, deadline, &left, &wait);
+        int cap = max - n < BATCH ? max - n : BATCH;
+        int got = 0;
         if (cap > 0)
         {
-            int wait = n > 0 ? 0 : dino__event_timers_timeout(&loop->timers, left);
-            got      = epoll_wait(loop->epfd, evs, cap, wait);
+            got = epoll_wait(loop->epfd, evs, cap, n > 0 ? 0 : wait);
+            if (n == 0)
+                dino__event_timers_waited(&loop->timers);
             // Timers already collected are out of the heap: report them
             // rather than lose them with the error.
             if (got < 0 && errno != EINTR)
@@ -379,7 +381,8 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
             n += collect_exits(loop, out + n, max - n);
         if (pipes_ready && n < max)
             n += collect_pipes(loop, out + n, max - n);
-        n += dino__event_timers_collect(&loop->timers, out + n, max - n);
+        n += dino__event_timers_step(
+            &loop->timers, out + n, max - n, timeout_ms, deadline, &left, NULL);
         // Nothing to report after a timer interrupt, EINTR or a wake meant for
         // someone else: wait again for what is left of the timeout.
         if (n > 0 || left == 0)

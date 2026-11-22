@@ -748,16 +748,21 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
     int timers_first = dino__event_timers_turn(&loop->timers);
     for (;;)
     {
-        n = timers_first ? dino__event_timers_collect(&loop->timers, out, max) : 0;
-        int              left = dino__event_remaining_ms(timeout_ms, deadline);
-        int              cap  = max - n < BATCH ? max - n : BATCH;
+        int left, wait;
+        n = dino__event_timers_step(
+            &loop->timers, out, timers_first ? max : 0, timeout_ms, deadline, &left, &wait);
+        int              cap = max - n < BATCH ? max - n : BATCH;
         OVERLAPPED_ENTRY e[BATCH];
         ULONG            got = 0;
         if (cap > 0)
         {
-            int wait = n > 0 ? 0 : dino__event_timers_timeout(&loop->timers, left);
-            if (!GetQueuedCompletionStatusEx(
-                    loop->port, e, (ULONG)cap, &got, wait < 0 ? INFINITE : (DWORD)wait, FALSE))
+            if (n > 0)
+                wait = 0;
+            BOOL ok = GetQueuedCompletionStatusEx(
+                loop->port, e, (ULONG)cap, &got, wait < 0 ? INFINITE : (DWORD)wait, FALSE);
+            if (n == 0)
+                dino__event_timers_waited(&loop->timers);
+            if (!ok)
             {
                 // Timers already collected are out of the heap: report them
                 // rather than lose them with the error.
@@ -793,7 +798,8 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
             }
         }
         ReleaseSRWLockExclusive(&loop->lock);
-        n += dino__event_timers_collect(&loop->timers, out + n, max - n);
+        n += dino__event_timers_step(
+            &loop->timers, out + n, max - n, timeout_ms, deadline, &left, NULL);
         // Only cancellations, stale completions or a timer interrupt came in:
         // keep waiting for whatever time is left.
         if (n > 0 || left == 0)

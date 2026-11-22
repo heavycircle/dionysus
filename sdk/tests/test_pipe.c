@@ -240,6 +240,28 @@ UTEST(pipe, an_earlier_pending_sigpipe_is_left_alone)
 }
 #endif
 
+#ifndef _WIN32
+// A caller that blocks SIGPIPE itself keeps it blocked, and the write's own
+// SIGPIPE isn't left pending for it.
+UTEST(pipe, a_caller_blocking_sigpipe_keeps_it_blocked_with_nothing_pending)
+{
+    sigset_t pipe_only, old, after;
+    sigemptyset(&pipe_only);
+    sigaddset(&pipe_only, SIGPIPE);
+    pthread_sigmask(SIG_BLOCK, &pipe_only, &old);
+
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    dino_pipe_close(r);
+    EXPECT_EQ(-1, dino_pipe_write(w, "x", 1));
+    dino_pipe_close(w);
+    EXPECT_FALSE(pipe_pending());
+    pthread_sigmask(SIG_SETMASK, NULL, &after);
+    EXPECT_TRUE(sigismember(&after, SIGPIPE));
+    pthread_sigmask(SIG_SETMASK, &old, NULL);
+}
+#endif
+
 // Only a read end can be waited for, on every platform: a write end would
 // time out on Linux, or report readable once its reader is gone.
 UTEST(pipe, wait_on_a_write_end_fails)

@@ -131,7 +131,9 @@ dino_event_timer_t dino_event_add_timer(
             t->all->prev = tm;
         t->all = tm;
     }
-    int earliest = ok && tm->index == 0;
+    // Under the lock: a waiter raises the count before reading the heap, so it
+    // either saw this timer or is counted here.
+    int interrupt = ok && tm->index == 0 && atomic_load(&t->waiting) > 0;
     dino_mutex_unlock(t->lock);
 
     if (!ok)
@@ -141,7 +143,7 @@ dino_event_timer_t dino_event_add_timer(
         return DINO_INVALID_EVENT_TIMER;
     }
     // A thread already waiting computed its timeout from the old earliest.
-    if (earliest)
+    if (interrupt)
         dino__event_interrupt(loop);
     return (dino_event_timer_t)tm;
 }
@@ -168,37 +170,23 @@ int dino_event_del_timer(dino_event_loop_t loop, dino_event_timer_t timer)
     return 0;
 }
 
-int dino__event_remaining_ms(int timeout_ms, uint64_t deadline_ns)
+int dino__event_remaining_ms(int timeout_ms, uint64_t deadline_ns, uint64_t now_ns)
 {
     if (timeout_ms < 0)
         return -1;
-    uint64_t now = dino_time_monotonic_ns();
-    if (now >= deadline_ns)
+    if (now_ns >= deadline_ns)
         return 0;
-    uint64_t ms = (deadline_ns - now + 999999) / 1000000;
+    uint64_t ms = (deadline_ns - now_ns + 999999) / 1000000;
     return ms > INT32_MAX ? INT32_MAX : (int)ms;
-}
-
-int dino__event_timers_timeout(struct dino__event_timers *t, int timeout_ms)
-{
-    dino_mutex_lock(t->lock);
-    int next = t->len ? dino__event_remaining_ms(0, t->heap[0]->deadline_ns) : -1;
-    dino_mutex_unlock(t->lock);
-    if (next < 0)
-        return timeout_ms;
-    return timeout_ms < 0 || next < timeout_ms ? next : timeout_ms;
 }
 
 int dino__event_timers_turn(struct dino__event_timers *t)
 {
-    dino_mutex_lock(t->lock);
-    int first       = t->timers_first;
-    t->timers_first = !first;
-    dino_mutex_unlock(t->lock);
-    return first;
+    return atomic_fetch_xor(&t->timers_first, 1);
 }
 
-int dino__event_timers_collect(struct dino__event_timers *t, dino_event_t *out, int max)
+int dino__event_timers_step(struct dino__event_timers *t, dino_event_t *out, int max,
+    int timeout_ms, uint64_t deadline_ns, int *left_ms, int *wait_ms)
 {
     int n = 0;
     dino_mutex_lock(t->lock);
@@ -220,6 +208,20 @@ int dino__event_timers_collect(struct dino__event_timers *t, dino_event_t *out, 
             remove_at(t, 0);
         }
     }
+    int left = dino__event_remaining_ms(timeout_ms, deadline_ns, now);
+    *left_ms = left;
+    if (wait_ms)
+    {
+        int next = t->len ? dino__event_remaining_ms(0, t->heap[0]->deadline_ns, now) : -1;
+        *wait_ms = next >= 0 && (left < 0 || next < left) ? next : left;
+        if (n == 0)
+            atomic_fetch_add(&t->waiting, 1);
+    }
     dino_mutex_unlock(t->lock);
     return n;
+}
+
+void dino__event_timers_waited(struct dino__event_timers *t)
+{
+    atomic_fetch_sub(&t->waiting, 1);
 }

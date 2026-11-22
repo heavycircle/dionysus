@@ -62,6 +62,7 @@ aren't written.
 
 - **One write per line:** each line is written with a single call, so lines from different threads
   never interleave.
+- **Flushed every line**, so nothing is lost if the program crashes: each line costs what an `fprintf` plus `fflush` does, a system call. Below the current level a line costs only the level check. For many lines a second, raise the level or give `dino_log_set_output` a stream of your own.
 - **Length:** lines over 1 KB are truncated.
 - **`errno`** is left as it was, so logging inside error handling doesn't disturb it.
 
