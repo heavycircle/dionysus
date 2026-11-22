@@ -22,6 +22,23 @@ project() {
     cd "$work/$1" || exit 1
 }
 
+# A build made by another zig is started over, as for a new SDK: CMake keeps
+# the compiler it found and the objects, so a reconfigure alone wouldn't do.
+case_zig_version_starts_over() {
+    project zig_version
+    dino build >/dev/null 2>&1 || return 1
+    mkdir -p "$work/zig_version_bin"
+    # shellcheck disable=SC2016 # $1 and $@ are for the wrapper, not this shell
+    printf '#!/bin/sh\nif [ "$1" = version ]; then echo 0.17.99; exit 0; fi\nexec %s "$@"\n' \
+        "$(command -v zig)" >"$work/zig_version_bin/zig"
+    chmod +x "$work/zig_version_bin/zig"
+    PATH=$work/zig_version_bin:$PATH dino build -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'mutex_posix\.c' out || { echo "SDK not rebuilt"; cat out; return 1; }
+    # And with the same zig again, nothing is redone.
+    PATH=$work/zig_version_bin:$PATH dino build -v >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'mutex_posix\.c' out
+}
+
 # Configuring against another SDK starts from a fresh CMake cache, so the old
 # toolchain file is no longer used.
 case_sdk_switch() {
@@ -117,23 +134,6 @@ case_doctor_checks_zig() {
     printf '#!/bin/sh\necho 0.13.0\n' >bin/zig
     PATH=$work/doctor/bin:$PATH dino doctor >out 2>&1
     grep -q 'zig .*0\.13\.0.*dino needs Zig' out
-}
-
-# A build made by another zig is started over, as for a new SDK: CMake keeps
-# the compiler it found and the objects, so a reconfigure alone wouldn't do.
-case_zig_version_starts_over() {
-    project zig_version
-    dino build >/dev/null 2>&1 || return 1
-    mkdir -p "$work/zig_version_bin"
-    # shellcheck disable=SC2016 # $1 and $@ are for the wrapper, not this shell
-    printf '#!/bin/sh\nif [ "$1" = version ]; then echo 0.17.99; exit 0; fi\nexec %s "$@"\n' \
-        "$(command -v zig)" >"$work/zig_version_bin/zig"
-    chmod +x "$work/zig_version_bin/zig"
-    PATH=$work/zig_version_bin:$PATH dino build -v >out 2>&1 || { cat out; return 1; }
-    grep -q 'mutex_posix\.c' out || { echo "SDK not rebuilt"; cat out; return 1; }
-    # And with the same zig again, nothing is redone.
-    PATH=$work/zig_version_bin:$PATH dino build -v >out 2>&1 || { cat out; return 1; }
-    ! grep -q 'mutex_posix\.c' out
 }
 
 # A target named twice, even by its triple, is built once.
