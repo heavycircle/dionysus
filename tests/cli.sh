@@ -638,6 +638,75 @@ case_run_forwards_sigterm() {
     [[ $code == 7 ]] && grep -qx 'got 1' out
 }
 
+# A signal that was ignored when dino started stays ignored in what it runs:
+# nohup and background jobs of a script depend on it. Bits 0 and 1 of SigIgn
+# are SIGHUP and SIGINT.
+case_ignored_signals_stay_ignored() {
+    project ignored_signals
+    cat >src/main.c <<'C'
+#include <stdio.h>
+#include <string.h>
+
+int main(void)
+{
+    char  line[256];
+    FILE *status = fopen("/proc/self/status", "r");
+    if (!status)
+        return 1;
+    while (fgets(line, sizeof(line), status))
+        if (strncmp(line, "SigIgn:", 7) == 0)
+            fputs(line, stdout);
+    fclose(status);
+    return 0;
+}
+C
+    dino build >/dev/null || return 1
+    (trap '' HUP INT; dino run --no-build) >out || { cat out; return 1; }
+    cat out
+    grep -Eq '^SigIgn:.*[37bf]$' out
+}
+
+# A signal sent to dino alone also ends what the program started. The program
+# dies of it and would otherwise leave its child running.
+case_signal_reaches_grandchildren() {
+    project grandchildren
+    cat >src/main.c <<'C'
+#include <stdio.h>
+#include <unistd.h>
+
+int main(void)
+{
+    pid_t child = fork();
+    if (child == 0)
+    {
+        sleep(60);
+        return 0;
+    }
+    printf("%d\nready\n", (int)child);
+    fflush(stdout);
+    pause();
+    return 0;
+}
+C
+    dino build >/dev/null 2>&1 || return 1
+    dino run --no-build >out &
+    local pid=$!
+    wait_for_ready out || return 1
+    local grandchild
+    grandchild=$(head -n 1 out)
+    kill -TERM "$pid"
+    wait "$pid"
+    local code=$?
+    [[ $code == 143 ]] || { echo "dino exited $code"; kill "$grandchild"; return 1; }
+    for _ in $(seq 50); do
+        kill -0 "$grandchild" 2>/dev/null || return 0
+        sleep 0.1
+    done
+    echo "the program's child $grandchild is still running"
+    kill "$grandchild"
+    return 1
+}
+
 # Interrupted while building one target, dino stops instead of going on to
 # the next, and exits 128 + the signal.
 case_interrupted_build_stops() {
