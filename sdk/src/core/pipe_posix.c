@@ -60,13 +60,22 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, size_t len)
     // process. Pipes have no MSG_NOSIGNAL, so block it in this thread for the
     // write and consume the one it caused, leaving the mask and disposition as
     // they were. A SIGPIPE that was already pending is left for its owner.
+    // Only a thread that blocked SIGPIPE itself can have one pending for it:
+    // otherwise it was delivered, and one sent to the whole process meanwhile
+    // waits in the process's queue, which Linux takes from only after the
+    // thread's own, where the write puts its signal.
     sigset_t pipe_only, old;
     sigemptyset(&pipe_only);
     sigaddset(&pipe_only, SIGPIPE);
     pthread_sigmask(SIG_BLOCK, &pipe_only, &old);
-    sigset_t pending;
-    sigpending(&pending);
-    int already_pending = sigismember(&pending, SIGPIPE);
+    int was_blocked     = sigismember(&old, SIGPIPE);
+    int already_pending = 0;
+    if (was_blocked)
+    {
+        sigset_t pending;
+        sigpending(&pending);
+        already_pending = sigismember(&pending, SIGPIPE);
+    }
 
     ssize_t n;
     do
@@ -81,7 +90,8 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, size_t len)
         while (sigtimedwait(&pipe_only, NULL, &now) < 0 && errno == EINTR)
             ;
     }
-    pthread_sigmask(SIG_SETMASK, &old, NULL);
+    if (!was_blocked)
+        pthread_sigmask(SIG_SETMASK, &old, NULL);
     return n < 0 ? dino__fail(reason) : (int)n;
 }
 
