@@ -1,6 +1,6 @@
 .{
     .name = .dionysus,
-    .version = "0.7.0",
+    .version = "0.7.1-dev",
     // Generated once by `zig init` and never changed; it identifies this package
     // across versions. Regenerate only when forking an actively maintained upstream.
     .fingerprint = 0x2bc998979f5afdc1, // Changing this has security and trust implications.
