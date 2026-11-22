@@ -201,6 +201,37 @@ UTEST_F(event, del_stops_events)
     EXPECT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
 }
 
+// Closing without del is a mistake, but it must not report the dead socket,
+// whose userdata is usually freed by then: the loop forgets it, as epoll does.
+UTEST_F(event, socket_closed_without_del_is_forgotten)
+{
+    dino_event_t out[8];
+    ASSERT_EQ(0,
+        dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
+    EXPECT_EQ(0, dino_event_wait(utest_fixture->loop, out, 8, 0));
+
+    dino_socket_close(utest_fixture->p.peer);
+    EXPECT_EQ(0, dino_event_wait(utest_fixture->loop, out, 8, 200));
+    EXPECT_EQ(-1, dino_event_del_socket(utest_fixture->loop, utest_fixture->p.peer));
+    utest_fixture->p.peer = DINO_INVALID_SOCKET;
+}
+
+// The same when it was closed between being reported and the next wait, which
+// is when a level-triggered socket is polled again.
+UTEST_F(event, socket_closed_after_an_event_is_forgotten)
+{
+    dino_event_t out[8];
+    ASSERT_EQ(0,
+        dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
+
+    dino_socket_close(utest_fixture->p.peer);
+    EXPECT_EQ(0, dino_event_wait(utest_fixture->loop, out, 8, 200));
+    EXPECT_EQ(-1, dino_event_del_socket(utest_fixture->loop, utest_fixture->p.peer));
+    utest_fixture->p.peer = DINO_INVALID_SOCKET;
+}
+
 UTEST_F(event, del_with_a_poll_in_flight_then_destroy)
 {
     dino_event_t out[8];
@@ -577,6 +608,22 @@ UTEST(event, timer_invalid_args)
     EXPECT_EQ(-1, dino_event_timer_del(loop, DINO_INVALID_EVENT_TIMER));
     EXPECT_EQ(-1, dino_event_timer_del(DINO_INVALID_EVENT_LOOP, DINO_INVALID_EVENT_TIMER));
     dino_event_loop_destroy(loop);
+}
+
+// A timer belongs to the loop it was added to.
+UTEST(event, timer_del_through_another_loop_fails)
+{
+    dino_event_loop_t a = dino_event_loop_create();
+    dino_event_loop_t b = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, a);
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, b);
+    dino_event_timer_t t = dino_event_timer_add(a, 10000, 0, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, t);
+
+    EXPECT_EQ(-1, dino_event_timer_del(b, t));
+    EXPECT_EQ(0, dino_event_timer_del(a, t));
+    dino_event_loop_destroy(a);
+    dino_event_loop_destroy(b);
 }
 
 struct waiter
