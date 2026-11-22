@@ -78,7 +78,7 @@ case_usage_errors() {
     local cmd code
     for cmd in 'frob' 'help frob' 'build --bogus' 'build -C ""' 'build -C=' 'build nosuchtarget' \
         'build --all x86_64' 'build -j 0' 'run x86_64 arm' 'test --memcheck arm' 'clean -C ""' \
-        'init a b' 'targets x' 'doctor x' 'run --exe' 'test --timeout 0' 'test --timeout soon'; do
+        'init a b' 'init ""' 'targets x' 'doctor x' 'run --exe' 'test --timeout 0' 'test --timeout soon'; do
         eval "dino $cmd" >/dev/null 2>&1
         code=$?
         [[ $code == 2 ]] || { echo "dino $cmd: exit $code"; return 1; }
@@ -192,7 +192,8 @@ case_sdk_leftover_reported() {
 # Names CMake or dino already use are refused before anything is written.
 case_init_reserved_names() {
     local name
-    for name in test all help install clean package dino_core dino_anything test_main; do
+    for name in test all help install clean package preinstall dino_core dino_anything test_main \
+        CMakeFiles Testing _dino _dino_libs; do
         mkdir -p "$work/reserved/$name"
         (cd "$work/reserved/$name" && dino init --no-configure)
         [[ $? == 2 ]] || { echo "$name: not refused"; return 1; }
@@ -200,7 +201,47 @@ case_init_reserved_names() {
     done
     dino init --no-configure "$work/reserved/new/help"
     [[ $? == 2 && ! -e $work/reserved/new ]] || { echo "new dir created"; return 1; }
-    mkdir -p "$work/reserved/testing" && cd "$work/reserved/testing" && dino init --no-configure >/dev/null
+    mkdir -p "$work/reserved/testing" && cd "$work/reserved/testing" && dino init --no-configure >/dev/null || return 1
+    # A project that already exists keeps its name: init only adds to it.
+    mkdir -p "$work/reserved/existing/test" && cd "$work/reserved/existing/test" || return 1
+    echo 'project(mine C)' >CMakeLists.txt
+    dino init --no-configure >/dev/null || { echo "existing project refused"; return 1; }
+    [[ -f .clang-tidy ]]
+}
+
+# In a project that already exists, init adds the tooling files and nothing
+# that its CMakeLists.txt would compile: no second main(), no sample test.
+case_init_existing_project() {
+    project init_existing
+    mv src/main.c src/app.c
+    rm tests/test_main.c .clang-tidy
+    dino init --no-configure >out || { cat out; return 1; }
+    cat out
+    [[ ! -e src/main.c && ! -e tests/test_main.c && -f .clang-tidy ]] || return 1
+    [[ $(grep -c 'skipped' out) == 2 ]] || return 1
+    dino build >/dev/null 2>&1
+}
+
+# What goes wrong is named, and nothing is left that looks like a project.
+case_init_failures() {
+    mkdir -p "$work/init_fail/blocked" && cd "$work/init_fail" || return 1
+    touch blocked/src
+    dino init --no-configure blocked >out 2>&1 && { cat out; return 1; }
+    grep -q 'creating blocked/src' out || { cat out; return 1; }
+    [[ ! -e blocked/CMakeLists.txt ]] || { echo "CMakeLists.txt was written"; return 1; }
+
+    # A link to nothing counts as there: the other files are still written.
+    mkdir dangling && ln -s missing dangling/.gitignore
+    dino init --no-configure dangling >out 2>&1 || { cat out; return 1; }
+    [[ -f dangling/.clang-tidy && -L dangling/.gitignore ]] || { cat out; return 1; }
+
+    # Configuring is a second step: when it can't run, the project is there
+    # and init says so.
+    DINO_LIBRARY_PATH=$work/init_fail/no_such_library dino init unconfigured >out 2>&1
+    local code=$?
+    cat out
+    [[ $code == 1 && -f unconfigured/src/main.c ]] || return 1
+    grep -q 'files were created, but configuring failed' out && grep -q '^Next:' out
 }
 
 # init -C <dir> works from <dir>, as -C does elsewhere.
@@ -209,8 +250,12 @@ case_init_dash_c() {
     dino init --no-configure -C base app >/dev/null || return 1
     [[ -f base/app/CMakeLists.txt ]] || return 1
     grep -q 'project(app C)' base/app/CMakeLists.txt || return 1
-    dino init --no-configure -C here >/dev/null || return 1
-    grep -q 'project(here C)' here/CMakeLists.txt
+    dino init --no-configure -C here >out || return 1
+    grep -q 'project(here C)' here/CMakeLists.txt || return 1
+    ! grep -q 'here/\./' out || { cat out; return 1; }
+    # An absolute directory is not moved under -C.
+    dino init --no-configure -C base "$work/c/absolute" >/dev/null || return 1
+    [[ -f $work/c/absolute/CMakeLists.txt && ! -e base/${work#/} ]]
 }
 
 # The SDK and the test harness build under strict ISO C, whether it's asked
