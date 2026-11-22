@@ -42,7 +42,7 @@ To run binaries for other targets, `dino run` and `dino test` also need:
 | `wine`                                 | `win64`; `win32` also needs 32-bit wine | `wine`, plus `wine32:i386` for win32 (after `dpkg --add-architecture i386`) |
 | `valgrind`                             | `dino test --memcheck`                  | `valgrind`                                                                  |
 
-None of these are needed just to *build* for those targets.
+None of these are needed just to _build_ for those targets.
 
 ### From source
 
@@ -87,22 +87,27 @@ Runners for `dino run` (optional):
   [ ok ] arm64      /usr/bin/qemu-aarch64
   [ ok ] i386       native
   [ ok ] ppc        /usr/bin/qemu-ppc
-  [ ok ] win32      /usr/bin/wine
+  [ ok ] win32      /usr/bin/wine (needs its 32-bit support, which isn't checked)
   [ ok ] win64      /usr/bin/wine
   [ ok ] x86_64     native
+
+For `dino test --memcheck` (optional):
+  [ ok ] valgrind   /usr/bin/valgrind
 
 All required tools found.
 ```
 
 - **Required** must all be `ok`, or `dino doctor` exits non-zero. A missing generator means
   neither `ninja` nor `make` is on `PATH`, and CMake older than 3.20 is reported as a problem.
+  So is a Zig that isn't 0.17 (any 0.17.x passes; dino is tested with 0.17.1), and a `zig` or `cmake` that is on `PATH` but fails to run.
 - **sdk** is where `dino` unpacked its built-in SDK, once per version, under `$DINO_HOME` (by
   default `~/.cache/dino`). Set `DINO_SDK_PATH` to build against another SDK checkout instead.
 - **Libraries** lists your [organization libraries](libraries.md), and any broken entry counts as a
   problem.
 - **Runners** are optional. A `MISS` only means `dino run` and `dino test` can't run that target
   here; `dino build` still builds it. `native` means the host runs it directly: an x86_64 Linux
-  machine runs `i386` binaries without qemu.
+  machine runs `i386` binaries without qemu. For `win32`, doctor only finds `wine`; whether that wine can run 32-bit programs (a `wine32` package, or a WoW64 build) is not something it can tell.
+- **valgrind** is only needed for `dino test --memcheck`, which runs on x86_64 Linux hosts.
 
 ## Environment variables
 

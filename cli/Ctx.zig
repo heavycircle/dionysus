@@ -134,7 +134,7 @@ pub fn capture(ctx: *Ctx, argv: []const []const u8) Error!Captured {
     return .{ .code = exitCode(result.term), .stdout = result.stdout, .stderr = result.stderr };
 }
 
-fn exitCode(term: std.process.Child.Term) u8 {
+pub fn exitCode(term: std.process.Child.Term) u8 {
     return switch (term) {
         .exited => |code| code,
         .signal, .stopped => |sig| 128 +| @as(u8, @truncate(@backingInt(sig))),

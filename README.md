@@ -53,7 +53,7 @@ on your `PATH`:
 ```sh
 tar -xJf dino-<version>-x86_64-linux.tar.xz
 install -m755 dino-<version>-x86_64-linux/dino ~/.local/bin/
-dino doctor                               # checks for zig, cmake, a generator, qemu and wine
+dino doctor                               # checks zig, cmake, a generator, qemu, wine and valgrind
 ```
 
 `dino` is a single static executable with the SDK inside it. Building projects with it requires
