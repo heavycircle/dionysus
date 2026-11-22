@@ -209,9 +209,14 @@ static void remove_slot(struct dino_event_loop *loop, struct item *s)
     }
 }
 
+// DISCONNECT (the peer's FIN) only with READ or WRITE, as on Linux: it lasts,
+// so with no interest it would end every wait at once. A reset (ABORT) is
+// reported anyway.
 static ULONG to_afd(uint32_t events)
 {
-    ULONG afd = AFD_POLL_DISCONNECT | AFD_POLL_ABORT | AFD_POLL_LOCAL_CLOSE | AFD_POLL_CONNECT_FAIL;
+    ULONG afd = AFD_POLL_ABORT | AFD_POLL_LOCAL_CLOSE | AFD_POLL_CONNECT_FAIL;
+    if (events & (DINO_EVENT_READ | DINO_EVENT_WRITE))
+        afd |= AFD_POLL_DISCONNECT;
     if (events & DINO_EVENT_READ)
         afd |= AFD_POLL_RECEIVE | AFD_POLL_ACCEPT;
     if (events & DINO_EVENT_WRITE)
@@ -228,6 +233,11 @@ static uint32_t from_afd(ULONG afd)
         events |= DINO_EVENT_WRITE;
     if (afd & AFD_POLL_CONNECT_FAIL)
         events |= DINO_EVENT_ERROR | DINO_EVENT_WRITE;
+    // AFD sets no RECEIVE bit at the end of the stream or on a reset, but a
+    // recv returns at once there (0, or the error): READ, as epoll reports it.
+    // complete() drops it again when READ wasn't asked for.
+    if (afd & (AFD_POLL_DISCONNECT | AFD_POLL_ABORT))
+        events |= DINO_EVENT_READ;
     if (afd & (AFD_POLL_DISCONNECT | AFD_POLL_ABORT | AFD_POLL_LOCAL_CLOSE))
         events |= DINO_EVENT_HANGUP;
     if (afd & AFD_POLL_ABORT)

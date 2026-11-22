@@ -37,10 +37,13 @@ typedef struct dino_event_timer *dino_event_timer_t;
 #define DINO_INVALID_EVENT_TIMER ((dino_event_timer_t)0)
 
 /* ---- Event flags ---- */
-#define DINO_EVENT_READ    0x0001 /**< Data to read, a connection to accept, or end of stream. */
-#define DINO_EVENT_WRITE   0x0004 /**< A send won't block, or a connect finished. */
-#define DINO_EVENT_ERROR   0x0008 /**< Always reported. */
-#define DINO_EVENT_HANGUP  0x0010 /**< Peer closed or shut down; always reported. */
+#define DINO_EVENT_READ  0x0001 /**< Data to read, a connection to accept, or end of stream. */
+#define DINO_EVENT_WRITE 0x0004 /**< A send won't block, or a connect finished. */
+#define DINO_EVENT_ERROR 0x0008 /**< Always reported. */
+/** The peer closed or shut down its side, so a read returns 0 (with READ, if
+ *  watched for it). Reported for an item watched for READ or WRITE; with
+ *  neither, only a reset is, with ERROR. */
+#define DINO_EVENT_HANGUP  0x0010
 #define DINO_EVENT_WAKE    0x0100 /**< From dino_event_wake; userdata is NULL. */
 #define DINO_EVENT_TIMER   0x0200 /**< A timer fired; userdata is the timer's. */
 #define DINO_EVENT_EXIT    0x0400 /**< A process ended; userdata is the process's. */
@@ -109,9 +112,9 @@ int dino_event_del_socket(dino_event_loop_t loop, dino_socket_t sock);
 
 /**
  * Start watching the read end of a pipe. READ is reported while data is
- * waiting, and READ with HANGUP once every write end has closed (a read then
- * returns 0). A pipe can be in a loop once; remove it with dino_event_del_pipe
- * before closing it.
+ * waiting, and READ with HANGUP once every write end has closed and the data
+ * written before is read (a read then returns 0). A pipe can be in a loop once; remove it with
+ * dino_event_del_pipe before closing it.
  *
  * Only read ends can be watched, and only for DINO_EVENT_READ: Windows has no
  * signal for a pipe having room to write, so write ends are refused on every
