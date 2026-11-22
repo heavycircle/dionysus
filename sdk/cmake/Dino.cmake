@@ -46,6 +46,38 @@ elseif(NOT DINO_LINK_FOR STREQUAL "size")
     message(FATAL_ERROR "DINO_LINK_FOR is '${DINO_LINK_FOR}'; use speed or size")
 endif()
 
+# The SDK reads its options here, at the first project(): a project that sets
+# one later (or changes it) changes nothing, silently. Note what was used, and
+# warn at the end of the top-level CMakeLists.txt about any that differ now.
+set(DINO__OPTIONS DINO_NO_PLATFORM_WARNINGS DINO_NO_AUTO_RUNTIME DINO_NO_LEAK_CHECK
+    DINO_NO_UTF8_MANIFEST DINO_SDK_WERROR DINO_LINK_FOR)
+foreach(_dino_option IN LISTS DINO__OPTIONS)
+    set(DINO__USED_${_dino_option} "${${_dino_option}}")
+endforeach()
+unset(_dino_option)
+function(_dino_check_late_options)
+    foreach(option IN LISTS DINO__OPTIONS)
+        set(used "${DINO__USED_${option}}")
+        set(now "${${option}}")
+        if(NOT option STREQUAL "DINO_LINK_FOR")
+            # Compared as booleans: ON, TRUE and 1 are the same setting.
+            foreach(var used now)
+                if(${var})
+                    set(${var} ON)
+                else()
+                    set(${var} OFF)
+                endif()
+            endforeach()
+        endif()
+        if(NOT used STREQUAL now)
+            message(WARNING "${option} is ${now} here, but the SDK read it as ${used} at project() "
+                "and still uses that. Set it before project(), or pass -D${option}=${now} to "
+                "`dino build --`.")
+        endif()
+    endforeach()
+endfunction()
+cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL _dino_check_late_options)
+
 # The first project() is the top-level one, so `ctest` and `dino test` find the
 # tests at the root of the build directory.
 enable_testing()

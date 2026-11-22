@@ -1,11 +1,11 @@
-// clang-format off: one redeclaration per call, laid out to be read.
 #pragma GCC system_header
+// clang-format off: one redeclaration per call, laid out to be read.
 #include_next <sys/socket.h>
 
 #include "dino_portability.h"
 
 // Windows sockets are SOCKET handles, need WSAStartup and close with closesocket.
-#if defined(DINO__WARNINGS) && !defined(DINO__SYS_SOCKET_H)
+#if defined(DINO__WARNINGS) && !defined(DINO__SYS_SOCKET_H) && (defined(_SYS_SOCKET_H))
 #define DINO__SYS_SOCKET_H
 
 __typeof__(socket) socket __attribute__((deprecated(

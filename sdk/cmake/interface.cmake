@@ -42,7 +42,7 @@ if(WIN32 AND NOT DINO_NO_UTF8_MANIFEST)
     set(_dino_rc "${CMAKE_BINARY_DIR}/CMakeFiles/dino_utf8.rc")
     set(_dino_res "${CMAKE_BINARY_DIR}/CMakeFiles/dino_utf8.res")
     file(WRITE "${_dino_rc}" "1 24 \"${DINO__SDK_DIR}/cmake/utf8.manifest\"\n")
-    execute_process(COMMAND zig rc /fo "${_dino_res}" "${_dino_rc}"
+    execute_process(COMMAND "${DINO_ZIG}" rc /fo "${_dino_res}" "${_dino_rc}"
         RESULT_VARIABLE _dino_rc_failed ERROR_VARIABLE _dino_rc_error)
     if(_dino_rc_failed)
         message(FATAL_ERROR "dino: compiling the UTF-8 manifest failed: ${_dino_rc_error}")

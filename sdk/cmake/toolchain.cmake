@@ -41,10 +41,14 @@ if(ZIG_TARGET MATCHES "^x86-linux")
     set(dino_cpu ";-mcpu=i686")
 endif()
 
+# One zig, found once: the compiler and the tool wrappers below name it by
+# path, so a build started with another PATH (an IDE, a CI step) still uses it.
+find_program(DINO_ZIG zig REQUIRED)
+
 # The target rides along with the compiler command rather than CMAKE_C_FLAGS,
 # so user-supplied flags can never drop it and silently build for the host.
-set(CMAKE_C_COMPILER "zig;cc;-target;${ZIG_TARGET}${dino_cpu}" CACHE STRING "C Compiler" FORCE)
-set(CMAKE_CXX_COMPILER "zig;c++;-target;${ZIG_TARGET}${dino_cpu}" CACHE STRING "C++ Compiler" FORCE)
+set(CMAKE_C_COMPILER "${DINO_ZIG};cc;-target;${ZIG_TARGET}${dino_cpu}" CACHE STRING "C Compiler" FORCE)
+set(CMAKE_CXX_COMPILER "${DINO_ZIG};c++;-target;${ZIG_TARGET}${dino_cpu}" CACHE STRING "C++ Compiler" FORCE)
 # A cross compiler: CMake then identifies it by compiling alone. Otherwise its
 # compiler-ID step links a program with no flags at all, and zig builds a
 # Debug libc for it (about a minute, cold) that a Release build never uses.
@@ -53,25 +57,33 @@ set(CMAKE_CXX_COMPILER_TARGET "${ZIG_TARGET}")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# CMake wants ar/ranlib as standalone executables, but zig only offers them as
-# subcommands. Small wrappers keep archiving independent of host binutils.
+# CMake wants ar, ranlib and the resource compiler as standalone executables,
+# but zig only offers them as subcommands. Small wrappers keep the build
+# independent of host binutils. Each wrapper is stored in the cache variables
+# named after the tool.
 function(dino_zig_tool name)
     set(dir "${CMAKE_BINARY_DIR}/CMakeFiles/dino-tools")
     if(CMAKE_HOST_WIN32)
         set(tool "${dir}/${name}.cmd")
-        file(WRITE "${tool}" "@zig ${name} %*\r\n")
+        file(WRITE "${tool}" "@\"${DINO_ZIG}\" ${name} %*\r\n")
     else()
         set(tool "${dir}/${name}")
-        file(WRITE "${tool}" "#!/bin/sh\nexec zig ${name} \"$@\"\n")
+        file(WRITE "${tool}" "#!/bin/sh\nexec '${DINO_ZIG}' ${name} \"$@\"\n")
         file(CHMOD "${tool}"
             PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE
                 WORLD_READ WORLD_EXECUTE)
     endif()
-    string(TOUPPER "${name}" var)
-    set(CMAKE_${var} "${tool}" CACHE FILEPATH "zig ${name} wrapper" FORCE)
+    foreach(var ${ARGN})
+        set(${var} "${tool}" CACHE FILEPATH "zig ${name} wrapper" FORCE)
+    endforeach()
 endfunction()
-dino_zig_tool(ar)
-dino_zig_tool(ranlib)
+# The compiler-specific ones archive LTO objects (CMAKE_INTERPROCEDURAL_OPTIMIZATION):
+# left alone, CMake looks for a host llvm-ar and uses "-NOTFOUND" without one.
+dino_zig_tool(ar CMAKE_AR CMAKE_C_COMPILER_AR CMAKE_CXX_COMPILER_AR)
+dino_zig_tool(ranlib CMAKE_RANLIB CMAKE_C_COMPILER_RANLIB CMAKE_CXX_COMPILER_RANLIB)
+# Windows targets enable RC for .rc files (icons, version information), which
+# would otherwise mean a host windres.
+dino_zig_tool(rc CMAKE_RC_COMPILER)
 
 # try_compile projects (check_function_exists and friends) read this file again
 # without the cache, so pass the target on, or every check runs against the
@@ -104,7 +116,24 @@ endif()
 # another libc, and a Debug configure would otherwise also build a Release one.
 set(CMAKE_TRY_COMPILE_CONFIGURATION "${CMAKE_BUILD_TYPE}")
 
-# Don't use host machine glibc
-set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+# find_library, find_path and find_package must not find the host's libraries
+# and headers (/usr/include, a host OpenSSL): they are for another C library and
+# usually another architecture, and fail later with a wall of header errors.
+# The system paths and the directories next to each PATH entry are what put
+# them there; a project's own CMAKE_PREFIX_PATH, HINTS and PATHS still apply.
+# find_program keeps searching PATH for host tools.
+set(CMAKE_FIND_USE_CMAKE_SYSTEM_PATH OFF)
+set(CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH OFF)
+set(CMAKE_FIND_USE_PACKAGE_REGISTRY OFF)
+if(CMAKE_HOST_WIN32)
+    set(dino_path "$ENV{PATH}")
+else()
+    string(REPLACE ":" ";" dino_path "$ENV{PATH}")
+endif()
+list(APPEND CMAKE_PROGRAM_PATH ${dino_path})
+unset(dino_path)
+# pkg-config likewise: its default directories describe host libraries. Its
+# PKG_CONFIG_PATH, and a PKG_CONFIG_LIBDIR of the user's own, are kept.
+if(NOT DEFINED ENV{PKG_CONFIG_LIBDIR})
+    set(ENV{PKG_CONFIG_LIBDIR} "${CMAKE_CURRENT_LIST_DIR}/no-host-pkgconfig")
+endif()

@@ -1,12 +1,12 @@
-// clang-format off: one redeclaration per call, laid out to be read.
 #pragma GCC system_header
+// clang-format off: one redeclaration per call, laid out to be read.
 #include_next <pthread.h>
 
 #include "dino_portability.h"
 
 // On Windows these come from winpthreads, a library dino_thread_* doesn't need.
 // pthread_sigmask, pthread_kill and the like have no dino equivalent and stay quiet.
-#if defined(DINO__WARNINGS) && !defined(DINO__PTHREAD_H)
+#if defined(DINO__WARNINGS) && !defined(DINO__PTHREAD_H) && (defined(_PTHREAD_H) || defined(WIN_PTHREADS_H))
 #define DINO__PTHREAD_H
 
 __typeof__(pthread_create) pthread_create __attribute__((deprecated(

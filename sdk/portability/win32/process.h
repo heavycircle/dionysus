@@ -1,10 +1,10 @@
-// clang-format off: one redeclaration per call, laid out to be read.
 #pragma GCC system_header
+// clang-format off: one redeclaration per call, laid out to be read.
 #include_next <process.h>
 
 #include "dino_portability.h"
 
-#if defined(DINO__WARNINGS) && !defined(DINO__PROCESS_H)
+#if defined(DINO__WARNINGS) && !defined(DINO__PROCESS_H) && (defined(_INC_PROCESS))
 #define DINO__PROCESS_H
 
 _CRTIMP __typeof__(_beginthread) _beginthread __attribute__((deprecated(

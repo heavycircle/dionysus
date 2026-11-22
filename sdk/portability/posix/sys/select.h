@@ -1,10 +1,10 @@
-// clang-format off: one redeclaration per call, laid out to be read.
 #pragma GCC system_header
+// clang-format off: one redeclaration per call, laid out to be read.
 #include_next <sys/select.h>
 
 #include "dino_portability.h"
 
-#if defined(DINO__WARNINGS) && !defined(DINO__SYS_SELECT_H)
+#if defined(DINO__WARNINGS) && !defined(DINO__SYS_SELECT_H) && (defined(_SYS_SELECT_H))
 #define DINO__SYS_SELECT_H
 
 __typeof__(select) select __attribute__((deprecated(

@@ -111,6 +111,10 @@ foreach(target dino_core dino_util dino_test_output dino_leakcheck dino_utf8_con
     if(TARGET ${target})
         target_compile_definitions(${target} PRIVATE _GNU_SOURCE)
         target_compile_options(${target} PRIVATE ${dino_sdk_warnings})
+        # The sources are C11, whatever standard the project picked: CMake puts
+        # this -std= after CFLAGS and CMAKE_C_FLAGS, so a project's C89 can't
+        # reach them (inline, declarations in for loops).
+        set_target_properties(${target} PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON)
     endif()
 endforeach()
 

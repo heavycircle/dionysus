@@ -1,10 +1,10 @@
-// clang-format off: one redeclaration per call, laid out to be read.
 #pragma GCC system_header
+// clang-format off: one redeclaration per call, laid out to be read.
 #include_next <unistd.h>
 
 #include "dino_portability.h"
 
-#if defined(DINO__WARNINGS) && !defined(DINO__UNISTD_H)
+#if defined(DINO__WARNINGS) && !defined(DINO__UNISTD_H) && (defined(_UNISTD_H))
 #define DINO__UNISTD_H
 
 #ifndef _WIN32

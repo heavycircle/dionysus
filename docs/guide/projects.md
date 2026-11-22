@@ -111,7 +111,9 @@ Everything links statically, so libraries need to be static (`STATIC`), or heade
 
 - **Host packages** (`find_package()` for something installed by apt) won't work for foreign targets:
   they're built for the host and usually not static. Build such libraries from source as part of the
-  project, or register them as organization libraries.
+  project, or register them as organization libraries. So that a host copy isn't picked up by mistake, `find_package`, `find_library`, `find_path` and pkg-config don't search the host's system directories (`/usr/include`, `/usr/lib`, ...) at all: they report the package missing. A library you built for the target is found through `CMAKE_PREFIX_PATH`, or the `HINTS`/`PATHS` of the call, as usual. `find_program` still finds host tools on `PATH`.
+- **Windows resources:** a `.rc` file (an icon, version information) in a Windows target's sources is compiled with zig's resource compiler; no host `windres` is needed. A manifest of your own needs `DINO_NO_UTF8_MANIFEST` (see [UTF-8 on Windows](../sdk/fs.md#utf-8-on-windows)).
+- **LTO:** `CMAKE_INTERPROCEDURAL_OPTIMIZATION` (or the `INTERPROCEDURAL_OPTIMIZATION` property) works, static libraries included: they are archived with zig's own archiver.
 
 ## Platform-specific code
 
@@ -145,7 +147,7 @@ Another triple gets the Linux or Windows spelling of its architecture where one 
 
 The SDK is built with dino's own flags. A project's `CFLAGS`, C standard and other CMake settings apply to the project's code and to the SDK's headers it includes; whether they also reach the SDK's own sources is not something a project may rely on.
 
-- **Language standard:** any C standard works for a project, strict ISO C included (`CFLAGS=-std=c11`, or `CMAKE_C_STANDARD 11` with `CMAKE_C_EXTENSIONS OFF`): the SDK's headers are checked to compile under it.
+- **Language standard:** any C standard from C89 on works for a project's code, strict ISO C included (`CFLAGS=-std=c11`, or `CMAKE_C_STANDARD 11` with `CMAKE_C_EXTENSIONS OFF`): the SDK's headers are checked to compile under it, and the SDK's own sources are always built as C11. Two limits: tests need C99 or later (`utest.h` uses `inline`), and C89 with `-pedantic` warns about the SDK's headers, which use `//` comments.
 - **Warnings:** the project's warning flags don't apply to the SDK's own sources, which build with
   `-Wall -Wextra` of their own and never fail the build, so `CFLAGS="-Wconversion -Werror"` checks
   the project's code without tripping over the SDK's. The SDK's headers are compiled with the
@@ -155,7 +157,7 @@ The SDK is built with dino's own flags. A project's `CFLAGS`, C standard and oth
 ## SDK options
 
 These change how the SDK is built, so they must be set **before `project()`**, which is where dino
-adds the SDK. They can also be passed as `dino build -- -D<OPTION>=ON`.
+adds the SDK. They can also be passed as `dino build -- -D<OPTION>=ON`. One set or changed after `project()` has no effect, and the configure warns about it.
 
 ```cmake
 cmake_minimum_required(VERSION 3.20)
