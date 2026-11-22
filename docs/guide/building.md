@@ -142,6 +142,12 @@ dino clean arm win32  # just these
 
 `dino clean` leaves alone any directory under `build/` that it didn't create.
 
+## The first build
+
+The first build of each target, in each build mode, takes noticeably longer than later ones: zig builds the C library (musl or MinGW) and its runtime for that target and caches them in its own cache directory (`~/.cache/zig`), which every later project reuses. On a typical machine that is several seconds for a Linux target and longer for Windows; `dino` says so when it starts configuring a target for the first time.
+
+The C library is built again for each new combination of flags that reach the link, since zig caches it per set of flags: switching to `--debug` once, or adding a flag such as `-flto` or `-mcpu=...`, each costs one more of these builds. In Docker, mount a directory as the zig cache (see [Docker](docker.md#file-ownership)) so containers don't start cold every time.
+
 ## Without dino
 
 `dino build` is a thin layer over CMake, and a project needs nothing from it at build time beyond
