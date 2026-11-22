@@ -62,6 +62,23 @@ RUN install -d -o dino -g dino /opt/wine-prefix \
     && setpriv --reuid=dino --regid=dino --init-groups \
         env HOME=/home/dino dino-entrypoint --own-wine-prefix
 
+# zig builds the C library and runtime for each target the first time a build
+# needs it, which in a fresh container is every time: about a minute of a
+# first build. The published images (release.yml, nightly.yml) pass
+# WARM_ZIG_CACHE=1 to build a project for every target here, so their cache
+# already holds what a Release build links. It lives in /opt and is writable by
+# anyone, for whichever user the entrypoint picks, as the wine prefix is.
+# The entrypoint points zig at it unless the user chose a cache of their own.
+ARG WARM_ZIG_CACHE=0
+RUN install -d -o dino -g dino /opt/zig-cache \
+    && if [ "$WARM_ZIG_CACHE" = 1 ]; then \
+        setpriv --reuid=dino --regid=dino --init-groups sh -c \
+            'export HOME=/home/dino ZIG_GLOBAL_CACHE_DIR=/opt/zig-cache && cd /tmp && dino init --no-configure warm >/dev/null \
+             && dino build --all -C warm >/dev/null' \
+        && rm -rf /tmp/warm /home/dino/.cache/dino; \
+    fi \
+    && chmod -R a+rwX /opt/zig-cache
+
 # Starts as root only to pick the user: the owner of the working directory
 # (see scripts/docker-entrypoint.sh), so files in a mounted project stay yours.
 # The group marks a start without --user: --user 0 starts in group 0.

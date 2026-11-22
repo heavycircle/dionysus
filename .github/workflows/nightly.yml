@@ -89,7 +89,9 @@ jobs:
           context: .
           push: true
           tags: ghcr.io/${{ github.repository }}:nightly
-          build-args: DINO_VERSION=${{ steps.build.outputs.version }}
+          build-args: |
+            DINO_VERSION=${{ steps.build.outputs.version }}
+            WARM_ZIG_CACHE=1
           labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
           cache-from: type=gha
 

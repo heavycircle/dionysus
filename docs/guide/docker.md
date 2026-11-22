@@ -53,6 +53,12 @@ docker run --rm -v "$PWD:/work" -v "$HOME/.cache/zig:/home/dino/.cache/zig" \
     ghcr.io/heavycircle/dionysus:stable dino build --all
 ```
 
+## The zig cache
+
+zig builds the C library and runtime for each target the first time a build needs them, about a minute for all seven targets, and a new container starts with whatever its image holds. The published images (`:stable`, the version tags and `:nightly`) are built with that cache already filled for Release builds of every target, in `/opt/zig-cache`, so a new project's first `dino build --all` takes about half the time (78 s to 32 s on a CI-sized machine); a `--debug` build, or one with flags of its own, still builds its own library once per container. An image you build yourself starts cold unless you pass `--build-arg WARM_ZIG_CACHE=1`, which adds about 240 MB.
+
+zig uses that cache unless you choose another: set `ZIG_GLOBAL_CACHE_DIR`, or mount a directory at `/home/dino/.cache/zig` as shown above to keep a cache across containers.
+
 ## Wine
 
 Every container user gets a wine prefix that links to a shared, prebuilt one in the image, so the
@@ -124,11 +130,11 @@ itself. For your own project, a `.devcontainer/devcontainer.json` can use the pu
 
 ```json
 {
-    "name": "my-project",
-    "image": "ghcr.io/heavycircle/dionysus:stable",
-    "remoteUser": "dino",
-    "customizations": {
-        "vscode": { "extensions": ["llvm-vs-code-extensions.vscode-clangd"] }
-    }
+  "name": "my-project",
+  "image": "ghcr.io/heavycircle/dionysus:stable",
+  "remoteUser": "dino",
+  "customizations": {
+    "vscode": { "extensions": ["llvm-vs-code-extensions.vscode-clangd"] }
+  }
 }
 ```

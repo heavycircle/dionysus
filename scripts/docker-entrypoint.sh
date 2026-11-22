@@ -42,6 +42,15 @@ own_wine_prefix() {
     fi
 }
 
+# The image's zig cache in /opt, warmed in the published images, unless the
+# user chose one: ZIG_GLOBAL_CACHE_DIR, or a cache mounted at zig's default
+# place in the home directory, as the Docker guide suggests.
+use_image_zig_cache() {
+    if [ -z "${ZIG_GLOBAL_CACHE_DIR-}" ] && [ ! -e "$HOME/.cache/zig" ]; then
+        export ZIG_GLOBAL_CACHE_DIR=/opt/zig-cache
+    fi
+}
+
 if [ "${1-}" = --own-wine-prefix ]; then
     own_wine_prefix
     exit 0
@@ -55,6 +64,7 @@ if [ "$(id -u)" != 0 ]; then
         mkdir -p "$HOME"
     fi
     own_wine_prefix
+    use_image_zig_cache
     exec "$@"
 fi
 
@@ -62,6 +72,7 @@ fi
 if [ "$(id -g)" != "$(getent group dino-entrypoint | cut -d: -f3)" ]; then
     export HOME=/root
     own_wine_prefix
+    use_image_zig_cache
     exec "$@"
 fi
 
@@ -71,6 +82,7 @@ gid=$(stat -c %g .)
 if [ "$uid" = 0 ]; then
     export HOME=/root
     own_wine_prefix
+    use_image_zig_cache
     exec setpriv --reuid=0 --regid=0 --init-groups "$@"
 fi
 
