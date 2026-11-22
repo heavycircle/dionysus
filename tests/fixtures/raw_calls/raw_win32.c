@@ -2,6 +2,7 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <process.h>
+#include <stdlib.h>
 
 static DWORD WINAPI thread_main(LPVOID arg)
 {
@@ -18,6 +19,14 @@ static unsigned __stdcall thread_main_ex(void *arg)
 static void thread_main_crt(void *arg)
 {
     (void)arg;
+}
+
+static BOOL CALLBACK init_once_cb(PINIT_ONCE once, PVOID param, PVOID *context)
+{
+    (void)once;
+    (void)param;
+    (void)context;
+    return TRUE;
 }
 
 void raw_win32(void);
@@ -49,6 +58,41 @@ void raw_win32(void)
     InitializeCriticalSection(&cs);                 // expected-warning {{use dino_mutex_create()}}
     InitializeCriticalSectionAndSpinCount(&cs, 0);  // expected-warning {{use dino_mutex_create()}}
     QueryPerformanceCounter(&now);                  // expected-warning {{use dino_time_monotonic_ns()}}
+    TerminateProcess(pi.hProcess, 1);               // expected-warning {{use dino_process_kill()}}
+    (void)GetCurrentProcessId();                    // expected-warning {{use dino_process_current_id()}}
+    (void)GetCurrentThreadId();                     // expected-warning {{use dino_thread_current_id()}}
+    SwitchToThread();                               // expected-warning {{use dino_thread_yield()}}
+    SleepEx(0, FALSE);                              // expected-warning {{use dino_sleep_ms()}}
+    GetEnvironmentVariableA("X", buf, 1);           // expected-warning {{use dino_env_get()}}
+    GetEnvironmentVariableW(L"X", NULL, 0);         // expected-warning {{use dino_env_get()}}
+    SetEnvironmentVariableA("X", "1");              // expected-warning {{use dino_env_set()}}
+    SetEnvironmentVariableW(L"X", NULL);            // expected-warning {{use dino_env_set()}}
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);                   // expected-warning {{use dino_time_unix_ms()}}
+    GetFileSizeEx(r, &now);                         // expected-warning {{use dino_file_size()}}
+    HANDLE port = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0); // expected-warning {{use dino_event_loop_create()}}
+    DWORD        bytes;
+    ULONG_PTR    key;
+    LPOVERLAPPED ov;
+    GetQueuedCompletionStatus(port, &bytes, &key, &ov, 0); // expected-warning {{use dino_event_wait()}}
+#if _WIN32_WINNT >= 0x0600
+    (void)GetTickCount64();                         // expected-warning {{use dino_time_monotonic_ns()}}
+    OVERLAPPED_ENTRY entry;
+    ULONG            got;
+    GetQueuedCompletionStatusEx(port, &entry, 1, &got, 0, FALSE); // expected-warning {{use dino_event_wait()}}
+    INIT_ONCE io = INIT_ONCE_STATIC_INIT;
+    InitOnceExecuteOnce(&io, init_once_cb, NULL, NULL); // expected-warning {{use dino_once()}}
+    CONDITION_VARIABLE cv;
+    InitializeConditionVariable(&cv);               // expected-warning {{use dino_cond_create()}}
+    SleepConditionVariableCS(&cv, &cs, 0);          // expected-warning {{use dino_cond_wait()}}
+#endif
+    (void)_getpid();                                // expected-warning {{use dino_process_current_id()}}
+    _cwait(NULL, 0, 0);                             // expected-warning {{use dino_process_wait()}}
+    _spawnl(_P_NOWAIT, "x", "x", NULL);             // expected-warning {{_spawnl() is Windows-only}}
+    _spawnv(_P_NOWAIT, "x", NULL);                  // expected-warning {{_spawnv() is Windows-only}}
+    _execl("x", "x", NULL);                         // expected-warning {{_execl() is Windows-only}}
+    _execv("x", NULL);                              // expected-warning {{_execv() is Windows-only}}
+    _putenv("X=1");                                 // expected-warning {{use dino_env_set()}}
 
     WSAStartup(MAKEWORD(2, 2), &wsa);               // expected-warning {{WSAStartup() is Windows-only}}
     SOCKET s = socket(AF_INET, SOCK_STREAM, 0);     // expected-warning {{use dino_socket_create()}}
@@ -60,6 +104,13 @@ void raw_win32(void)
     recv(s, buf, 1, 0);                             // expected-warning {{use dino_socket_recv()}}
     setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt)); // expected-warning {{use dino_socket_setopt()}}
     shutdown(s, SD_BOTH);                           // expected-warning {{use dino_socket_shutdown()}}
+    u_long mode = 1;
+    ioctlsocket(s, FIONBIO, &mode);                 // expected-warning {{use dino_socket_set_nonblocking()}}
+    sendto(s, "x", 1, 0, &addr, len);               // expected-warning {{use dino_socket_sendto()}}
+    recvfrom(s, buf, 1, 0, &addr, &len);            // expected-warning {{use dino_socket_recvfrom()}}
+    (void)WSAGetLastError();                        // expected-warning {{use dino_error()}}
+    WSASocketA(AF_INET, SOCK_STREAM, 0, NULL, 0, 0); // expected-warning {{WSASocketA() is Windows-only}}
+    WSASocketW(AF_INET, SOCK_STREAM, 0, NULL, 0, 0); // expected-warning {{WSASocketW() is Windows-only}}
     FD_ZERO(&set);
     select(0, &set, NULL, NULL, NULL);              // expected-warning {{use dino_select()}}
 #if _WIN32_WINNT >= 0x0600

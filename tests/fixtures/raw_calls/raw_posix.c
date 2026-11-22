@@ -1,12 +1,24 @@
 // clang-format off: clang -verify reads each call's expectation from that call's own line.
 #include <poll.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stddef.h>
+#include <stdlib.h>
+#include <sys/epoll.h>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/wait.h>
+#include <threads.h>
 #include <time.h>
 #include <unistd.h>
+
+static int thread_main(void *arg)
+{
+    (void)arg;
+    return 0;
+}
+
+static void init_once(void) {}
 
 void raw_posix(char **argv, char **envp);
 void raw_posix(char **argv, char **envp)
@@ -33,6 +45,26 @@ void raw_posix(char **argv, char **envp)
     posix_spawn(&pid, "/bin/sh", NULL, NULL, argv, envp); // expected-warning {{posix_spawn() is POSIX-only}}
     posix_spawnp(&pid, "sh", NULL, NULL, argv, envp);     // expected-warning {{posix_spawnp() is POSIX-only}}
     waitpid(pid, NULL, 0);                 // expected-warning {{waitpid() is POSIX-only}}
+    wait(NULL);                            // expected-warning {{use dino_process_wait()}}
+#if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
+    siginfo_t info;
+    waitid(P_PID, (id_t)pid, &info, WEXITED); // expected-warning {{waitid() is POSIX-only}}
+    kill(pid, SIGTERM);                    // expected-warning {{use dino_process_kill()}}
+    setenv("X", "1", 1);                   // expected-warning {{use dino_env_set()}}
+    unsetenv("X");                         // expected-warning {{use dino_env_unset()}}
+#endif
+#if defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
+    wait4(pid, NULL, 0, NULL);             // expected-warning {{wait4() is POSIX-only}}
+#endif
+#if defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
+    static char env_entry[] = "X=1";
+    putenv(env_entry);                     // expected-warning {{putenv() keeps the caller's string}}
+#endif
+#ifdef _GNU_SOURCE
+    clearenv();                            // expected-warning {{clearenv() is Linux-only}}
+    (void)gettid();                        // expected-warning {{use dino_thread_current_id()}}
+#endif
+    (void)getpid();                        // expected-warning {{use dino_process_current_id()}}
 
     int s = socket(AF_INET, SOCK_STREAM, 0); // expected-warning {{use dino_socket_create()}}
     bind(s, &addr, len);                   // expected-warning {{use dino_socket_bind()}}
@@ -43,18 +75,59 @@ void raw_posix(char **argv, char **envp)
     recv(s, fds, 1, 0);                    // expected-warning {{use dino_socket_recv()}}
     setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)); // expected-warning {{use dino_socket_setopt()}}
     shutdown(s, SHUT_RDWR);                // expected-warning {{use dino_socket_shutdown()}}
+    sendto(s, "x", 1, 0, &addr, len);      // expected-warning {{use dino_socket_sendto()}}
+    recvfrom(s, fds, 1, 0, &addr, &len);   // expected-warning {{use dino_socket_recvfrom()}}
+#ifdef _GNU_SOURCE
+    accept4(s, &addr, &len, 0);            // expected-warning {{accept4() is Linux-only}}
+#endif
 
     poll(&pfd, 1, 0);                      // expected-warning {{use dino_poll()}}
     FD_ZERO(&set);
     select(1, &set, NULL, NULL, NULL);     // expected-warning {{use dino_select()}}
+#if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
+    pselect(1, &set, NULL, NULL, NULL, NULL); // expected-warning {{pselect() is POSIX-only}}
+#endif
+#ifdef _GNU_SOURCE
+    ppoll(&pfd, 1, NULL, NULL);            // expected-warning {{ppoll() is Linux-only}}
+#endif
+
+    int ep = epoll_create(1);              // expected-warning {{use dino_event_loop_create()}}
+    epoll_create1(0);                      // expected-warning {{use dino_event_loop_create()}}
+    struct epoll_event ev = { 0 };
+    epoll_ctl(ep, EPOLL_CTL_ADD, s, &ev);  // expected-warning {{epoll_ctl() is Linux-only}}
+    epoll_wait(ep, &ev, 1, 0);             // expected-warning {{use dino_event_wait()}}
+    epoll_pwait(ep, &ev, 1, 0, NULL);      // expected-warning {{use dino_event_wait()}}
+
+    thrd_t    thr;
+    mtx_t     mtx;
+    cnd_t     cnd;
+    once_flag flag = ONCE_FLAG_INIT;
+    thrd_create(&thr, thread_main, NULL);  // expected-warning {{use dino_thread_create()}}
+    thrd_join(thr, NULL);                  // expected-warning {{use dino_thread_join()}}
+    thrd_detach(thr);                      // expected-warning {{use dino_thread_detach()}}
+    thrd_yield();                          // expected-warning {{use dino_thread_yield()}}
+    mtx_init(&mtx, mtx_plain);             // expected-warning {{use dino_mutex_create()}}
+    mtx_lock(&mtx);                        // expected-warning {{use dino_mutex_lock()}}
+    mtx_trylock(&mtx);                     // expected-warning {{use dino_mutex_trylock()}}
+    mtx_unlock(&mtx);                      // expected-warning {{use dino_mutex_unlock()}}
+    cnd_init(&cnd);                        // expected-warning {{use dino_cond_create()}}
+    cnd_wait(&cnd, &mtx);                  // expected-warning {{use dino_cond_wait()}}
+    struct timespec until = { 0, 0 };
+    cnd_timedwait(&cnd, &mtx, &until);     // expected-warning {{use dino_cond_timedwait()}}
+    cnd_signal(&cnd);                      // expected-warning {{use dino_cond_signal()}}
+    cnd_broadcast(&cnd);                   // expected-warning {{use dino_cond_broadcast()}}
+    cnd_destroy(&cnd);                     // expected-warning {{use dino_cond_destroy()}}
+    mtx_destroy(&mtx);                     // expected-warning {{use dino_mutex_destroy()}}
+    call_once(&flag, init_once);           // expected-warning {{use dino_once()}}
 
 #ifdef CLOCK_REALTIME
     struct timespec ts = { 0, 0 };
     nanosleep(&ts, NULL);                  // expected-warning {{use dino_sleep_us()}}
     clock_gettime(CLOCK_MONOTONIC, &ts);   // expected-warning {{use dino_time_monotonic_ns()}}
+    clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL); // expected-warning {{clock_nanosleep() is POSIX-only}}
 #endif
 
     // Still quiet: right on files, or no dino replacement.
     close(write(fds[1], "x", 1));
-    (void)getpid();
+    (void)getenv("X");
 }

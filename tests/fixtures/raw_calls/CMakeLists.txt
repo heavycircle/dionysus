@@ -9,10 +9,12 @@ project(RawCalls C)
 # fails to compile.
 
 if(WIN32)
-    set(platform win32)
+    set(platform win32 winsock1)
 else()
     set(platform posix)
 endif()
+list(TRANSFORM platform PREPEND raw_)
+list(TRANSFORM platform APPEND .c)
 
 if(DINO_NO_PLATFORM_WARNINGS)
     # The project-wide opt-out: nothing may warn at all.
@@ -25,7 +27,7 @@ else()
 endif()
 
 function(variant name standard extensions)
-    add_library(raw_${name} STATIC raw_common.c raw_${platform}.c)
+    add_library(raw_${name} STATIC raw_common.c ${platform})
     target_link_libraries(raw_${name} PRIVATE dino_core)
     target_compile_options(raw_${name} PRIVATE ${check})
     target_include_directories(raw_${name} SYSTEM PRIVATE system)
@@ -39,7 +41,7 @@ variant(posix2008 11 OFF _POSIX_C_SOURCE=200809L)
 variant(gnu 17 ON _GNU_SOURCE)
 
 # Per-target opt-out, as a project would set it.
-add_library(raw_allowed STATIC raw_common.c raw_${platform}.c)
+add_library(raw_allowed STATIC raw_common.c ${platform})
 target_link_libraries(raw_allowed PRIVATE dino_core)
 target_include_directories(raw_allowed SYSTEM PRIVATE system)
 target_compile_definitions(raw_allowed PRIVATE DINO_ALLOW_PLATFORM_CALLS)

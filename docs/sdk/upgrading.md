@@ -9,6 +9,10 @@ almost everything here: a removed or renamed name fails to build, and the error 
 
 New: `dino_socket_sendto`, `dino_socket_recvfrom`, `dino_socket_local_addr` and `dino_socket_peer_addr`, with `dino_socket_addr_t` (see [Network](network.md#udp)). Two Windows behaviors now match Linux: a datagram larger than the buffer is returned cut to fit instead of failing, and an unconnected UDP socket no longer fails a receive with `DINO_ECONNRESET` after sending to a port nobody listens on.
 
+### More portability warnings
+
+Calls with a `dino_*` replacement that weren't flagged now are: `kill`, `getpid`, `wait`, `setenv`, `gettimeofday`, `sched_yield`, `epoll_*`, C11 `<threads.h>`, `sendto`/`recvfrom` and their Windows counterparts (`TerminateProcess`, `GetCurrentThreadId`, `SetEnvironmentVariable`, `ioctlsocket`, `WSAGetLastError`, ...); see the table in [Portability warnings](../guide/portability-warnings.md#whats-flagged). A project built with `-Werror` that uses them sees new errors: switch to the `dino_*` call, or opt out as that page shows.
+
 ### Toolchain fixes
 
 - **`find_package`, `find_library`, `find_path` and pkg-config no longer search the host's system directories**, whose libraries and headers are for another C library. A project that found a host package by accident now gets "not found" at configure time instead of errors at build time. Point `CMAKE_PREFIX_PATH` at libraries built for the target.
