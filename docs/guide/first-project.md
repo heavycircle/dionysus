@@ -98,7 +98,7 @@ dino build --all
     build/arm64/hello (7.5 KiB)
 ...
 ==> win64 (x86_64-windows-gnu, release)
-    build/win64/hello.exe (57.0 KiB)
+    build/win64/hello.exe (57.5 KiB)
     build/win64/test_main.exe (63.0 KiB)
 ==> x86_64 (x86_64-linux-musl, release)
     build/x86_64/hello (7.3 KiB)

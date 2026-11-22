@@ -7,6 +7,7 @@
 #   DINO_PLATFORM             win32 or posix
 #   DINO__TEST_OBJECTS        objects every test links
 #   DINO__LEAK_CHECK_OBJECTS  the leak check's object; empty where it can't work
+#   DINO__UTF8_OBJECTS        the Windows UTF-8 console object; empty elsewhere
 
 # Wrappers for the system headers that declare calls with a dino_* replacement
 # (sdk/portability/common/dino_portability.h). INTERFACE only: everything that
@@ -26,6 +27,33 @@ endif()
 option(DINO_NO_AUTO_RUNTIME "Don't run the SDK's setup before main() (see dino/core/runtime.h)" OFF)
 if(NOT WIN32 AND NOT DINO_NO_AUTO_RUNTIME)
     target_link_options(dino_core INTERFACE "LINKER:-u,dino__runtime_auto")
+endif()
+
+# What dino_executable() and dino_test() add to a Windows program: a manifest
+# that makes its code page UTF-8, so argv, fopen, getenv and printf agree with
+# the SDK's UTF-8 strings (Windows 10 1903 and later), and the object that sets
+# the console to match. The manifest is compiled to a .res once, here, and
+# linked as is: zig could compile the .rc on every link line, but parallel
+# links then race on it. A project with a manifest of its own sets
+# DINO_NO_UTF8_MANIFEST: an executable can have only one.
+option(DINO_NO_UTF8_MANIFEST "Don't make Windows executables use UTF-8 (manifest and console)" OFF)
+add_library(dino__utf8 INTERFACE)
+if(WIN32 AND NOT DINO_NO_UTF8_MANIFEST)
+    set(_dino_rc "${CMAKE_BINARY_DIR}/CMakeFiles/dino_utf8.rc")
+    set(_dino_res "${CMAKE_BINARY_DIR}/CMakeFiles/dino_utf8.res")
+    file(WRITE "${_dino_rc}" "1 24 \"${DINO__SDK_DIR}/cmake/utf8.manifest\"\n")
+    execute_process(COMMAND zig rc /fo "${_dino_res}" "${_dino_rc}"
+        RESULT_VARIABLE _dino_rc_failed ERROR_VARIABLE _dino_rc_error)
+    if(_dino_rc_failed)
+        message(FATAL_ERROR "dino: compiling the UTF-8 manifest failed: ${_dino_rc_error}")
+    endif()
+    target_link_options(dino__utf8 INTERFACE "${_dino_res}")
+    set_property(TARGET dino__utf8 PROPERTY INTERFACE_LINK_DEPENDS "${_dino_res}")
+    target_sources(dino__utf8 INTERFACE ${DINO__UTF8_OBJECTS})
+    unset(_dino_rc)
+    unset(_dino_res)
+    unset(_dino_rc_failed)
+    unset(_dino_rc_error)
 endif()
 
 # SYSTEM: utest.h's own warnings and clang-tidy findings stay out of test code.

@@ -68,7 +68,7 @@ handles. Using one handle from several threads at once is only safe where the he
 event loop, for example, is designed for it).
 
 **Strings** are UTF-8 on every platform, including paths, arguments and environment variables
-passed to the process functions.
+passed to the process functions. On Windows, programs built with `dino_executable()` also get `argv`, `fopen` and `printf` in UTF-8 (see [fs](fs.md#utf-8-on-windows)).
 
 **Setup** is automatic. Nothing needs to be called before using any module; see [runtime](runtime.md).
 

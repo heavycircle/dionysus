@@ -9,6 +9,14 @@ almost everything here: a removed or renamed name fails to build, and the error 
 
 New: `dino_socket_sendto`, `dino_socket_recvfrom`, `dino_socket_local_addr` and `dino_socket_peer_addr`, with `dino_socket_addr_t` (see [Network](network.md#udp)). Two Windows behaviors now match Linux: a datagram larger than the buffer is returned cut to fit instead of failing, and an unconnected UDP socket no longer fails a receive with `DINO_ECONNRESET` after sending to a port nobody listens on.
 
+### Windows executables use UTF-8
+
+Executables from `dino_executable()` and `dino_test()` now carry a manifest that makes their Windows code page UTF-8 (Windows 10 1903 and later), and set the console to UTF-8 while they run: `argv`, `fopen`, `getenv` and `printf` now agree with the SDK's UTF-8 strings. A program that relied on `argv` arriving in the ANSI code page sees UTF-8 instead; one that links its own manifest sets `DINO_NO_UTF8_MANIFEST` (see [fs](fs.md#utf-8-on-windows)).
+
+### `dino_file_rename` and `dino_file_remove`
+
+New, for the two calls whose C library versions differ on Windows: `rename` there fails when the destination exists, `remove` on a read-only file (see [fs](fs.md#renaming-and-removing)).
+
 ## To 0.7
 
 0.7 changes the API where it has to change before 1.0 freezes it. The compiler finds the changes to handle types, `argv`, process status and the renamed names; the changes to `dino_mutex_trylock`, to negative lengths and to event flags it doesn't.

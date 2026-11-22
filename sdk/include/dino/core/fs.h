@@ -22,6 +22,36 @@ extern "C"
 int dino_file_size(const char *path, uint64_t *size);
 
 /**
+ * Rename a file or directory, replacing a file already at the new path, as
+ * rename(2) does on Linux. The C library's rename() on Windows fails when the
+ * destination exists, so the usual "write a temporary file, then rename it
+ * over the old one" fails from the second save on.
+ *
+ * Within one file system only. On Windows neither path may be open in another
+ * program unless it opened the file with delete sharing.
+ *
+ * @param  from  Path to rename, UTF-8 on every platform.
+ * @param  to    New path, UTF-8 on every platform.
+ * @return 0 on success, -1 on failure or for a NULL argument.
+ */
+int dino_file_rename(const char *from, const char *to);
+
+/**
+ * Remove a file, or an empty directory, as remove(3) does on Linux. On
+ * Windows a read-only file is removed too, as on Linux, where only the
+ * directory's permissions count.
+ *
+ * On Windows a file that is open, in this program or another, can't be
+ * removed unless it was opened with delete sharing; fopen() doesn't. Close it
+ * first.
+ *
+ * @param  path  Path to remove, UTF-8 on every platform.
+ * @return 0 on success, -1 on failure (DINO_ENOENT when it doesn't exist) or
+ *         for a NULL argument.
+ */
+int dino_file_remove(const char *path);
+
+/**
  * Initialize fs environment.
  *
  * Points any of stdin, stdout and stderr that are closed at /dev/null.

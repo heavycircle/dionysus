@@ -22,7 +22,7 @@ endif()
 
 function(dino_executable name)
     add_executable(${name} ${ARGN})
-    target_link_libraries(${name} PRIVATE dino_util)
+    target_link_libraries(${name} PRIVATE dino_util dino__utf8)
 endfunction()
 
 # What a Release build's link optimizes for. zig builds the C library's own
@@ -87,7 +87,7 @@ function(dino_test name)
         endif()
     endif()
     add_executable(${name} EXCLUDE_FROM_ALL ${arg_UNPARSED_ARGUMENTS})
-    target_link_libraries(${name} PRIVATE dino_testing ${arg_LIBRARIES})
+    target_link_libraries(${name} PRIVATE dino_testing dino__utf8 ${arg_LIBRARIES})
     set_target_properties(${name} PROPERTIES FOLDER dino_tests)
     if(DINO__LIBRARY_DEPENDENCY)
         set_target_properties(${name} PROPERTIES DINO__LIBRARY_TEST "${CMAKE_CURRENT_SOURCE_DIR}")
