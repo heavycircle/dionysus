@@ -7,6 +7,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "error_internal.h"
+
 typedef socklen_t dino_socklen_t;
 
 #define INVALID_SOCKET (-1)
@@ -74,7 +76,10 @@ dino_socket_t dino_socket_create(
     // listening port bound, or a connection open, after the parent closes it.
     int s = socket(os_domain, os_type | SOCK_CLOEXEC, os_protocol);
     if (s == INVALID_SOCKET)
+    {
+        dino__error_set_os();
         return DINO_INVALID_SOCKET;
+    }
     // The OS default differs (dual-stack on Linux, v6-only on Windows).
     if (os_domain == AF_INET6 && dino_socket_set_v6only((dino_socket_t)s, 1) != 0)
     {
@@ -88,10 +93,10 @@ dino_socket_t dino_socket_create(
 int dino_socket_close(dino_socket_t sock)
 {
     if (sock == DINO_INVALID_SOCKET)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     if (close((int)sock) < 0)
-        return -1;
+        return dino__fail_os();
 
     return 0;
 }
@@ -131,18 +136,18 @@ int dino_socket_bind(dino_socket_t sock, const char *ip, int port)
     struct sockaddr_storage addr;
     dino_socklen_t          len;
     if (dino_sockaddr(&addr, &len, ip, port) != 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     int res = bind((int)sock, (struct sockaddr *)&addr, len);
 
-    return (res == SOCKET_ERROR) ? -1 : 0;
+    return (res == SOCKET_ERROR) ? dino__fail_os() : 0;
 }
 
 int dino_socket_listen(dino_socket_t sock, int backlog)
 {
     int res = listen((int)sock, backlog);
 
-    return (res == SOCKET_ERROR) ? -1 : 0;
+    return (res == SOCKET_ERROR) ? dino__fail_os() : 0;
 }
 
 dino_socket_t dino_socket_accept(dino_socket_t sock)
@@ -153,7 +158,10 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
 
     int client = accept4((int)sock, (struct sockaddr *)&addr, &len, SOCK_CLOEXEC);
     if (client == INVALID_SOCKET)
+    {
+        dino__error_set_os();
         return DINO_INVALID_SOCKET;
+    }
 
     return (dino_socket_t)client;
 }
@@ -163,11 +171,11 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
     struct sockaddr_storage addr;
     dino_socklen_t          len;
     if (dino_sockaddr(&addr, &len, ip, port) != 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     int res = connect((int)sock, (struct sockaddr *)&addr, len);
 
-    return (res == SOCKET_ERROR) ? -1 : 0;
+    return (res == SOCKET_ERROR) ? dino__fail_os() : 0;
 }
 
 int dino_socket_send(dino_socket_t sock, const void *buf, int len)
@@ -176,23 +184,23 @@ int dino_socket_send(dino_socket_t sock, const void *buf, int len)
     // MSG_NOSIGNAL: a closed peer fails the call with EPIPE, as on Windows,
     // instead of raising SIGPIPE, which would end the process.
     if (len < 0 || (len > 0 && !buf))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     int sent = (int)send((int)sock, (const char *)buf, len, MSG_NOSIGNAL);
-    return (sent == SOCKET_ERROR) ? -1 : sent;
+    return (sent == SOCKET_ERROR) ? dino__fail_os() : sent;
 }
 
 int dino_socket_recv(dino_socket_t sock, void *buf, int len)
 {
     if (len < 0 || (len > 0 && !buf))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     int received = (int)recv((int)sock, (char *)buf, len, 0);
-    return (received == SOCKET_ERROR) ? -1 : received;
+    return (received == SOCKET_ERROR) ? dino__fail_os() : received;
 }
 
 int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, int len)
 {
     int rc = setsockopt((int)sock, level, optname, val, (socklen_t)len);
-    return (rc == SOCKET_ERROR) ? -1 : 0;
+    return (rc == SOCKET_ERROR) ? dino__fail_os() : 0;
 }
 
 int dino_socket_set_reuseaddr(dino_socket_t sock, int enable)
@@ -211,13 +219,22 @@ int dino_socket_set_nonblocking(dino_socket_t sock, int enable)
 {
     int flags = fcntl((int)sock, F_GETFL, 0);
     if (flags == -1)
-        return -1;
+        return dino__fail_os();
     flags = enable ? (flags | O_NONBLOCK) : (flags & ~O_NONBLOCK);
-    return fcntl((int)sock, F_SETFL, flags) == -1 ? -1 : 0;
+    return fcntl((int)sock, F_SETFL, flags) == -1 ? dino__fail_os() : 0;
 }
 
 int dino_socket_shutdown(dino_socket_t sock, dino_socket_shutdown_t how)
 {
     int rc = shutdown((int)sock, (int)how);
-    return (rc == SOCKET_ERROR) ? -1 : 0;
+    return (rc == SOCKET_ERROR) ? dino__fail_os() : 0;
+}
+
+int dino_socket_error(dino_socket_t sock)
+{
+    int       pending = 0;
+    socklen_t len     = sizeof(pending);
+    if (getsockopt((int)sock, SOL_SOCKET, SO_ERROR, &pending, &len) != 0)
+        return dino__error_from_os();
+    return pending ? dino__error_from_code(pending) : 0;
 }

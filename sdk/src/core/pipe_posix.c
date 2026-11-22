@@ -2,6 +2,7 @@
 
 #include <dino/core/time.h>
 
+#include "error_internal.h"
 #include "pipe_internal.h"
 
 #define PIPE_BYTES 65536
@@ -26,7 +27,7 @@ int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
 
     int fds[2];
     if (pipe2(fds, O_CLOEXEC) != 0)
-        return -1;
+        return dino__fail_os();
     // Linux's default; set anyway so both platforms behave the same. Best
     // effort: an unprivileged process can't raise it past pipe-max-size.
     fcntl(fds[1], F_SETPIPE_SZ, PIPE_BYTES);
@@ -38,19 +39,19 @@ int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
 int dino_pipe_read(dino_pipe_t pipe, void *buf, int len)
 {
     if (pipe == DINO_INVALID_PIPE || len < 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     ssize_t n;
     do
         n = read(TO_FD(pipe), buf, (size_t)len);
     while (n < 0 && errno == EINTR);
-    return n < 0 ? -1 : (int)n;
+    return n < 0 ? dino__fail_os() : (int)n;
 }
 
 int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
 {
     if (pipe == DINO_INVALID_PIPE || len < 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     // A write to a pipe with no reader raises SIGPIPE, which would end the
     // process. Pipes have no MSG_NOSIGNAL, so block it in this thread for the
@@ -68,6 +69,8 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
     do
         n = write(TO_FD(pipe), buf, (size_t)len);
     while (n < 0 && errno == EINTR);
+    // Now: the signal calls below have an errno of their own.
+    int reason = n < 0 ? dino__error_from_os() : 0;
 
     if (n < 0 && errno == EPIPE && !already_pending)
     {
@@ -76,7 +79,7 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len)
             ;
     }
     pthread_sigmask(SIG_SETMASK, &old, NULL);
-    return n < 0 ? -1 : (int)n;
+    return n < 0 ? dino__fail(reason) : (int)n;
 }
 
 // After POLLOUT a pipe has room for at least PIPE_BUF bytes, so a write that
@@ -86,7 +89,7 @@ int dino__pipe_write_timeout(
 {
     *written = 0;
     if (pipe == DINO_INVALID_PIPE || len < 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     struct pollfd pfd = { TO_FD(pipe), POLLOUT, 0 };
     uint64_t      deadline
@@ -106,8 +109,10 @@ int dino__pipe_write_timeout(
     }
     if (rc == 0)
         return DINO_TIMEOUT;
-    if (rc < 0 || (pfd.revents & POLLNVAL))
-        return -1;
+    if (rc < 0)
+        return dino__fail_os();
+    if (pfd.revents & POLLNVAL)
+        return dino__fail(DINO_EINVAL);
     // With no reader left (POLLERR) the write fails with EPIPE.
     int n = dino_pipe_write(pipe, buf, len < PIPE_BUF ? len : PIPE_BUF);
     if (n < 0)
@@ -119,7 +124,7 @@ int dino__pipe_write_timeout(
 int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
 {
     if (pipe == DINO_INVALID_PIPE)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     struct pollfd pfd      = { TO_FD(pipe), POLLIN, 0 };
     uint64_t      deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
@@ -133,19 +138,19 @@ int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
         }
         int rc = poll(&pfd, 1, wait);
         if (rc > 0)
-            return pfd.revents & POLLNVAL ? -1 : 0;
+            return pfd.revents & POLLNVAL ? dino__fail(DINO_EINVAL) : 0;
         if (rc == 0)
             return DINO_TIMEOUT;
         if (errno != EINTR)
-            return -1;
+            return dino__fail_os();
     }
 }
 
 int dino_pipe_close(dino_pipe_t pipe)
 {
     if (pipe == DINO_INVALID_PIPE)
-        return -1;
-    return close(TO_FD(pipe)) == 0 ? 0 : -1;
+        return dino__fail(DINO_EINVAL);
+    return close(TO_FD(pipe)) == 0 ? 0 : dino__fail_os();
 }
 
 intptr_t dino__pipe_to_os(dino_pipe_t pipe)
@@ -167,6 +172,8 @@ int dino__pipe_create_for_child(dino_pipe_t *parent_end, dino_pipe_t *child_end,
     if (fd > 2)
         return 0;
     int moved = fcntl(fd, F_DUPFD_CLOEXEC, 3);
+    if (moved < 0)
+        dino__error_set_os();
     close(fd);
     if (moved < 0)
     {
@@ -181,10 +188,10 @@ int dino__pipe_create_for_child(dino_pipe_t *parent_end, dino_pipe_t *child_end,
 int dino__pipe_is_read_end(dino_pipe_t pipe)
 {
     if (pipe == DINO_INVALID_PIPE)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     int flags = fcntl(TO_FD(pipe), F_GETFL);
     if (flags < 0)
-        return -1;
+        return dino__fail_os();
     return (flags & O_ACCMODE) == O_RDONLY;
 }
 
@@ -192,5 +199,5 @@ int dino__pipe_attach(dino_pipe_t pipe, intptr_t port, uint64_t loop_id)
 {
     (void)port;
     (void)loop_id;
-    return pipe == DINO_INVALID_PIPE ? -1 : 0;
+    return pipe == DINO_INVALID_PIPE ? dino__fail(DINO_EINVAL) : 0;
 }

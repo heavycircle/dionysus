@@ -9,6 +9,7 @@
 
 #include <dino/core/time.h>
 
+#include "error_internal.h"
 #include "event_internal.h"
 #include "pipe_internal.h"
 #include "process_internal.h"
@@ -46,7 +47,10 @@ dino_event_loop_t dino_event_loop_create(void)
 {
     struct dino_event_loop *loop = malloc(sizeof(*loop));
     if (!loop)
+    {
+        dino__error_set(DINO_ENOMEM);
         return DINO_INVALID_EVENT_LOOP;
+    }
     if (dino__event_timers_init(&loop->timers) != 0)
     {
         free(loop);
@@ -72,6 +76,10 @@ dino_event_loop_t dino_event_loop_create(void)
         || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->proc_epfd, &procs) != 0
         || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->pipe_epfd, &pipes) != 0)
     {
+        // Before the cleanup: errno is still the failed call's. A mutex that
+        // couldn't be made has recorded its own reason.
+        if (loop->proc_lock != DINO_INVALID_MUTEX)
+            dino__error_set_os();
         if (loop->epfd >= 0)
             close(loop->epfd);
         if (loop->wakefd >= 0)
@@ -121,21 +129,23 @@ static int ctl(int epfd, int op, int fd, uint32_t events, void *userdata)
     if (events & DINO_EVENT_ONESHOT)
         ev.events |= EPOLLONESHOT;
     ev.data.ptr = userdata;
-    return epoll_ctl(epfd, op, fd, &ev) == 0 ? 0 : -1;
+    // DINO_EEXIST for an add of something already there, DINO_ENOENT for a
+    // mod of something that isn't.
+    return epoll_ctl(epfd, op, fd, &ev) == 0 ? 0 : dino__fail_os();
 }
 
 // Linux before 2.6.9 required a non-NULL event even for DEL.
 static int ctl_del(int epfd, int fd)
 {
     struct epoll_event ev = { 0 };
-    return epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev) == 0 ? 0 : -1;
+    return epoll_ctl(epfd, EPOLL_CTL_DEL, fd, &ev) == 0 ? 0 : dino__fail_os();
 }
 
 static int socket_ctl(
     dino_event_loop_t loop, int op, dino_socket_t sock, uint32_t events, void *userdata)
 {
     if (!dino__event_ctl_args_valid(loop, sock, events))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return ctl(((struct dino_event_loop *)loop)->epfd, op, (int)sock, events, userdata);
 }
 
@@ -154,7 +164,7 @@ int dino_event_mod_socket(
 int dino_event_del_socket(dino_event_loop_t loop, dino_socket_t sock)
 {
     if (!dino__event_ctl_args_valid(loop, sock, 0))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return ctl_del(((struct dino_event_loop *)loop)->epfd, (int)sock);
 }
 
@@ -162,7 +172,7 @@ static int pipe_ctl(
     dino_event_loop_t loop, int op, dino_pipe_t pipe, uint32_t events, void *userdata)
 {
     if (!dino__event_pipe_args_valid(loop, events) || dino__pipe_is_read_end(pipe) != 1)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return ctl(((struct dino_event_loop *)loop)->pipe_epfd, op, (int)dino__pipe_to_os(pipe), events,
         userdata);
 }
@@ -180,7 +190,7 @@ int dino_event_mod_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t event
 int dino_event_del_pipe(dino_event_loop_t loop, dino_pipe_t pipe)
 {
     if (loop == DINO_INVALID_EVENT_LOOP || pipe == DINO_INVALID_PIPE)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     return ctl_del(((struct dino_event_loop *)loop)->pipe_epfd, (int)dino__pipe_to_os(pipe));
 }
 
@@ -235,28 +245,35 @@ static int collect_exits(struct dino_event_loop *loop, dino_event_t *out, int ma
 int dino_event_add_process(dino_event_loop_t handle, dino_process_t process, void *userdata)
 {
     if (handle == DINO_INVALID_EVENT_LOOP || process == DINO_INVALID_PROCESS)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
     struct proc_item       *item = malloc(sizeof(*item));
     if (!item)
-        return -1;
+        return dino__fail(DINO_ENOMEM);
     item->process  = process;
     item->userdata = userdata;
     item->pidfd    = -1;
 
-    int rc = -1;
+    // Already added, no pidfds on this kernel (DINO_ENOTSUP), or epoll's reason.
+    int rc = -1, reason = DINO_EEXIST;
     dino_mutex_lock(loop->proc_lock);
     struct proc_item *it = loop->procs;
     while (it && it->process != process)
         it = it->next;
     if (!it)
+    {
         item->pidfd = dino__pidfd_open(process);
+        if (item->pidfd < 0)
+            reason = dino__error_from_os();
+    }
     if (item->pidfd >= 0)
     {
         struct epoll_event ev = { 0 };
         ev.events             = EPOLLIN | EPOLLONESHOT;
         ev.data.ptr           = item;
         rc = epoll_ctl(loop->proc_epfd, EPOLL_CTL_ADD, item->pidfd, &ev) == 0 ? 0 : -1;
+        if (rc != 0)
+            reason = dino__error_from_os();
     }
     if (rc == 0)
     {
@@ -269,14 +286,15 @@ int dino_event_add_process(dino_event_loop_t handle, dino_process_t process, voi
         if (item->pidfd >= 0)
             close(item->pidfd);
         free(item);
+        return dino__fail(reason);
     }
-    return rc;
+    return 0;
 }
 
 int dino_event_del_process(dino_event_loop_t handle, dino_process_t process)
 {
     if (handle == DINO_INVALID_EVENT_LOOP || process == DINO_INVALID_PROCESS)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
     dino_mutex_lock(loop->proc_lock);
     struct proc_item **p = &loop->procs;
@@ -291,13 +309,13 @@ int dino_event_del_process(dino_event_loop_t handle, dino_process_t process)
         free(item);
     }
     dino_mutex_unlock(loop->proc_lock);
-    return item ? 0 : -1;
+    return item ? 0 : dino__fail(DINO_ENOENT);
 }
 
 int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int timeout_ms)
 {
     if (!dino__event_wait_args_valid(handle, out, max))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
 
     struct epoll_event evs[BATCH];
@@ -317,7 +335,7 @@ int dino_event_wait(dino_event_loop_t handle, dino_event_t *out, int max, int ti
             // Timers already collected are out of the heap: report them
             // rather than lose them with the error.
             if (got < 0 && errno != EINTR)
-                return n > 0 ? n : -1;
+                return n > 0 ? n : dino__fail_os();
         }
 
         int procs_ready = 0, pipes_ready = 0;
@@ -367,13 +385,13 @@ static int signal_wakefd(struct dino_event_loop *loop)
     uint64_t one = 1;
     ssize_t  rc  = write(loop->wakefd, &one, sizeof(one));
     // EAGAIN: the counter is full, so a wake is already pending.
-    return rc == (ssize_t)sizeof(one) || errno == EAGAIN ? 0 : -1;
+    return rc == (ssize_t)sizeof(one) || errno == EAGAIN ? 0 : dino__fail_os();
 }
 
 int dino_event_wake(dino_event_loop_t handle)
 {
     if (handle == DINO_INVALID_EVENT_LOOP)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
     atomic_store(&loop->user_wake, 1);
     return signal_wakefd(loop);

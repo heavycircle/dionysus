@@ -7,6 +7,8 @@
 
 #include <windows.h>
 
+#include "error_internal.h"
+
 typedef int dino_socklen_t;
 
 #ifndef WSA_FLAG_NO_HANDLE_INHERIT
@@ -66,11 +68,13 @@ int dino_net_init(void)
     AcquireSRWLockExclusive(&wsa_lock);
     if (!wsa_started)
     {
+        // WSAStartup returns its error; it doesn't set the last-error value.
         WSADATA wsaData;
-        if (WSAStartup(MAKEWORD(2, 2), &wsaData) == 0)
+        int     err = WSAStartup(MAKEWORD(2, 2), &wsaData);
+        if (err == 0)
             InterlockedExchange(&wsa_started, 1);
         else
-            rc = -1;
+            rc = dino__fail(dino__error_from_code(err));
     }
     ReleaseSRWLockExclusive(&wsa_lock);
     return rc;
@@ -103,7 +107,10 @@ dino_socket_t dino_socket_create(
     SOCKET s = WSASocketW(
         os_domain, os_type, os_protocol, NULL, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
     if (s == INVALID_SOCKET)
+    {
+        dino__error_set_os();
         return DINO_INVALID_SOCKET;
+    }
     // The OS default differs (dual-stack on Linux, v6-only on Windows).
     if (os_domain == AF_INET6 && dino_socket_set_v6only((dino_socket_t)s, 1) != 0)
     {
@@ -117,10 +124,10 @@ dino_socket_t dino_socket_create(
 int dino_socket_close(dino_socket_t sock)
 {
     if (sock == DINO_INVALID_SOCKET)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     if (closesocket((SOCKET)sock) == SOCKET_ERROR)
-        return -1;
+        return dino__fail_os();
 
     return 0;
 }
@@ -160,18 +167,18 @@ int dino_socket_bind(dino_socket_t sock, const char *ip, int port)
     struct sockaddr_storage addr;
     dino_socklen_t          len;
     if (dino_sockaddr(&addr, &len, ip, port) != 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     int res = bind((SOCKET)sock, (struct sockaddr *)&addr, len);
 
-    return (res == SOCKET_ERROR) ? -1 : 0;
+    return (res == SOCKET_ERROR) ? dino__fail_os() : 0;
 }
 
 int dino_socket_listen(dino_socket_t sock, int backlog)
 {
     int res = listen((SOCKET)sock, backlog);
 
-    return (res == SOCKET_ERROR) ? -1 : 0;
+    return (res == SOCKET_ERROR) ? dino__fail_os() : 0;
 }
 
 dino_socket_t dino_socket_accept(dino_socket_t sock)
@@ -182,13 +189,17 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
 
     SOCKET client = accept((SOCKET)sock, (struct sockaddr *)&addr, &len);
     if (client == INVALID_SOCKET)
+    {
+        dino__error_set_os();
         return DINO_INVALID_SOCKET;
+    }
     // Not documented to carry over from the listening socket. Non-blocking
     // mode does carry over on Windows; Linux's accept4 never does, so clear it.
     u_long blocking = 0;
     if (!SetHandleInformation((HANDLE)client, HANDLE_FLAG_INHERIT, 0)
         || ioctlsocket(client, FIONBIO, &blocking) != 0)
     {
+        dino__error_set_os();
         closesocket(client);
         return DINO_INVALID_SOCKET;
     }
@@ -201,33 +212,38 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
     struct sockaddr_storage addr;
     dino_socklen_t          len;
     if (dino_sockaddr(&addr, &len, ip, port) != 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     int res = connect((SOCKET)sock, (struct sockaddr *)&addr, len);
-
-    return (res == SOCKET_ERROR) ? -1 : 0;
+    if (res != SOCKET_ERROR)
+        return 0;
+    // Winsock's word for a non-blocking connect that has started is "would
+    // block"; everywhere else that is EINPROGRESS, and EAGAIN means try again.
+    if (WSAGetLastError() == WSAEWOULDBLOCK)
+        return dino__fail(DINO_EINPROGRESS);
+    return dino__fail_os();
 }
 
 int dino_socket_send(dino_socket_t sock, const void *buf, int len)
 {
     if (len < 0 || (len > 0 && !buf))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     int sent = send((SOCKET)sock, (const char *)buf, len, 0);
-    return (sent == SOCKET_ERROR) ? -1 : sent;
+    return (sent == SOCKET_ERROR) ? dino__fail_os() : sent;
 }
 
 int dino_socket_recv(dino_socket_t sock, void *buf, int len)
 {
     if (len < 0 || (len > 0 && !buf))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     int received = recv((SOCKET)sock, (char *)buf, len, 0);
-    return (received == SOCKET_ERROR) ? -1 : received;
+    return (received == SOCKET_ERROR) ? dino__fail_os() : received;
 }
 
 int dino_socket_setopt(dino_socket_t sock, int level, int optname, const void *val, int len)
 {
     int rc = setsockopt((SOCKET)sock, level, optname, (const char *)val, len);
-    return (rc == SOCKET_ERROR) ? -1 : 0;
+    return (rc == SOCKET_ERROR) ? dino__fail_os() : 0;
 }
 
 // Windows already lets a server rebind its port while old connections linger,
@@ -238,9 +254,11 @@ int dino_socket_set_reuseaddr(dino_socket_t sock, int enable)
 {
     (void)enable;
     if (sock == DINO_INVALID_SOCKET)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     int type, len = sizeof(type);
-    return getsockopt((SOCKET)sock, SOL_SOCKET, SO_TYPE, (char *)&type, &len) == 0 ? 0 : -1;
+    return getsockopt((SOCKET)sock, SOL_SOCKET, SO_TYPE, (char *)&type, &len) == 0
+        ? 0
+        : dino__fail_os();
 }
 
 int dino_socket_set_v6only(dino_socket_t sock, int enable)
@@ -249,9 +267,10 @@ int dino_socket_set_v6only(dino_socket_t sock, int enable)
     // refuses it, so check the family here.
     WSAPROTOCOL_INFOW info;
     int               len = sizeof(info);
-    if (getsockopt((SOCKET)sock, SOL_SOCKET, SO_PROTOCOL_INFOW, (char *)&info, &len) != 0
-        || info.iAddressFamily != AF_INET6)
-        return -1;
+    if (getsockopt((SOCKET)sock, SOL_SOCKET, SO_PROTOCOL_INFOW, (char *)&info, &len) != 0)
+        return dino__fail_os();
+    if (info.iAddressFamily != AF_INET6)
+        return dino__fail(DINO_EINVAL);
     int flag = enable ? 1 : 0;
     return dino_socket_setopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &flag, sizeof(flag));
 }
@@ -259,11 +278,20 @@ int dino_socket_set_v6only(dino_socket_t sock, int enable)
 int dino_socket_set_nonblocking(dino_socket_t sock, int enable)
 {
     u_long mode = enable ? 1 : 0;
-    return ioctlsocket((SOCKET)sock, FIONBIO, &mode) == 0 ? 0 : -1;
+    return ioctlsocket((SOCKET)sock, FIONBIO, &mode) == 0 ? 0 : dino__fail_os();
 }
 
 int dino_socket_shutdown(dino_socket_t sock, dino_socket_shutdown_t how)
 {
     int rc = shutdown((SOCKET)sock, (int)how);
-    return (rc == SOCKET_ERROR) ? -1 : 0;
+    return (rc == SOCKET_ERROR) ? dino__fail_os() : 0;
+}
+
+int dino_socket_error(dino_socket_t sock)
+{
+    int pending = 0;
+    int len     = sizeof(pending);
+    if (getsockopt((SOCKET)sock, SOL_SOCKET, SO_ERROR, (char *)&pending, &len) != 0)
+        return dino__error_from_os();
+    return pending ? dino__error_from_code(pending) : 0;
 }

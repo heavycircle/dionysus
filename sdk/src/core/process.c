@@ -6,6 +6,7 @@
 #include <dino/core/thread.h>
 #include <dino/core/time.h>
 
+#include "error_internal.h"
 #include "pipe_internal.h"
 #include "process_internal.h"
 
@@ -126,7 +127,7 @@ int dino_process_run(
     char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result)
 {
     if (!result)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     memset(result, 0, sizeof(*result));
     result->exit_code = -1;
 
@@ -153,9 +154,13 @@ int dino_process_run(
         && dino_thread_create(&threads[1], collect, &err) == 0
         && (in.pipe == DINO_INVALID_PIPE || dino_thread_create(&threads[2], feed, &in) == 0);
 
-    int status = 0;
+    // Why the run failed, kept from the call that failed: the calls that
+    // follow it here succeed or fail for reasons of their own, and the reader
+    // threads' failures happen in those threads.
+    int status = 0, reason = 0;
     if (!started)
     {
+        reason = dino_error();
         dino_process_kill(process);
         status = -1;
     }
@@ -167,7 +172,10 @@ int dino_process_run(
         status = status ? status : DINO_TIMEOUT;
     }
     if (rc != 0)
+    {
+        reason = reason ? reason : dino_error();
         status = -1;
+    }
 
     // The child is gone, so the readers reach end of file and the writer's next
     // write fails, unless something the child started still holds the pipes:
@@ -185,8 +193,11 @@ int dino_process_run(
     result->out = take(&out, &result->out_len);
     result->err = take(&err, &result->err_len);
     if (out.failed || err.failed || !result->out || !result->err)
+    {
+        reason = reason ? reason : DINO_ENOMEM;
         status = -1;
-    return status;
+    }
+    return status == -1 ? dino__fail(reason) : status;
 }
 
 void dino_process_result_free(dino_process_result_t *result)

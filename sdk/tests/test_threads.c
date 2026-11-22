@@ -203,7 +203,9 @@ UTEST(mutex, is_recursive)
     dino_mutex_destroy(m);
 }
 
-UTEST(mutex, trylock_fails_while_another_thread_holds_it)
+// Busy is "not now", the answer of every wait that runs out of time, and not
+// a failure: -1 is for a handle that isn't a mutex.
+UTEST(mutex, trylock_times_out_while_another_thread_holds_it)
 {
     g_mutex = dino_mutex_create();
     ASSERT_NE(DINO_INVALID_MUTEX, g_mutex);
@@ -213,7 +215,7 @@ UTEST(mutex, trylock_fails_while_another_thread_holds_it)
     ASSERT_EQ(0, dino_mutex_lock(g_mutex));
     ASSERT_EQ(0, dino_thread_create(&t, try_lock, &result));
     dino_thread_join(t, NULL);
-    EXPECT_NE(0, result);
+    EXPECT_EQ(DINO_TIMEOUT, result);
 
     ASSERT_EQ(0, dino_mutex_unlock(g_mutex));
     ASSERT_EQ(0, dino_thread_create(&t, try_lock, &result));
@@ -291,7 +293,7 @@ UTEST(mutex, invalid_handle_is_rejected)
 {
     EXPECT_NE(0, dino_mutex_lock(DINO_INVALID_MUTEX));
     EXPECT_NE(0, dino_mutex_unlock(DINO_INVALID_MUTEX));
-    EXPECT_NE(0, dino_mutex_trylock(DINO_INVALID_MUTEX));
+    EXPECT_EQ(-1, dino_mutex_trylock(DINO_INVALID_MUTEX));
     dino_mutex_destroy(DINO_INVALID_MUTEX);
 }
 

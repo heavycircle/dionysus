@@ -8,13 +8,20 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "error_internal.h"
+
 int dino_file_size(const char *path, uint64_t *size)
 {
     if (size)
         *size = 0;
     struct stat st;
-    if (!path || !size || stat(path, &st) != 0 || !S_ISREG(st.st_mode))
-        return -1;
+    if (!path || !size)
+        return dino__fail(DINO_EINVAL);
+    if (stat(path, &st) != 0)
+        return dino__fail_os();
+    // A directory, a device, a pipe: there, but with no size to report.
+    if (!S_ISREG(st.st_mode))
+        return dino__fail(DINO_EINVAL);
     *size = (uint64_t)st.st_size;
     return 0;
 }
@@ -38,10 +45,10 @@ int dino__fs_init_with(const char *null_device)
             // be taken, or the program's next file gets it. A directory can
             // be opened anywhere, and reads and writes on it fail, where a
             // pipe would block or raise SIGPIPE.
-            rc     = -1;
+            rc     = dino__fail_os();
             filler = open("/", O_RDONLY);
             if (filler < 0)
-                return -1;
+                return dino__fail_os();
         }
         if (filler != fd)
         {

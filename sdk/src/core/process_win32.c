@@ -8,6 +8,7 @@
 
 #include <dino/core/time.h>
 
+#include "error_internal.h"
 #include "pipe_internal.h"
 #include "process_internal.h"
 
@@ -280,13 +281,13 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
     if (!pipes)
     {
         if (dino__process_any_pipe(opts))
-            return -1;
+            return dino__fail(DINO_EINVAL);
         pipes = &unused;
     }
     pipes->in = pipes->out = pipes->err = DINO_INVALID_PIPE;
     dino_stdio_t modes[3];
     if (!argv || !argv[0] || !dino__process_modes(opts, modes))
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     HANDLE   std[3] = { NULL, NULL, NULL };
     wchar_t *app    = NULL;
@@ -295,21 +296,35 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
     wchar_t *env    = opts && opts->env ? environment_block(opts->env) : NULL;
     LPPROC_THREAD_ATTRIBUTE_LIST attrs   = NULL;
     int                          started = 0;
+    // What failed is recorded at the end, after the cleanup, whose own calls
+    // must not replace it.
+    int reason = DINO_EOTHER;
 
+    // A string that isn't UTF-8, or a batch-file argument that quoting can't
+    // protect; running out of memory is the unlikely third.
     if (!cmd || (opts && opts->cwd && !cwd) || (opts && opts->env && !env))
+    {
+        reason = DINO_EINVAL;
         goto done;
+    }
     // A batch file's app is cmd.exe, which already finds it from the new cwd.
     if (!app && cwd && is_relative_path(argv[0]))
     {
         app = find_in(cwd, argv[0]);
         if (!app)
+        {
+            reason = DINO_ENOENT;
             goto done;
+        }
     }
     for (int i = 0; i < 3; i++)
     {
         std[i] = child_handle(i, modes[i], pipes);
         if (!std[i])
+        {
+            reason = dino__error_from_os();
             goto done;
+        }
     }
 
     // Only these three handles reach the child, even if the parent has other
@@ -319,13 +334,17 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
     attrs = malloc(size);
     if (!attrs || !InitializeProcThreadAttributeList(attrs, 1, 0, &size))
     {
+        reason = attrs ? dino__error_from_os() : DINO_ENOMEM;
         free(attrs);
         attrs = NULL;
         goto done;
     }
     if (!UpdateProcThreadAttribute(
             attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, (void *)std, sizeof(std), NULL, NULL))
+    {
+        reason = dino__error_from_os();
         goto done;
+    }
 
     STARTUPINFOEXW si         = { 0 };
     si.StartupInfo.cb         = sizeof(si);
@@ -343,6 +362,12 @@ int dino_process_spawn(dino_process_t *process, char *const argv[],
         *process = (dino_process_t)pi.hProcess;
         started  = 1;
     }
+    else
+    {
+        // DINO_ENOENT for a program or a cwd that isn't there, DINO_EACCES for
+        // a file that can't be executed.
+        reason = dino__error_from_os();
+    }
 
 done:
     if (attrs)
@@ -359,17 +384,17 @@ done:
     free(env);
     if (!started)
         dino__process_close_parent_ends(pipes);
-    return started ? 0 : -1;
+    return started ? 0 : dino__fail(reason);
 }
 
 int dino_process_wait(dino_process_t process, int *exit_code)
 {
     if (process == DINO_INVALID_PROCESS)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     HANDLE h = (HANDLE)process;
     DWORD  code;
     if (WaitForSingleObject(h, INFINITE) != WAIT_OBJECT_0 || !GetExitCodeProcess(h, &code))
-        return -1;
+        return dino__fail_os();
     CloseHandle(h);
     if (exit_code)
         *exit_code = (int)code;
@@ -379,12 +404,14 @@ int dino_process_wait(dino_process_t process, int *exit_code)
 int dino_process_kill(dino_process_t process)
 {
     if (process == DINO_INVALID_PROCESS)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     if (TerminateProcess((HANDLE)process, DINO_EXIT_KILLED))
         return 0;
     // Fails with access denied once the process has exited. Nothing is left to
     // kill, which Linux reports as success.
-    return WaitForSingleObject((HANDLE)process, 0) == WAIT_OBJECT_0 ? 0 : -1;
+    DWORD why = GetLastError();
+    return WaitForSingleObject((HANDLE)process, 0) == WAIT_OBJECT_0 ? 0
+                                                                    : dino__fail_code((long)why);
 }
 
 uint64_t dino_process_id(dino_process_t process)
@@ -397,7 +424,7 @@ uint64_t dino_process_id(dino_process_t process)
 int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_code)
 {
     if (process == DINO_INVALID_PROCESS)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     if (timeout_ms < 0)
         return dino_process_wait(process, exit_code);
 
@@ -410,7 +437,7 @@ int dino_process_wait_timeout(dino_process_t process, int timeout_ms, int *exit_
         if (rc == WAIT_OBJECT_0)
             return dino_process_wait(process, exit_code);
         if (rc != WAIT_TIMEOUT)
-            return -1;
+            return dino__fail_os();
         if (dino_time_monotonic_ns() >= deadline)
             return DINO_TIMEOUT;
     }
@@ -424,10 +451,10 @@ uint64_t dino_process_current_id(void)
 int dino_env_get(const char *name, char *buf, size_t size)
 {
     if (!dino__process_valid_env_name(name) || (!buf && size))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     wchar_t *wname = widen(name, -1);
     if (!wname)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     int      len   = -1;
     DWORD    n     = GetEnvironmentVariableW(wname, NULL, 0);
@@ -452,6 +479,9 @@ int dino_env_get(const char *name, char *buf, size_t size)
     }
     free(value);
     free(wname);
+    // No such variable, or no memory to convert its value.
+    if (len < 0)
+        dino__error_set(n ? DINO_ENOMEM : DINO_ENOENT);
     return len;
 }
 
@@ -462,19 +492,25 @@ int dino_env_get(const char *name, char *buf, size_t size)
 static int env_change(const char *name, const char *value)
 {
     if (!dino__process_valid_env_name(name))
-        return -1;
+        return dino__fail(DINO_EINVAL);
     wchar_t *wname  = widen(name, -1);
     wchar_t *wvalue = value ? widen(value, -1) : NULL;
-    int      ok     = wname && (!value || wvalue) && _wputenv_s(wname, wvalue ? wvalue : L"") == 0
-        && SetEnvironmentVariableW(wname, wvalue);
+    int      reason = 0;
+    // Not UTF-8, most likely.
+    if (!wname || (value && !wvalue))
+        reason = DINO_EINVAL;
+    else if (_wputenv_s(wname, wvalue ? wvalue : L"") != 0)
+        reason = DINO_EOTHER;
+    else if (!SetEnvironmentVariableW(wname, wvalue))
+        reason = dino__error_from_os();
     free(wname);
     free(wvalue);
-    return ok ? 0 : -1;
+    return reason ? dino__fail(reason) : 0;
 }
 
 int dino_env_set(const char *name, const char *value)
 {
-    return value ? env_change(name, value) : -1;
+    return value ? env_change(name, value) : dino__fail(DINO_EINVAL);
 }
 
 int dino_env_unset(const char *name)

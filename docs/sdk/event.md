@@ -191,7 +191,6 @@ there, is an error), except the create functions, which return a handle or its i
 - **Delete before closing.** Remove a socket or pipe from the loop (`del`) before closing it. A socket closed while still in a loop is dropped from it without an event, on both platforms, and a later `del` for it usually returns `-1`. On Windows the loop only notices the close during a wait, and never for a `ONESHOT` socket that already fired: until then a new socket that happens to get the same handle value can't be added. A pipe closed while in a loop may still be reported on Windows, as an error and with its old userdata, so never free the userdata of something you haven't deleted.
 - **A failed `mod` changes nothing.** The item keeps the events and userdata it had.
 - **Non-blocking sockets.** Make sockets non-blocking (`dino_socket_set_nonblocking`) when one event
-  may not cover everything you'll read or accept: keep calling until it returns `-1`, as
-  `examples/event_example` does for `accept`.
+  may not cover everything you'll read or accept: keep calling until it fails with [`dino_error()`](error.md) of `DINO_EAGAIN`, as `examples/event_example` does for `accept`. Any other code is a real failure. `DINO_EMFILE` from `accept` means the process is out of descriptors while the connection is still waiting: the listener stays ready, so stop watching it for a moment instead of spinning.
 - **`max` is a limit, not a requirement.** Items that don't fit in `out` stay ready for the next
   wait.

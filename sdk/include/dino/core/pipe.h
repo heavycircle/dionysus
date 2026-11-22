@@ -55,7 +55,8 @@ int dino_pipe_read(dino_pipe_t pipe, void *buf, int len);
  * @param  pipe  Writing end.
  * @param  buf   Source.
  * @param  len   Number of bytes to write.
- * @return Bytes written, -1 on error.
+ * @return Bytes written, -1 on error; dino_error() (dino/core/error.h) is
+ *         DINO_EPIPE when every read end is closed.
  */
 int dino_pipe_write(dino_pipe_t pipe, const void *buf, int len);
 

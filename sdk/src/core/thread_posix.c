@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "error_internal.h"
 #include "thread_internal.h"
 
 _Static_assert(sizeof(pthread_t) <= sizeof(uintptr_t), "pthread_t must fit in dino_thread.os");
@@ -17,16 +18,19 @@ static void *trampoline(void *arg)
 
 int dino_thread_create(dino_thread_t *thread, dino_thread_fn fn, void *arg)
 {
-    *thread               = DINO_INVALID_THREAD;
-    struct dino_thread *t = fn ? dino__thread_alloc(fn, arg) : NULL;
+    *thread = DINO_INVALID_THREAD;
+    if (!fn)
+        return dino__fail(DINO_EINVAL);
+    struct dino_thread *t = dino__thread_alloc(fn, arg);
     if (!t)
-        return -1;
+        return dino__fail(DINO_ENOMEM);
 
     pthread_t pt;
-    if (pthread_create(&pt, NULL, trampoline, t) != 0)
+    int       rc = pthread_create(&pt, NULL, trampoline, t);
+    if (rc != 0)
     {
         free(t);
-        return -1;
+        return dino__fail_code(rc);
     }
     t->os   = (uintptr_t)pt;
     *thread = (dino_thread_t)t;
@@ -37,10 +41,11 @@ int dino_thread_join(dino_thread_t thread, int *result)
 {
     struct dino_thread *t = (struct dino_thread *)thread;
     if (!t || pthread_equal((pthread_t)t->os, pthread_self()))
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
-    if (pthread_join((pthread_t)t->os, NULL) != 0)
-        return -1;
+    int rc = pthread_join((pthread_t)t->os, NULL);
+    if (rc != 0)
+        return dino__fail_code(rc);
     if (result)
         *result = t->result;
     dino__thread_release(t);
@@ -50,8 +55,11 @@ int dino_thread_join(dino_thread_t thread, int *result)
 int dino_thread_detach(dino_thread_t thread)
 {
     struct dino_thread *t = (struct dino_thread *)thread;
-    if (!t || pthread_detach((pthread_t)t->os) != 0)
-        return -1;
+    if (!t)
+        return dino__fail(DINO_EINVAL);
+    int rc = pthread_detach((pthread_t)t->os);
+    if (rc != 0)
+        return dino__fail_code(rc);
 
     dino__thread_release(t);
     return 0;

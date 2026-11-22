@@ -95,9 +95,8 @@ int main(void)
 - **Short transfers.** `send` may send fewer bytes than asked, and `recv` returns whatever has
   arrived: a message can come in pieces, or several can come together. Loop until you have what
   your protocol says you should.
-- **Non-blocking sockets** return `-1` from `recv`, `send`, `accept` and `connect` when they would
-  have waited. The API doesn't distinguish that from a real error, so use non-blocking sockets with
-  [poll](io.md) or the [event loop](event.md), which tell you when a call won't wait.
+- **Non-blocking sockets** return `-1` from `recv`, `send` and `accept` when they would have waited, with [`dino_error()`](error.md) of `DINO_EAGAIN`; any other code is a real failure. Use [poll](io.md) or the [event loop](event.md) to learn when to call again.
+- **A non-blocking `connect`** returns `-1` with `DINO_EINPROGRESS` once it has started. Wait for the socket to become writable, then call `dino_socket_error(sock)`: `0` means connected, anything else is why not. [Errors](error.md) has the whole sequence as a program.
 - **Accepted sockets are blocking**, even from a non-blocking listener. Call
   `dino_socket_set_nonblocking` on each one you want non-blocking. Windows' `accept` would copy the
   listener's mode; the SDK clears it so both platforms agree.

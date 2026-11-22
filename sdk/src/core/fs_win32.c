@@ -4,6 +4,8 @@
 
 #include <windows.h>
 
+#include "error_internal.h"
+
 // The attributes come without opening the file, so a file another process has
 // open without sharing still has a size.
 int dino_file_size(const char *path, uint64_t *size)
@@ -11,14 +13,14 @@ int dino_file_size(const char *path, uint64_t *size)
     if (size)
         *size = 0;
     if (!path || !size)
-        return -1;
+        return dino__fail(DINO_EINVAL);
 
     int len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, NULL, 0);
     if (len <= 0)
-        return -1;
+        return dino__fail(DINO_EINVAL);
     WCHAR *wide = malloc((size_t)len * sizeof(WCHAR));
     if (!wide)
-        return -1;
+        return dino__fail(DINO_ENOMEM);
     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, path, -1, wide, len);
 
     // Opening the path follows symbolic links, as stat does on Linux;
@@ -27,14 +29,24 @@ int dino_file_size(const char *path, uint64_t *size)
     HANDLE file = CreateFileW(wide, FILE_READ_ATTRIBUTES,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
         FILE_FLAG_BACKUP_SEMANTICS, NULL);
-    free(wide);
     if (file == INVALID_HANDLE_VALUE)
+    {
+        dino__error_set_os();
+        free(wide);
         return -1;
+    }
+    free(wide);
     BY_HANDLE_FILE_INFORMATION info;
-    BOOL                       ok = GetFileInformationByHandle(file, &info);
-    CloseHandle(file);
-    if (!ok || (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+    if (!GetFileInformationByHandle(file, &info))
+    {
+        dino__error_set_os();
+        CloseHandle(file);
         return -1;
+    }
+    CloseHandle(file);
+    // A directory: there, but with no size to report.
+    if (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+        return dino__fail(DINO_EINVAL);
     *size = ((uint64_t)info.nFileSizeHigh << 32) | info.nFileSizeLow;
     return 0;
 }

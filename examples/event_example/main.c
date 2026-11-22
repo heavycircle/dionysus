@@ -5,6 +5,7 @@
 #include <sys/resource.h>
 #endif
 
+#include <dino/core/error.h>
 #include <dino/core/event.h>
 #include <dino/core/network.h>
 #include <dino/core/thread.h>
@@ -51,6 +52,10 @@ static void serve_accept(struct server *srv)
         if (++srv->open > srv->peak)
             srv->peak = srv->open;
     }
+    // DINO_EAGAIN is the empty backlog. Anything else is a real failure, with
+    // the connection, if there was one, still waiting.
+    if (dino_error() != DINO_EAGAIN)
+        fprintf(stderr, "accept: %s\n", dino_error_message(dino_error()));
 }
 
 static void serve_conn(struct server *srv, dino_socket_t s, uint32_t events)
