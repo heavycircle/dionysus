@@ -33,7 +33,7 @@ Dionysus lets you write C once and get tiny, fully static binaries for Linux (mu
 | Ninja, or make | any | CMake generator; Ninja is required on Windows hosts |
 | `qemu-user` | any | running arm, arm64 and ppc builds on an x86_64 host (optional) |
 | `wine` (plus `wine32` for win32) | any | running Windows builds on Linux (optional) |
-| `clang-format` | any recent | formatting C code |
+| `clang-format` | 19 or newer; CI pins 19.1.7 (see [CI](#ci)) | formatting C code. The repository's `.clang-format` uses `MainIncludeChar`, which older versions reject; the copy `dino init` writes leaves it out and works from 14 |
 
 **Installing Zig.** Download the 0.17.1 archive for your platform from
 <https://ziglang.org/download/>, extract it anywhere, and put the directory on your `PATH`:
