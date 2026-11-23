@@ -32,10 +32,12 @@ struct collector
 {
     dino_pipe_t pipe;
     uint64_t    deadline;
+    size_t      max; // 0: no limit
     char       *data;
     size_t      len, cap;
-    int         failed;
+    int         error; // why it failed, from this thread's dino_error()
     int         timed_out;
+    int         truncated;
 };
 
 // At the deadline, take what is already waiting, up to one pipe's worth.
@@ -56,24 +58,38 @@ static int collect(void *arg)
                 c->timed_out = 1;
                 rc           = dino_pipe_wait(c->pipe, 0);
             }
+            if (rc == -1)
+                goto broken;
             if (rc != 0 || (c->timed_out && drained >= FINAL_DRAIN))
                 break;
         }
         int n = dino_pipe_read(c->pipe, chunk, sizeof(chunk));
-        if (n <= 0)
+        if (n < 0)
+            goto broken;
+        if (n == 0)
             break;
         if (c->timed_out)
             drained += (size_t)n;
-        // Keeps draining after running out of memory, so the child isn't blocked.
-        if (c->failed)
+        // Past the limit, or out of memory, it keeps draining, so the child
+        // isn't blocked on a full pipe.
+        if (c->error)
+            continue;
+        if (c->max && c->len + (size_t)n > c->max)
+        {
+            n            = (int)(c->max - c->len);
+            c->truncated = 1;
+        }
+        if (n == 0)
             continue;
         if (c->len + (size_t)n + 1 > c->cap)
         {
-            size_t cap  = (c->len + (size_t)n + 1) * 2;
-            char  *data = realloc(c->data, cap);
+            size_t cap = (c->len + (size_t)n + 1) * 2;
+            if (c->max && cap > c->max + 1)
+                cap = c->max + 1;
+            char *data = realloc(c->data, cap);
             if (!data)
             {
-                c->failed = 1;
+                c->error = DINO_ENOMEM;
                 continue;
             }
             c->data = data;
@@ -83,6 +99,14 @@ static int collect(void *arg)
         c->len += (size_t)n;
         c->data[c->len] = '\0';
     }
+    return 0;
+
+broken:
+    // Nothing reads this pipe any more: closing it makes the child's writes
+    // fail instead of blocking it forever on a full pipe.
+    c->error = dino_error();
+    dino_pipe_close(c->pipe);
+    c->pipe = DINO_INVALID_PIPE;
     return 0;
 }
 
@@ -144,8 +168,9 @@ int dino_process_run(
 
     int      timeout     = opts && opts->timeout_ms > 0 ? opts->timeout_ms : -1;
     uint64_t deadline    = timeout > 0 ? dino_time_monotonic_ns() + (uint64_t)timeout * 1000000 : 0;
-    struct collector out = { pipes.out, deadline, NULL, 0, 0, 0, 0 };
-    struct collector err = { pipes.err, deadline, NULL, 0, 0, 0, 0 };
+    size_t   max         = opts ? opts->max_output : 0;
+    struct collector out = { pipes.out, deadline, max, NULL, 0, 0, 0, 0, 0 };
+    struct collector err = { pipes.err, deadline, max, NULL, 0, 0, 0, 0, 0 };
     struct feeder    in
         = { pipes.in, deadline, opts ? opts->input : NULL, opts ? opts->input_len : 0, 0 };
     dino_thread_t threads[3] = { DINO_INVALID_THREAD, DINO_INVALID_THREAD, DINO_INVALID_THREAD };
@@ -186,14 +211,18 @@ int dino_process_run(
         status = DINO_TIMEOUT;
     if (in.pipe != DINO_INVALID_PIPE && threads[2] == DINO_INVALID_THREAD)
         dino_pipe_close(in.pipe);
-    dino_pipe_close(pipes.out);
-    dino_pipe_close(pipes.err);
+    if (out.pipe != DINO_INVALID_PIPE)
+        dino_pipe_close(out.pipe);
+    if (err.pipe != DINO_INVALID_PIPE)
+        dino_pipe_close(err.pipe);
 
-    result->out = take(&out, &result->out_len);
-    result->err = take(&err, &result->err_len);
-    if (out.failed || err.failed || !result->out || !result->err)
+    result->out       = take(&out, &result->out_len);
+    result->err       = take(&err, &result->err_len);
+    result->truncated = out.truncated || err.truncated;
+    int lost          = out.error ? out.error : err.error;
+    if (lost || !result->out || !result->err)
     {
-        reason = reason ? reason : DINO_ENOMEM;
+        reason = reason ? reason : lost ? lost : DINO_ENOMEM;
         status = -1;
     }
     return status == -1 ? dino__fail(reason) : status;
