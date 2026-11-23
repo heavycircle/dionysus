@@ -20,6 +20,12 @@ Calls with a `dino_*` replacement that weren't flagged now are: `kill`, `getpid`
 - **LTO** works with static libraries, and **`.rc` files** build for Windows targets, both with zig's own tools.
 - **SDK options set after `project()`** now get a warning; they never had an effect.
 
+### `dino` keeps `--` settings
+
+- **A build type given with `--`** (`dino build -- -DCMAKE_BUILD_TYPE=RelWithDebInfo`) stays for later `dino build`, `dino run` and `dino test` until `--debug` or `--release`, instead of being reset to Release by the next command. `--` arguments reconfigure only when they differ from the last ones.
+- **A moved or copied project** builds on the first try instead of failing once with CMake cache errors.
+- **A `build/<target>` configured with plain CMake** is no longer taken over: `dino` stops instead of deleting its cache. Remove the directory, or configure it elsewhere.
+
 ### Target conventions fixed for 1.0
 
 - **`CMAKE_SYSTEM_PROCESSOR`** is now what native CMake reports: `ppc` (was `powerpc`), `armv7l` (was `arm`), `x86` for win32 (was `i686`) and `AMD64` for win64 (was `x86_64`). A project or CMake module that matched the old values has to match the new ones (see the table in [Projects](../guide/projects.md)); modules written for native builds already do.

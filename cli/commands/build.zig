@@ -134,8 +134,12 @@ pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
     const results = ctx.arena.alloc(Result, opts.targets.len) catch @panic("OOM");
     for (opts.targets, results, 0..) |target, *result, i| {
         if (ctx.interrupted != null) return results[0..i];
-        ctx.step("{s} ({s}, {t})", .{ target.name, target.triple, opts.mode });
         const cfg = try config(ctx, opts, project, target);
+        if (cfg.build_type.len != 0) {
+            ctx.step("{s} ({s}, {s})", .{ target.name, target.triple, cfg.build_type });
+        } else {
+            ctx.step("{s} ({s}, {t})", .{ target.name, target.triple, opts.mode });
+        }
         result.* = .{ .cfg = cfg, .ok = false };
 
         if (cmake.needsConfigure(ctx, cfg) and !try cmake.configure(ctx, cfg, opts.run)) continue;
@@ -190,17 +194,45 @@ fn zigVersion(ctx: *Ctx) []const u8 {
 }
 
 fn config(ctx: *Ctx, opts: Options, project: Project, target: Target) Ctx.Error!cmake.Config {
+    const build_dir = buildDir(ctx, opts.project, target);
+    const build_type = givenBuildType(opts) orelse if (opts.mode_given) "" else keptBuildType(ctx, build_dir);
     return .{
         .source_dir = project.source_dir,
-        .build_dir = buildDir(ctx, opts.project, target),
+        .build_dir = build_dir,
         .sdk = project.sdk,
         .zig = project.zig,
-        .prebuilt = try prebuilt.dir(ctx, project.sdk, project.zig, target, opts.mode),
+        // Built for Debug or Release only.
+        .prebuilt = if (build_type.len != 0) "" else try prebuilt.dir(ctx, project.sdk, project.zig, target, opts.mode),
         .libraries = project.libraries,
         .target = target,
         .mode = opts.mode,
+        .build_type = build_type,
         .extra = opts.extra,
     };
+}
+
+/// The build type `--` arguments set, which win over --debug and --release
+/// because CMake sees them last; "" when it is the mode's.
+fn givenBuildType(opts: Options) ?[]const u8 {
+    var found: ?[]const u8 = null;
+    for (opts.extra) |arg| {
+        for ([_][]const u8{ "-DCMAKE_BUILD_TYPE=", "-DCMAKE_BUILD_TYPE:STRING=" }) |prefix| {
+            if (std.mem.startsWith(u8, arg, prefix)) found = arg[prefix.len..];
+        }
+    }
+    const t = found orelse return null;
+    return if (std.mem.eql(u8, t, opts.mode.cmakeName())) "" else t;
+}
+
+/// A build type other than Debug and Release can only have come from `--`
+/// arguments, and stays until --debug or --release; "" when there is none.
+fn keptBuildType(ctx: *Ctx, build_dir: []const u8) []const u8 {
+    const cache = Io.Dir.cwd().readFileAlloc(ctx.io, ctx.join(&.{ build_dir, "CMakeCache.txt" }), ctx.arena, .limited(16 << 20)) catch return "";
+    const t = cmake.cacheValue(cache, "CMAKE_BUILD_TYPE") orelse return "";
+    for (std.enums.values(cmake.Mode)) |m| {
+        if (std.mem.eql(u8, t, m.cmakeName())) return "";
+    }
+    return t;
 }
 
 pub fn buildDir(ctx: *Ctx, project: []const u8, target: Target) []const u8 {

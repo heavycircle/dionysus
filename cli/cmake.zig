@@ -30,6 +30,9 @@ pub const Config = struct {
     prebuilt: []const u8 = "",
     target: Target,
     mode: Mode,
+    /// CMAKE_BUILD_TYPE when it isn't the mode's: one given with `--` stays
+    /// until --debug or --release (cli/commands/build.zig).
+    build_type: []const u8 = "",
     /// Absolute paths of the DINO_LIBRARY_PATH libraries.
     libraries: []const []const u8 = &.{},
     /// Extra arguments forwarded verbatim to the configure step.
@@ -38,8 +41,13 @@ pub const Config = struct {
 
 pub const stamp_file = ".dino-stamp";
 
+pub fn buildType(cfg: Config) []const u8 {
+    return if (cfg.build_type.len != 0) cfg.build_type else cfg.mode.cmakeName();
+}
+
 /// The `-D` settings that define a dino build. Anything that changes these
-/// requires a fresh configure.
+/// requires a fresh configure. The `--` arguments aren't among them: CMake's
+/// cache keeps what they set, so a command without them changes nothing.
 pub fn defines(ctx: *Ctx, cfg: Config) []const []const u8 {
     const sdk = cmakePath(ctx, cfg.sdk);
     var list: std.ArrayList([]const u8) = .empty;
@@ -48,7 +56,7 @@ pub fn defines(ctx: *Ctx, cfg: Config) []const []const u8 {
         ctx.sprint("-DCMAKE_PROJECT_INCLUDE={s}/cmake/Dino.cmake", .{sdk}),
         ctx.sprint("-DDINO_SDK_PATH={s}", .{sdk}),
         ctx.sprint("-DZIG_TARGET={s}", .{cfg.target.triple}),
-        ctx.sprint("-DCMAKE_BUILD_TYPE={s}", .{cfg.mode.cmakeName()}),
+        ctx.sprint("-DCMAKE_BUILD_TYPE={s}", .{buildType(cfg)}),
         "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
     }) catch @panic("OOM");
     // Passed even when empty: a -D left out keeps its old value in CMakeCache.txt.
@@ -58,10 +66,8 @@ pub fn defines(ctx: *Ctx, cfg: Config) []const []const u8 {
     const joined = std.mem.join(ctx.arena, ";", paths.items) catch @panic("OOM");
     list.append(ctx.arena, ctx.sprint("-DDINO_LIBRARY_PATH={s}", .{joined})) catch @panic("OOM");
     // Lets ctest (and add_custom_command) run foreign binaries through qemu or wine.
-    if (targets.emulator(ctx, cfg.target)) |e| {
-        list.append(ctx.arena, ctx.sprint("-DCMAKE_CROSSCOMPILING_EMULATOR={s}", .{cmakePath(ctx, e)})) catch @panic("OOM");
-    }
-    list.appendSlice(ctx.arena, cfg.extra) catch @panic("OOM");
+    const emulator = if (targets.emulator(ctx, cfg.target)) |e| cmakePath(ctx, e) else "";
+    list.append(ctx.arena, ctx.sprint("-DCMAKE_CROSSCOMPILING_EMULATOR={s}", .{emulator})) catch @panic("OOM");
     return list.items;
 }
 
@@ -74,40 +80,71 @@ pub fn cmakePath(ctx: *Ctx, path: []const u8) []const u8 {
 }
 
 pub fn stamp(ctx: *Ctx, cfg: Config) []const u8 {
-    var hasher = std.hash.Wyhash.init(0);
-    hasher.update(cfg.source_dir);
-    for (defines(ctx, cfg)) |d| {
-        hasher.update(d);
-        hasher.update(&.{0});
-    }
-    return ctx.sprint("{x:0>16}\n", .{hasher.final()});
+    return hash(ctx, defines(ctx, cfg));
 }
 
-/// The stamp file holds the stamp, then the SDK and the zig version the build
-/// dir was configured with. It is empty while a configure runs, and stays empty
-/// if it fails.
-const Recorded = struct { stamp: []const u8, sdk: []const u8, zig: []const u8 };
+fn hash(ctx: *Ctx, items: []const []const u8) []const u8 {
+    var hasher = std.hash.Wyhash.init(0);
+    for (items) |item| {
+        hasher.update(item);
+        hasher.update(&.{0});
+    }
+    return ctx.sprint("{x:0>16}", .{hasher.final()});
+}
+
+/// The stamp file holds one line each: the stamp, the SDK, the zig version, the
+/// source and build directories the build dir was configured with, and a hash
+/// of the last `--` arguments. It is empty while a configure runs, and stays
+/// empty if it fails.
+const Recorded = struct { stamp: []const u8, sdk: []const u8, zig: []const u8, source: []const u8, build: []const u8, extra: []const u8 };
 
 fn recorded(ctx: *Ctx, cfg: Config) Recorded {
     const bytes = Io.Dir.cwd().readFileAlloc(ctx.io, ctx.join(&.{ cfg.build_dir, stamp_file }), ctx.arena, .limited(64 << 10)) catch "";
     var lines = std.mem.splitScalar(u8, bytes, '\n');
-    const first = lines.first();
-    const sdk = lines.next() orelse "";
-    return .{ .stamp = first, .sdk = sdk, .zig = lines.next() orelse "" };
+    return .{
+        .stamp = lines.first(),
+        .sdk = lines.next() orelse "",
+        .zig = lines.next() orelse "",
+        .source = lines.next() orelse "",
+        .build = lines.next() orelse "",
+        .extra = lines.next() orelse "",
+    };
 }
 
-/// Configured with another SDK or another zig: CMake keeps the compiler it
-/// found and the objects it built, so only starting over takes the new one.
-fn toolchainChanged(ctx: *Ctx, cfg: Config) bool {
+/// Hashed with the mtimes of the files CMake reads only on a first configure,
+/// so editing an SDK checkout (DINO_SDK_PATH) takes effect too.
+fn sdkIdentity(ctx: *Ctx, cfg: Config) []const u8 {
+    var hasher = std.hash.Wyhash.init(0);
+    for ([_][]const u8{ "toolchain.cmake", "flags.cmake" }) |name| {
+        const stat = Io.Dir.cwd().statFile(ctx.io, ctx.join(&.{ cfg.sdk, "cmake", name }), .{}) catch continue;
+        hasher.update(std.mem.asBytes(&stat.mtime));
+    }
+    return ctx.sprint("{s} {x:0>16}", .{ cfg.sdk, hasher.final() });
+}
+
+fn absoluteBuildDir(ctx: *Ctx, cfg: Config) []const u8 {
+    return Io.Dir.cwd().realPathFileAlloc(ctx.io, cfg.build_dir, ctx.arena) catch "";
+}
+
+/// Configured with another SDK or zig, or in another place (the project was
+/// moved or copied): CMake keeps the compiler it found and the objects it
+/// built, and refuses a cache made for other directories, so only starting
+/// over works.
+fn startsOver(ctx: *Ctx, cfg: Config) bool {
     const r = recorded(ctx, cfg);
-    return !std.mem.eql(u8, r.sdk, cfg.sdk) or !std.mem.eql(u8, r.zig, cfg.zig);
+    return !std.mem.eql(u8, r.sdk, sdkIdentity(ctx, cfg)) or !std.mem.eql(u8, r.zig, cfg.zig) or
+        !std.mem.eql(u8, r.source, cfg.source_dir) or !std.mem.eql(u8, r.build, absoluteBuildDir(ctx, cfg));
 }
 
 pub fn needsConfigure(ctx: *Ctx, cfg: Config) bool {
     if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }))) return true;
-    if (toolchainChanged(ctx, cfg)) return true;
-    const s = stamp(ctx, cfg);
-    return !std.mem.eql(u8, recorded(ctx, cfg).stamp, s[0 .. s.len - 1]);
+    if (startsOver(ctx, cfg)) return true;
+    // What CMake generates, deleted by hand: only a configure brings it back.
+    if (!ctx.exists(ctx.join(&.{ cfg.build_dir, ".cmake", "api", "v1", "reply" }))) return true;
+    if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "build.ninja" })) and !ctx.exists(ctx.join(&.{ cfg.build_dir, "Makefile" }))) return true;
+    const r = recorded(ctx, cfg);
+    if (!std.mem.eql(u8, r.stamp, stamp(ctx, cfg))) return true;
+    return cfg.extra.len != 0 and !std.mem.eql(u8, r.extra, hash(ctx, cfg.extra));
 }
 
 /// The value of `name` in a CMakeCache.txt (`NAME:TYPE=value` lines).
@@ -139,6 +176,12 @@ pub const RunOptions = struct {
 
 pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     const cwd = Io.Dir.cwd();
+    const stamp_path = ctx.join(&.{ cfg.build_dir, stamp_file });
+    const cache_path = ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" });
+    // Its settings are someone's; dino doesn't delete them.
+    if (ctx.exists(cache_path) and !ctx.exists(stamp_path)) {
+        return ctx.fail("{s} was configured without dino; remove it, or configure it in another directory", .{cfg.build_dir});
+    }
     // An empty query file asks CMake to describe its targets, which is how
     // `dino run` finds executables without the project naming them for us.
     const query_dir = ctx.join(&.{ cfg.build_dir, ".cmake", "api", "v1", "query" });
@@ -149,9 +192,10 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     // CMake reads the toolchain file only on the first configure, so a cache
     // made with another SDK keeps its compiler and flags. A failed configure
     // may have left the cache half-written, so it starts over too.
-    const stamp_path = ctx.join(&.{ cfg.build_dir, stamp_file });
-    if (toolchainChanged(ctx, cfg)) {
-        cwd.deleteFile(ctx.io, ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" })) catch |e| switch (e) {
+    const previous = recorded(ctx, cfg);
+    const fresh = startsOver(ctx, cfg);
+    if (fresh) {
+        cwd.deleteFile(ctx.io, cache_path) catch |e| switch (e) {
             error.FileNotFound => {},
             else => return ctx.fail("removing the CMake cache in {s}: {t}", .{ cfg.build_dir, e }),
         };
@@ -164,7 +208,7 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
 
     var argv: std.ArrayList([]const u8) = .empty;
     argv.appendSlice(ctx.arena, &.{ "cmake", "-S", cfg.source_dir, "-B", cfg.build_dir }) catch @panic("OOM");
-    if (!ctx.exists(ctx.join(&.{ cfg.build_dir, "CMakeCache.txt" }))) {
+    if (!ctx.exists(cache_path)) {
         if (try generator(ctx)) |g| argv.appendSlice(ctx.arena, &.{ "-G", g }) catch @panic("OOM");
         // The only slow step a user sees with no output: zig builds the C
         // library for this target and build type the first time anything uses
@@ -173,11 +217,20 @@ pub fn configure(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     }
     if (!opts.verbose) argv.append(ctx.arena, "--log-level=WARNING") catch @panic("OOM");
     argv.appendSlice(ctx.arena, defines(ctx, cfg)) catch @panic("OOM");
+    argv.appendSlice(ctx.arena, cfg.extra) catch @panic("OOM");
 
     if (opts.verbose) ctx.print("$ {s}\n", .{commandLine(ctx, argv.items)});
     if (try ctx.exec(argv.items, .{}) != 0) return false;
 
-    cwd.writeFile(ctx.io, .{ .sub_path = stamp_path, .data = ctx.sprint("{s}{s}\n{s}\n", .{ stamp(ctx, cfg), cfg.sdk, cfg.zig }) }) catch |e|
+    // A build type given with `--` is what the next command keeps.
+    var done = cfg;
+    const cache = cwd.readFileAlloc(ctx.io, cache_path, ctx.arena, .limited(16 << 20)) catch "";
+    if (cacheValue(cache, "CMAKE_BUILD_TYPE")) |t| done.build_type = if (std.mem.eql(u8, t, cfg.mode.cmakeName())) "" else t;
+    // Without new `--` arguments, the cache still holds the last ones' values.
+    const extra = if (cfg.extra.len != 0) hash(ctx, cfg.extra) else if (fresh) "" else previous.extra;
+    const lines = [_][]const u8{ stamp(ctx, done), sdkIdentity(ctx, cfg), cfg.zig, cfg.source_dir, absoluteBuildDir(ctx, cfg), extra };
+    const data = std.mem.concat(ctx.arena, u8, &.{ std.mem.join(ctx.arena, "\n", &lines) catch @panic("OOM"), "\n" }) catch @panic("OOM");
+    cwd.writeFile(ctx.io, .{ .sub_path = stamp_path, .data = data }) catch |e|
         return ctx.fail("writing {s}: {t}", .{ stamp_path, e });
     return true;
 }

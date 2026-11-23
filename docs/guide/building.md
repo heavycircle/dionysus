@@ -69,7 +69,13 @@ dino run --debug
 
 A target has a single build directory shared by both modes, so switching between `--debug` and
 release reconfigures and rebuilds that target. CMake's other build types (`RelWithDebInfo`,
-`MinSizeRel`) can be selected with `-- -DCMAKE_BUILD_TYPE=...`.
+`MinSizeRel`) can be selected with `-- -DCMAKE_BUILD_TYPE=...`. Such a build type stays for later `dino build`, `dino run` and `dino test` commands on that target until `--debug` or `--release` is given:
+
+```sh
+dino build -- -DCMAKE_BUILD_TYPE=RelWithDebInfo
+dino test                    # tests the RelWithDebInfo build
+dino build --release         # back to Release
+```
 
 ### What release optimizes for
 
@@ -139,11 +145,8 @@ or 2 means whatever the program means by it.
 - **Incremental:** `dino build` runs CMake's own incremental build, so only changed files are
   recompiled.
 - **Reconfiguring:** a target is reconfigured when its settings change: the build mode, the SDK
-  version, `DINO_LIBRARY_PATH`, or arguments after `--`. Settings given after `--` stay in the
-  CMake cache for later builds.
-- **Starting over:** when the SDK changes (a new dino, or another `DINO_SDK_PATH`), or the last
-  configure failed, the target's CMake cache is deleted and it is configured from scratch, since
-  CMake reads the toolchain only once. Settings from earlier `--` arguments are dropped with it.
+  version, `DINO_LIBRARY_PATH`, the qemu or wine found on `PATH`, or arguments after `--` that differ from the last ones given. Settings given after `--` stay in the CMake cache, so a later command without them (`dino run`, `dino test`, a plain `dino build`) keeps them and doesn't reconfigure.
+- **Starting over:** when the SDK changes (a new dino, another `DINO_SDK_PATH`, or an edit to its `cmake/toolchain.cmake` or `cmake/flags.cmake`), zig changes, the project was moved or copied to another directory, or the last configure failed, the target's CMake cache is deleted and it is configured from scratch, since CMake reads the toolchain only once and refuses a cache made in another directory. Settings from earlier `--` arguments are dropped with it, except a build type.
 - **`CFLAGS`:** CMake reads it from the environment only the first time a target is configured.
   After changing it, run `dino clean` first.
 
@@ -191,4 +194,4 @@ cmake -S . -B build/arm64 -G Ninja \
 cmake --build build/arm64
 ```
 
-`dino build -v` prints the exact commands it runs.
+`dino build -v` prints the exact commands it runs. `dino` won't build in a directory configured this way: it stops rather than replace the cache and its settings, so use another directory for one or the other.
