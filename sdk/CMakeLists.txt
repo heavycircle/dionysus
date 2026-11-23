@@ -53,7 +53,8 @@ configure_file(cmake/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/include/dino/vers
 target_include_directories(dino_core PUBLIC include "${CMAKE_CURRENT_BINARY_DIR}/include")
 
 if(WIN32)
-    target_link_libraries(dino_core PRIVATE ws2_32)
+    # advapi32 for RtlGenRandom (unguessable pipe names).
+    target_link_libraries(dino_core PRIVATE ws2_32 advapi32)
 endif()
 
 # Optional extras built on dino_core (logging, ...), kept out of the core library.
