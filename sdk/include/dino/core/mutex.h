@@ -81,8 +81,9 @@ void dino_cond_destroy(dino_cond_t cond);
 /**
  * Release mutex, wait until cond is signalled, and lock mutex again.
  *
- * mutex must be locked exactly once by the caller (it is recursive; waiting
- * while holding it more than once is undefined). Wake-ups can be spurious, so
+ * mutex must be locked exactly once by the caller: it is recursive, and a wait
+ * while holding it more than once fails with -1 (DINO_EINVAL) instead of
+ * sleeping with it still locked. Wake-ups can be spurious, so
  * wait in a loop that re-checks the condition:
  *
  *   dino_mutex_lock(m);
@@ -92,7 +93,8 @@ void dino_cond_destroy(dino_cond_t cond);
  *
  * @param cond   Condition to wait on.
  * @param mutex  Mutex protecting the condition.
- * @return 0 on success, -1 if the caller doesn't hold the mutex or on error.
+ * @return 0 on success, -1 if the caller doesn't hold the mutex (DINO_EACCES),
+ *         holds it more than once (DINO_EINVAL) or on error.
  */
 int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex);
 

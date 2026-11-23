@@ -61,6 +61,26 @@ static int translate_protocol(dino_socket_protocol_t protocol)
 
 // Winsock is started on first use rather than once for good, so that a
 // cleanup followed by more socket calls starts it again.
+// Sockets made by dino_socket_create and dino_socket_accept and not yet
+// closed: dino_net_cleanup refuses to run while there are any, since on
+// Windows WSACleanup breaks every socket that is still open.
+static long open_sockets;
+
+static void opened(void)
+{
+    __atomic_fetch_add(&open_sockets, 1, __ATOMIC_RELAXED);
+}
+
+static void closed(void)
+{
+    __atomic_fetch_sub(&open_sockets, 1, __ATOMIC_RELAXED);
+}
+
+static int any_open(void)
+{
+    return __atomic_load_n(&open_sockets, __ATOMIC_RELAXED) > 0;
+}
+
 static SRWLOCK       wsa_lock = SRWLOCK_INIT;
 static volatile LONG wsa_started;
 
@@ -85,8 +105,10 @@ int dino_net_init(void)
     return rc;
 }
 
-void dino_net_cleanup(void)
+int dino_net_cleanup(void)
 {
+    if (any_open())
+        return dino__fail(DINO_EINVAL);
     AcquireSRWLockExclusive(&wsa_lock);
     if (wsa_started)
     {
@@ -94,6 +116,7 @@ void dino_net_cleanup(void)
         InterlockedExchange(&wsa_started, 0);
     }
     ReleaseSRWLockExclusive(&wsa_lock);
+    return 0;
 }
 
 dino_socket_t dino_socket_create(
@@ -140,6 +163,7 @@ dino_socket_t dino_socket_create(
         WSAIoctl(s, DINO__SIO_UDP_CONNRESET, &report, sizeof(report), NULL, 0, &bytes, NULL, NULL);
     }
 
+    opened();
     return (dino_socket_t)s;
 }
 
@@ -150,6 +174,7 @@ int dino_socket_close(dino_socket_t sock)
 
     if (closesocket((SOCKET)sock) == SOCKET_ERROR)
         return dino__fail_os();
+    closed();
 
     return 0;
 }
@@ -329,6 +354,7 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
         return DINO_INVALID_SOCKET;
     }
 
+    opened();
     return (dino_socket_t)client;
 }
 

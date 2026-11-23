@@ -37,16 +37,16 @@ int main(void)
         return 1;
     dino_socket_close(s);
 
-    dino_runtime_cleanup(); // optional
+    dino_runtime_cleanup(); // optional; refused while a socket is open
     puts("runtime ok");
     return 0;
 }
 ```
 
-| Function                          | Does                                                                                                                  |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `int dino_runtime_init(void)`     | Initialize every subsystem now. `0` on success, `-1` if any fails. Safe to call any number of times, from any thread. |
-| `void dino_runtime_cleanup(void)` | Tear every subsystem down. Optional. A later call that needs a subsystem initializes it again.                        |
+| Function                         | Does                                                                                                                                                                                                                                                                                                |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `int dino_runtime_init(void)`    | Initialize every subsystem now. `0` on success, `-1` if any fails. Safe to call any number of times, from any thread.                                                                                                                                                                               |
+| `int dino_runtime_cleanup(void)` | Tear every subsystem down. Optional. A later call that needs a subsystem initializes it again. While a socket is still open it does nothing and returns `-1` (`DINO_EINVAL`), on every platform: on Windows it would break them all, so a library calling it can't break the application's sockets. |
 
 Each module's own init function (`dino_net_init()`, `dino_fs_init()`) does the same for that one
 module.

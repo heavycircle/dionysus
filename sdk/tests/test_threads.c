@@ -10,6 +10,7 @@
 #include <stdint.h>
 #include <utest.h>
 
+#include <dino/core/error.h>
 #include <dino/core/mutex.h>
 #include <dino/core/thread.h>
 #include <dino/core/time.h>
@@ -396,6 +397,28 @@ UTEST(cond, waiting_on_an_unowned_mutex_fails)
     ASSERT_NE(DINO_INVALID_COND, c);
     EXPECT_EQ(-1, dino_cond_wait(c, m));
     EXPECT_EQ(-1, dino_cond_timedwait(c, m, 10));
+    dino_cond_destroy(c);
+    dino_mutex_destroy(m);
+}
+
+// A wait releases one level of the recursive mutex, so at depth two it would
+// sleep with the mutex still locked and nobody could signal it: refused.
+UTEST(cond, waiting_on_a_mutex_held_twice_fails)
+{
+    dino_mutex_t m = dino_mutex_create();
+    dino_cond_t  c = dino_cond_create();
+    ASSERT_NE(DINO_INVALID_MUTEX, m);
+    ASSERT_NE(DINO_INVALID_COND, c);
+    ASSERT_EQ(0, dino_mutex_lock(m));
+    ASSERT_EQ(0, dino_mutex_lock(m));
+    EXPECT_EQ(-1, dino_cond_wait(c, m));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(-1, dino_cond_timedwait(c, m, 10));
+    EXPECT_EQ(0, dino_mutex_unlock(m));
+    // Held once, a wait works as before.
+    EXPECT_EQ(DINO_TIMEOUT, dino_cond_timedwait(c, m, 10));
+    EXPECT_EQ(0, dino_mutex_unlock(m));
+    EXPECT_EQ(-1, dino_mutex_unlock(m));
     dino_cond_destroy(c);
     dino_mutex_destroy(m);
 }

@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <dino/core/thread.h>
 #include <dino/core/time.h>
 
 #define LINE_BYTES 1024
@@ -15,7 +16,28 @@
 #define UNRESOLVED (-1)
 
 static atomic_int current_level = UNRESOLVED;
-static FILE *_Atomic output;
+static FILE      *output;
+
+// Held while a line is written and while the output is switched, so once
+// dino_log_set_output returns no thread still writes to the old stream, and
+// the caller may close it. A static ticket lock that yields: a mutex would be
+// allocated once and never freed, which every dino_test leak check would
+// report in a program that logs, and a plain spinlock lets threads that log
+// without pause starve the others. Tickets are served in order.
+static atomic_uint next_ticket;
+static atomic_uint now_serving;
+
+static void take_lock(void)
+{
+    unsigned ticket = atomic_fetch_add_explicit(&next_ticket, 1, memory_order_relaxed);
+    while (atomic_load_explicit(&now_serving, memory_order_acquire) != ticket)
+        dino_thread_yield();
+}
+
+static void drop_lock(void)
+{
+    atomic_fetch_add_explicit(&now_serving, 1, memory_order_release);
+}
 
 static const char *const level_names[]   = { "trace", "debug", "info", "warn", "error", "off" };
 static const char        level_letters[] = "TDIWE";
@@ -30,16 +52,24 @@ static int names_equal(const char *a, const char *b)
 
 static int default_level(void)
 {
-    const char *env = getenv("DINO_LOG");
-    if (env)
-        for (int i = DINO_LOG_LEVEL_TRACE; i <= DINO_LOG_LEVEL_OFF; i++)
-            if (names_equal(env, level_names[i]))
-                return i;
 #ifdef NDEBUG
-    return DINO_LOG_LEVEL_INFO;
+    int fallback = DINO_LOG_LEVEL_INFO;
 #else
-    return DINO_LOG_LEVEL_DEBUG;
+    int fallback = DINO_LOG_LEVEL_DEBUG;
 #endif
+    const char *env = getenv("DINO_LOG");
+    if (!env)
+        return fallback;
+    for (int i = DINO_LOG_LEVEL_TRACE; i <= DINO_LOG_LEVEL_OFF; i++)
+        if (names_equal(env, level_names[i]))
+            return i;
+    if (names_equal(env, "warning"))
+        return DINO_LOG_LEVEL_WARN;
+    // Said once, when the level is first needed, so a typo doesn't go unseen.
+    fprintf(stderr,
+        "dino: DINO_LOG=%s is not a log level (trace, debug, info, warn, error, off); using %s\n",
+        env, level_names[fallback]);
+    return fallback;
 }
 
 void dino_log_set_level(dino_log_level_t level)
@@ -65,7 +95,9 @@ dino_log_level_t dino_log_get_level(void)
 
 void dino_log_set_output(FILE *stream)
 {
-    atomic_store(&output, stream);
+    take_lock();
+    output = stream;
+    drop_lock();
 }
 
 static const char *base_name(const char *path)
@@ -113,10 +145,10 @@ void dino_log_write(dino_log_level_t level, const char *file, int line, const ch
         buf[len++] = '\n';
     }
 
-    FILE *out = atomic_load(&output);
-    if (!out)
-        out = stderr;
+    take_lock();
+    FILE *out = output ? output : stderr;
     fwrite(buf, 1, len, out);
     fflush(out);
+    drop_lock();
     errno = saved_errno;
 }

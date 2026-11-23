@@ -31,7 +31,8 @@ for exe in "$dir"/test_*.exe; do
     # What set_tests_properties() gives each test in sdk/tests/CMakeLists.txt.
     vars=()
     case $name in
-    test_logging_env) vars=(DINO_LOG=WaRn) ;;
+    test_logging_env) vars=(DINO_LOG=WaRnInG) ;;
+    test_logging_env_unknown) vars=(DINO_LOG=warnings) ;;
     esac
 
     # The limit `dino test` gives a test executable.

@@ -34,6 +34,11 @@ void dino_sleep_us(uint64_t us);
  * The epoch is arbitrary; only differences between two readings are
  * meaningful. Never goes backwards, even when the wall clock is changed.
  *
+ * Across a suspend the platforms differ: Linux's clock stops while the
+ * machine sleeps, Windows' keeps counting. So do the sleeps and timed waits
+ * built on it: dino_sleep_ms(60000) across an hour of suspend returns at once
+ * on resume on Windows, and after the time still left on Linux.
+ *
  * @return Nanoseconds since an arbitrary fixed point.
  */
 uint64_t dino_time_monotonic_ns(void);

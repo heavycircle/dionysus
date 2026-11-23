@@ -32,8 +32,10 @@ void dino_log_set_level(dino_log_level_t level);
  * Get the lowest level that is written.
  *
  * Until dino_log_set_level() is called, this comes from the DINO_LOG
- * environment variable (trace, debug, info, warn, error or off, any case), read
- * on first use. Without it the level is debug, or info under NDEBUG.
+ * environment variable (trace, debug, info, warn or warning, error or off, any
+ * case), read on first use; another value is reported once on stderr and
+ * ignored. Without it the level is debug, or info under NDEBUG, which a
+ * release build (dino's default) defines.
  *
  * @return The current level.
  */
@@ -42,7 +44,9 @@ dino_log_level_t dino_log_get_level(void);
 /**
  * Send log lines to a stream instead of stderr.
  *
- * The stream must stay open while it is in use; set NULL before closing it.
+ * Once this returns, no thread writes to the previous stream any more, even
+ * one that was logging meanwhile, so it may be closed: set NULL (or the new
+ * stream), then fclose the old one.
  *
  * @param stream  Destination, or NULL for stderr.
  */

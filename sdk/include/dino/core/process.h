@@ -164,6 +164,11 @@ int dino_process_wait(dino_process_t process, dino_process_status_t *status);
  * shell script runs, and for a Windows .bat or .cmd file, where the process
  * is the cmd.exe that runs it, everything the script started.
  *
+ * Not from another thread while one is in dino_process_wait on the same
+ * handle: the wait may end it first, and the kill then reaches whatever
+ * process was given the ID next. Wait with dino_process_wait_timeout instead
+ * and kill from that thread when the time runs out.
+ *
  * @param  process  Handle from dino_process_spawn, not yet waited for.
  * @return 0 on success (including when it had already exited), -1 on error.
  */

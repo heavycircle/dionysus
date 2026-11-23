@@ -99,7 +99,7 @@ unlocked by the wrong thread would otherwise be silently corrupted.)
 - **Re-check in a loop:** wake-ups can be spurious, so always wait in a loop that re-checks the
   condition, as the example does.
 - **Lock once before waiting:** the mutex must be locked exactly once by the waiting thread. Waiting
-  while holding it more than once is undefined, and waiting without holding it returns `-1`.
+  while holding it more than once returns `-1` (`DINO_EINVAL`) instead of sleeping with it still locked, and waiting without holding it returns `-1` (`DINO_EACCES`).
 - **Monotonic timeouts:** `dino_cond_timedwait` measures on the monotonic clock, so changing the
   system time doesn't shorten or extend it.
 

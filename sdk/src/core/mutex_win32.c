@@ -107,17 +107,28 @@ void dino_cond_destroy(dino_cond_t cond)
     free((CONDITION_VARIABLE *)cond);
 }
 
+// The caller must hold the mutex exactly once: SleepConditionVariableCS
+// leaves the section once, so at a deeper level it would sleep with the
+// section still entered and nobody could signal it.
+static int check_waitable(struct dino_mutex *m)
+{
+    if (!held_by_caller(m))
+        return dino__fail(DINO_EACCES);
+    if (m->depth != 1)
+        return dino__fail(DINO_EINVAL);
+    return 0;
+}
+
 // SleepConditionVariableCS leaves and re-enters the section, so the owner is
-// handed over around it. The caller holds the mutex exactly once.
+// handed over around it.
 static BOOL sleep_on(dino_cond_t cond, struct dino_mutex *m, DWORD wait)
 {
-    unsigned depth = m->depth;
     __atomic_store_n(&m->owner, 0, __ATOMIC_RELAXED);
     m->depth    = 0;
     BOOL  woke  = SleepConditionVariableCS((CONDITION_VARIABLE *)cond, &m->cs, wait);
     DWORD error = GetLastError();
     __atomic_store_n(&m->owner, GetCurrentThreadId(), __ATOMIC_RELAXED);
-    m->depth = depth;
+    m->depth = 1;
     SetLastError(error);
     return woke;
 }
@@ -127,8 +138,8 @@ int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex)
     if (cond == DINO_INVALID_COND || mutex == DINO_INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
-    if (!held_by_caller(m))
-        return dino__fail(DINO_EACCES);
+    if (check_waitable(m) != 0)
+        return -1;
     return sleep_on(cond, m, INFINITE) ? 0 : dino__fail_os();
 }
 
@@ -141,8 +152,8 @@ int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
     if (timeout_ms < 0)
         return dino_cond_wait(cond, mutex);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
-    if (!held_by_caller(m))
-        return dino__fail(DINO_EACCES);
+    if (check_waitable(m) != 0)
+        return -1;
 
     uint64_t deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
     for (;;)

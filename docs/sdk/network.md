@@ -114,6 +114,7 @@ if (n >= 0)
 
 ## Pitfalls
 
+- **Closing a socket doesn't stop a thread blocked on it.** A thread in `dino_socket_accept` or `dino_socket_recv` wakes when another thread closes the socket on Windows, not on Linux (where `dino_socket_shutdown` wakes it, and the descriptor may meanwhile be reused). To be able to stop such a thread, wait with `dino_poll`, a receive timeout or the [event loop](event.md) instead of blocking.
 - **Short transfers.** `send` may send fewer bytes than asked, and `recv` returns whatever has
   arrived: a message can come in pieces, or several can come together. Loop until you have what
   your protocol says you should.
