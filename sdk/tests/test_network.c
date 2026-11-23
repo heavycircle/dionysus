@@ -176,9 +176,16 @@ UTEST(network, dual_stack_socket_sends_to_an_ipv4_literal)
 // by name on Linux; an interface that doesn't exist is refused.
 UTEST(network, ipv6_zone_names_the_interface)
 {
+    // Linux ignores the interface of an address that doesn't need one;
+    // Windows refuses any but 0 for it.
+#ifdef _WIN32
+    const char *numeric = "::1%0";
+#else
+    const char *numeric = "::1%1";
+#endif
     dino_socket_t s = dino_socket_create(DINO_AF_INET6, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
     ASSERT_NE(DINO_INVALID_SOCKET, s);
-    EXPECT_EQ(0, dino_socket_bind(s, "::1%1", 0));
+    EXPECT_EQ(0, dino_socket_bind(s, numeric, 0));
     dino_socket_close(s);
 #ifndef _WIN32
     s = dino_socket_create(DINO_AF_INET6, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
