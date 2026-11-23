@@ -3,7 +3,10 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <net/if.h>
 #include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -109,11 +112,45 @@ int dino_socket_close(dino_socket_t sock)
     return 0;
 }
 
+// The interface a "%zone" suffix names: a number, or an interface name.
+static int parse_zone(const char *zone, unsigned long *scope)
+{
+    if (*zone >= '0' && *zone <= '9')
+    {
+        char         *end;
+        unsigned long n = strtoul(zone, &end, 10);
+        if (*end || n > 0xffffffffUL)
+            return -1;
+        *scope = n;
+        return 0;
+    }
+    unsigned index = if_nametoindex(zone);
+    if (!index)
+        return -1;
+    *scope = index;
+    return 0;
+}
+
+// An IPv6 socket that also takes IPv4 (dino_socket_set_v6only(sock, 0)).
+static int dual_stack(dino_socket_t sock)
+{
+    struct sockaddr_storage local;
+    socklen_t               len = sizeof(local);
+    if (getsockname((int)sock, (struct sockaddr *)&local, &len) != 0 || local.ss_family != AF_INET6)
+        return 0;
+    int v6only = 1;
+    len        = sizeof(v6only);
+    return getsockopt((int)sock, IPPROTO_IPV6, IPV6_V6ONLY, &v6only, &len) == 0 && !v6only;
+}
+
 // The address string picks the family, so one call works for both IPv4 and
 // IPv6 sockets. A string that is neither fails instead of silently binding or
 // connecting to 0.0.0.0, and so does a port that doesn't fit in 16 bits.
-static int dino_sockaddr(
-    struct sockaddr_storage *addr, dino_socklen_t *len, const char *ip, int port)
+// An IPv6 literal may name its interface ("fe80::1%eth0"), which a link-local
+// address needs. An IPv4 literal becomes ::ffff:a.b.c.d for a dual-stack
+// socket, which takes no IPv4 address as such.
+static int dino_sockaddr(struct sockaddr_storage *addr, dino_socklen_t *len, const char *ip,
+    int port, dino_socket_t sock)
 {
     struct sockaddr_in  *v4 = (struct sockaddr_in *)addr;
     struct sockaddr_in6 *v6 = (struct sockaddr_in6 *)addr;
@@ -122,28 +159,53 @@ static int dino_sockaddr(
     if (ip == NULL || port < 0 || port > 65535)
         return -1;
 
-    if (inet_pton(AF_INET, ip, &v4->sin_addr) == 1)
+    char        host[DINO_IP_STRLEN];
+    const char *zone = strchr(ip, '%');
+    size_t      n    = zone ? (size_t)(zone - ip) : strlen(ip);
+    if (n >= sizeof(host))
+        return -1;
+    memcpy(host, ip, n);
+    host[n] = '\0';
+
+    if (!zone && inet_pton(AF_INET, host, &v4->sin_addr) == 1)
     {
-        v4->sin_family = AF_INET;
-        v4->sin_port   = htons((unsigned short)port);
-        *len           = (dino_socklen_t)sizeof(*v4);
-        return 0;
+        if (!dual_stack(sock))
+        {
+            v4->sin_family = AF_INET;
+            v4->sin_port   = htons((unsigned short)port);
+            *len           = (dino_socklen_t)sizeof(*v4);
+            return 0;
+        }
+        unsigned char ipv4[4];
+        memcpy(ipv4, &v4->sin_addr, 4);
+        memset(addr, 0, sizeof(*addr));
+        unsigned char *bytes = (unsigned char *)&v6->sin6_addr;
+        bytes[10] = bytes[11] = 0xff;
+        memcpy(bytes + 12, ipv4, 4);
     }
-    if (inet_pton(AF_INET6, ip, &v6->sin6_addr) == 1)
+    else if (inet_pton(AF_INET6, host, &v6->sin6_addr) == 1)
     {
-        v6->sin6_family = AF_INET6;
-        v6->sin6_port   = htons((unsigned short)port);
-        *len            = (dino_socklen_t)sizeof(*v6);
-        return 0;
+        unsigned long scope = 0;
+        if (zone && parse_zone(zone + 1, &scope) != 0)
+            return -1;
+        v6->sin6_scope_id = (uint32_t)scope;
     }
-    return -1;
+    else
+    {
+        return -1;
+    }
+    v6->sin6_family = AF_INET6;
+    v6->sin6_port   = htons((unsigned short)port);
+    *len            = (dino_socklen_t)sizeof(*v6);
+    return 0;
 }
 
 // The reverse of dino_sockaddr: the numeric form it accepts back.
 static int dino_sockaddr_format(const struct sockaddr_storage *addr, dino_socket_addr_t *out)
 {
     memset(out, 0, sizeof(*out));
-    const void *raw;
+    const void   *raw;
+    unsigned long scope = 0;
     if (addr->ss_family == AF_INET)
     {
         const struct sockaddr_in *v4 = (const struct sockaddr_in *)addr;
@@ -155,19 +217,28 @@ static int dino_sockaddr_format(const struct sockaddr_storage *addr, dino_socket
         const struct sockaddr_in6 *v6 = (const struct sockaddr_in6 *)addr;
         raw                           = &v6->sin6_addr;
         out->port                     = ntohs(v6->sin6_port);
+        scope                         = v6->sin6_scope_id;
     }
     else
     {
         return dino__fail(DINO_ENOTSUP);
     }
-    return inet_ntop(addr->ss_family, raw, out->ip, sizeof(out->ip)) ? 0 : dino__fail_os();
+    if (!inet_ntop(addr->ss_family, raw, out->ip, sizeof(out->ip)))
+        return dino__fail_os();
+    // The interface as a number, which dino_sockaddr takes back on both platforms.
+    if (scope)
+    {
+        size_t used = strlen(out->ip);
+        snprintf(out->ip + used, sizeof(out->ip) - used, "%%%lu", scope);
+    }
+    return 0;
 }
 
 int dino_socket_bind(dino_socket_t sock, const char *ip, int port)
 {
     struct sockaddr_storage addr;
     dino_socklen_t          len;
-    if (dino_sockaddr(&addr, &len, ip, port) != 0)
+    if (dino_sockaddr(&addr, &len, ip, port, sock) != 0)
         return dino__fail(DINO_EINVAL);
 
     int res = bind((int)sock, (struct sockaddr *)&addr, len);
@@ -208,7 +279,7 @@ int dino_socket_connect(dino_socket_t sock, const char *ip, int port)
 {
     struct sockaddr_storage addr;
     dino_socklen_t          len;
-    if (dino_sockaddr(&addr, &len, ip, port) != 0)
+    if (dino_sockaddr(&addr, &len, ip, port, sock) != 0)
         return dino__fail(DINO_EINVAL);
 
     int res = connect((int)sock, (struct sockaddr *)&addr, len);
@@ -251,7 +322,7 @@ int dino_socket_sendto(dino_socket_t sock, const void *buf, size_t len, const ch
 {
     struct sockaddr_storage addr;
     dino_socklen_t          addr_len;
-    if ((len > 0 && !buf) || dino_sockaddr(&addr, &addr_len, ip, port) != 0)
+    if ((len > 0 && !buf) || dino_sockaddr(&addr, &addr_len, ip, port, sock) != 0)
         return dino__fail(DINO_EINVAL);
     int sent;
     do

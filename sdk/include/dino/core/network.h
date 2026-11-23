@@ -85,7 +85,11 @@ int dino_socket_close(dino_socket_t sock);
  *
  * @param  sock     Socket to bind to the port.
  * @param  ip       IPv4 or IPv6 address literal to bind to, matching the socket's domain
- *                  (e.g. "0.0.0.0", "::", "::1"). Host names are not resolved.
+ *                  (e.g. "0.0.0.0", "::", "::1"). Host names are not resolved. A
+ *                  link-local IPv6 address names its interface after a %:
+ *                  "fe80::1%eth0" (Linux) or by number, "fe80::1%2" (both). On a
+ *                  dual-stack socket (dino_socket_set_v6only(sock, 0)) an IPv4
+ *                  literal means its ::ffff: form.
  * @param  port     Port to bind to, 0 to 65535 (0 picks any free port).
  * @return 0 on success, -1 on error, if ip is not a valid address or if port
  *         is out of range.
@@ -120,8 +124,8 @@ dino_socket_t dino_socket_accept(dino_socket_t sock);
  * Wrapper for connect(2) supporting Windows and POSIX APIs.
  *
  * @param  sock     Socket to use for connection.
- * @param  ip       IPv4 or IPv6 address literal to connect to, matching the socket's domain.
- *                  Host names are not resolved.
+ * @param  ip       IPv4 or IPv6 address literal to connect to, matching the socket's domain,
+ *                  as for dino_socket_bind. Host names are not resolved.
  * @param  port     Port to connect to, 0 to 65535.
  * @return 0 on connection, -1 on error, if ip is not a valid address or if
  *         port is out of range. On a non-blocking socket -1 with dino_error()
@@ -181,7 +185,7 @@ typedef struct
  * @param  buf      The datagram.
  * @param  len      Number of bytes in buf. A datagram larger than the
  *                  protocol allows fails.
- * @param  ip       IPv4 or IPv6 address literal, matching the socket's domain.
+ * @param  ip       IPv4 or IPv6 address literal, as for dino_socket_bind.
  * @param  port     Port to send to, 0 to 65535.
  * @return Number of bytes sent, or -1 if an error occurred, if ip is not a
  *         valid address or if port is out of range.

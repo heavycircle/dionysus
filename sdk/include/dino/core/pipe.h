@@ -21,7 +21,8 @@ typedef struct dino_pipe *dino_pipe_t;
 /**
  * Create a pipe: bytes written to write_end come out of read_end.
  *
- * Both ends hold 64 KB before a write blocks, and neither is inherited by child
+ * Both ends normally hold 64 KB before a write blocks (on Linux a user over
+ * the kernel's pipe-buffer limit gets 4 KB), and neither is inherited by child
  * processes unless passed to one explicitly.
  *
  * Pipes are not sockets: dino_poll and dino_select don't accept them. Wait on

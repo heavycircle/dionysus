@@ -149,6 +149,51 @@ UTEST(network, set_v6only_0_accepts_ipv4_peers)
     dino_socket_close(v6);
 }
 
+// A dual-stack socket takes no IPv4 address as such: an IPv4 literal means
+// its ::ffff: form, for sendto and connect as for bind.
+UTEST(network, dual_stack_socket_sends_to_an_ipv4_literal)
+{
+    dino_socket_t v4 = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    dino_socket_t v6 = dino_socket_create(DINO_AF_INET6, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, v4);
+    ASSERT_NE(DINO_INVALID_SOCKET, v6);
+    ASSERT_EQ(0, dino_socket_bind(v4, "127.0.0.1", PORT + 21));
+    ASSERT_EQ(0, dino_socket_set_v6only(v6, 0));
+    EXPECT_EQ(2, dino_socket_sendto(v6, "hi", 2, "127.0.0.1", PORT + 21));
+    char buf[4] = { 0 };
+    EXPECT_EQ(2, dino_socket_recv(v4, buf, sizeof(buf)));
+    EXPECT_EQ(0, dino_socket_connect(v6, "127.0.0.1", PORT + 21));
+    dino_socket_close(v6);
+
+    // A v6-only socket still refuses one: it can't reach IPv4 at all.
+    v6 = dino_socket_create(DINO_AF_INET6, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    EXPECT_EQ(-1, dino_socket_sendto(v6, "hi", 2, "127.0.0.1", PORT + 21));
+    dino_socket_close(v6);
+    dino_socket_close(v4);
+}
+
+// An IPv6 literal may name its interface after a '%', by number everywhere and
+// by name on Linux; an interface that doesn't exist is refused.
+UTEST(network, ipv6_zone_names_the_interface)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET6, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    EXPECT_EQ(0, dino_socket_bind(s, "::1%1", 0));
+    dino_socket_close(s);
+#ifndef _WIN32
+    s = dino_socket_create(DINO_AF_INET6, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    EXPECT_EQ(0, dino_socket_bind(s, "::1%lo", 0));
+    dino_socket_close(s);
+#endif
+    const char *bad[] = { "::1%", "::1%dino-no-such-interface", "::1%1x", "127.0.0.1%1" };
+    for (int i = 0; i < 4; i++)
+    {
+        s = dino_socket_create(DINO_AF_INET6, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+        EXPECT_EQ(-1, dino_socket_bind(s, bad[i], 0));
+        dino_socket_close(s);
+    }
+}
+
 UTEST(network, set_v6only_needs_an_ipv6_socket)
 {
     dino_socket_t v4 = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
