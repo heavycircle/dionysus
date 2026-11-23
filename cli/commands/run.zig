@@ -81,7 +81,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     if (targets.runnerFor(target) == .wine) env = try quietWine(ctx);
     argv.append(ctx.arena, exe.path) catch @panic("OOM");
     argv.appendSlice(ctx.arena, program_args) catch @panic("OOM");
-    return ctx.exec(argv.items, .{ .env = env });
+    return ctx.exitWithLastStatus(try ctx.exec(argv.items, .{ .env = env }));
 }
 
 fn existingExecutables(ctx: *Ctx, opts: build.Options) Ctx.Error![]const cmake.Executable {

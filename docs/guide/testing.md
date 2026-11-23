@@ -58,7 +58,7 @@ UTEST_MAIN()
 - `EXPECT_*` records a failure and continues the case. `ASSERT_*` stops it.
 
 - The checks are `EQ`, `NE`, `LT`, `LE`, `GT`, `GE`, `TRUE`, `FALSE`, `NEAR` (floats within a
-  tolerance), `STREQ`, `STRNE`, `STRNEQ`/`STRNNE` (the first *n* characters) and `MEMEQ`, each as
+  tolerance), `STREQ`, `STRNE`, `STRNEQ`/`STRNNE` (the first _n_ characters) and `MEMEQ`, each as
   `EXPECT_` and `ASSERT_`, and each with a `_MSG` form that adds a message.
 
 - Fixtures share setup and teardown across cases:
@@ -120,7 +120,7 @@ It counts every `malloc`, `calloc`, `realloc`, `reallocarray`, `aligned_alloc`, 
 - **Turning it off:** `DINO_LEAK_CHECK=0` in the environment disables it for one run.
   `DINO_NO_LEAK_CHECK` (set before `project()`) leaves it out of the build.
 
-To find *where* the leak comes from, use `--memcheck`.
+To find _where_ the leak comes from, use `--memcheck`.
 
 ## `--memcheck`: valgrind
 
@@ -129,7 +129,7 @@ dino test --memcheck
 ```
 
 It builds the tests again in `build/memcheck/`, for x86_64 Linux against the dynamic glibc (valgrind
-can't see the allocator inside a static binary), and runs each test under valgrind. As well as
+can't see the allocator inside a static binary), and runs each test under valgrind. It always builds Debug, for valgrind's stack traces, so it takes no `--release`, and it leaves `compile_commands.json` on the normal build. As well as
 leaks, with the stack that allocated them, it catches reads and writes out of bounds, use after free
 and use of uninitialized memory:
 

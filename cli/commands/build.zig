@@ -40,7 +40,12 @@ pub const Options = struct {
     mode_given: bool = false,
     run: cmake.RunOptions = .{},
     extra: []const []const u8 = &.{},
+    /// Refresh the project's compile_commands.json from the first target;
+    /// `dino test --memcheck` doesn't, since editors want a normal build.
+    export_compdb: bool = true,
 };
+
+const max_jobs = 4096;
 
 pub const Result = struct {
     cfg: cmake.Config,
@@ -97,9 +102,8 @@ pub fn parseCommon(ctx: *Ctx, args: *Args, arg: []const u8, opts: *Options) Ctx.
     } else if (std.mem.eql(u8, arg, "-v") or std.mem.eql(u8, arg, "--verbose")) {
         opts.run.verbose = true;
     } else if (try args.value(ctx, arg, &.{ "-j", "--jobs" })) |v| {
-        const jobs = std.fmt.parseInt(u32, v, 10) catch 0;
-        if (jobs == 0) return ctx.usage("invalid job count '{s}'", .{v});
-        opts.run.jobs = jobs;
+        opts.run.jobs = Args.count(v, max_jobs) orelse
+            return ctx.usage("invalid job count '{s}' (1 to {d})", .{ v, max_jobs });
     } else if (try args.value(ctx, arg, &.{"-C"})) |v| {
         opts.project = v;
     } else {
@@ -146,7 +150,7 @@ pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
         // Before compiling: editors need the compile database most when the code
         // doesn't build. Only the first target's, even if it fails to configure:
         // the editor shouldn't switch to another target's view.
-        if (i == 0) exportCompileCommands(ctx, cfg, opts.project);
+        if (i == 0 and opts.export_compdb) exportCompileCommands(ctx, cfg, opts.project);
         if (!try cmake.build(ctx, cfg, opts.run)) continue;
 
         result.executables = try cmake.executables(ctx, cfg);

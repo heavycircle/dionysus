@@ -104,7 +104,7 @@ dino run -- --verbose input.txt   # arguments for the program go after --
   installed) and Windows binaries under wine. `dino doctor` shows which runners it found. An x86_64
   host runs i386 binaries directly; an aarch64 host runs arm binaries directly only if its CPU can
   run 32-bit ARM code (many newer ones, and Apple silicon, can't), and uses `qemu-arm` otherwise. wine runs only Windows binaries for the host's own architecture (x86 and x86_64 on an x86_64 host), and x32 binaries (`*-linux-gnux32`, `*-linux-muslx32`) can't be run at all. A target that can't be run, or whose runner isn't installed, fails before anything is built.
-- **Exit code:** `dino run` exits with the program's exit code.
+- **Exit code:** `dino run` exits with the program's exit code. On Windows that is the full 32-bit code, so a crash (`0xC0000005`) is passed on as it is.
 - **Signals:** dino waits for the program to exit. Ctrl-C and Ctrl-\\ at the terminal, and the hangup of a closed terminal, reach the program directly, once. A signal sent to dino alone (`kill`, a supervisor's `SIGTERM`) is passed on to the program, and once the program has exited, to anything it left running, so an interrupted `dino build` doesn't leave make and the compilers working in the background. dino doesn't wait for those to finish. A signal that was ignored when dino started (`nohup dino build`, a background job in a script) stays ignored, by dino and by what it runs. On Windows, Ctrl-C and Ctrl-Break reach the program and dino ignores them. The same holds while `dino build` and `dino test` run CMake and CTest, and once interrupted they stop instead of going on to the next target.
 - **wine output:** wine's own `fixme:` chatter is silenced unless you set `WINEDEBUG` yourself.
 - **Several executables:** pick one with `--exe <name>`. Test executables (from `dino_test()`) are
@@ -122,7 +122,7 @@ and run them there.
 | `-C <dir>`             | build, run, test, clean | use `<dir>` as the project directory                            |
 | `-C <dir>`             | init                    | work from `<dir>`; the directory argument is relative to it     |
 | `--debug`, `--release` | build, run, test        | choose the build mode (release is the default)                  |
-| `-j <n>`, `--jobs <n>` | build, run, test        | parallel jobs (default: number of CPUs)                         |
+| `-j <n>`, `--jobs <n>` | build, run, test        | parallel jobs, 1 to 4096 (default: number of CPUs)              |
 | `-v`, `--verbose`      | build, run, test        | show the CMake commands and the full compiler output            |
 | `--all`                | build, test             | every named target                                              |
 | `-- <args>`            | build                   | passed to CMake's configure step, e.g. `-- -DENABLE_LOGGING=ON` |

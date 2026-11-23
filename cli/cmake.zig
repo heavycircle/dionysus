@@ -260,8 +260,53 @@ pub fn build(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
     return try ctx.exec(argv.items, .{}) == 0;
 }
 
+/// The command as it can be pasted into a shell: arguments with spaces, `;`
+/// (CMake lists) or other special characters are quoted.
 fn commandLine(ctx: *Ctx, argv: []const []const u8) []const u8 {
-    return std.mem.join(ctx.arena, " ", argv) catch @panic("OOM");
+    var out: std.ArrayList(u8) = .empty;
+    for (argv, 0..) |arg, i| {
+        if (i != 0) out.append(ctx.arena, ' ') catch @panic("OOM");
+        quoteArg(ctx.arena, &out, arg, builtin.os.tag == .windows) catch @panic("OOM");
+    }
+    return out.items;
+}
+
+fn quoteArg(arena: std.mem.Allocator, out: *std.ArrayList(u8), arg: []const u8, windows: bool) !void {
+    const plain = arg.len != 0 and for (arg) |c| {
+        if (!std.ascii.isAlphanumeric(c) and std.mem.indexOfScalar(u8, "_./=:+,@%-", c) == null and !(windows and c == '\\')) break false;
+    } else true;
+    if (plain) return out.appendSlice(arena, arg);
+    if (windows) {
+        // cmd and PowerShell both take double quotes; a quote inside is doubled.
+        try out.append(arena, '"');
+        for (arg) |c| try out.appendSlice(arena, if (c == '"') "\"\"" else &.{c});
+        return out.append(arena, '"');
+    }
+    try out.append(arena, '\'');
+    for (arg) |c| try out.appendSlice(arena, if (c == '\'') "'\\''" else &.{c});
+    try out.append(arena, '\'');
+}
+
+test quoteArg {
+    var arena_state: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena_state.deinit();
+    const a = arena_state.allocator();
+    const cases = [_]struct { []const u8, []const u8, []const u8 }{
+        .{ "-DX=1", "-DX=1", "-DX=1" },
+        .{ "/home/me/My Projects/app", "'/home/me/My Projects/app'", "\"/home/me/My Projects/app\"" },
+        .{ "-DE=/usr/bin/valgrind;--quiet", "'-DE=/usr/bin/valgrind;--quiet'", "\"-DE=/usr/bin/valgrind;--quiet\"" },
+        .{ "it's", "'it'\\''s'", "\"it's\"" },
+        .{ "", "''", "\"\"" },
+        .{ "C:\\zig\\zig.exe", "'C:\\zig\\zig.exe'", "C:\\zig\\zig.exe" },
+    };
+    for (cases) |c| {
+        var posix: std.ArrayList(u8) = .empty;
+        try quoteArg(a, &posix, c[0], false);
+        try std.testing.expectEqualStrings(c[1], posix.items);
+        var win: std.ArrayList(u8) = .empty;
+        try quoteArg(a, &win, c[0], true);
+        try std.testing.expectEqualStrings(c[2], win.items);
+    }
 }
 
 pub const Executable = struct {
