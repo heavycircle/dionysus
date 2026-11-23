@@ -160,6 +160,28 @@ case_clean_failed() {
     [[ ! -e build ]]
 }
 
+# `dino clean` prints paths as the other commands do, and leaves an empty
+# build/ it didn't empty alone.
+case_clean_paths() {
+    project clean_paths
+    mkdir build
+    dino clean >out 2>&1 || { cat out; return 1; }
+    [[ -d build ]] || { echo "removed a build/ that wasn't dino's"; return 1; }
+    dino build >/dev/null 2>&1 || return 1
+    dino clean >out 2>&1 || { cat out; return 1; }
+    grep -qx '    removed  build/x86_64' out || { cat out; return 1; }
+    [[ ! -e build ]]
+}
+
+# `-v` prints commands that can be pasted, quoting a path with a space.
+case_verbose_quotes() {
+    mkdir -p "$work/my dir" && rm -rf "$work/my dir/quoted"
+    dino init --no-configure "$work/my dir/quoted" >/dev/null || return 1
+    cd "$work/my dir/quoted" || return 1
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    grep -qF "\$ cmake -S '$work/my dir/quoted' -B build/x86_64" out || { grep -- '-S ' out; return 1; }
+}
+
 # `dino run` finds an executable built outside the build directory.
 case_run_output_outside_build() {
     project run_outside
@@ -245,7 +267,8 @@ case_usage_errors() {
     local cmd code
     for cmd in 'frob' 'help frob' 'build --bogus' 'build -C ""' 'build -C=' 'build nosuchtarget' \
         'build --all x86_64' 'build -j 0' 'run x86_64 arm' 'test --memcheck arm' 'clean -C ""' \
-        'init a b' 'init ""' 'targets x' 'doctor x' 'run --exe' 'test --timeout 0' 'test --timeout soon'; do
+        'init a b' 'init ""' 'targets x' 'doctor x' 'run --exe' 'test --timeout 0' 'test --timeout soon' \
+        'build -j 1_0' 'build -j +3' 'build -j 99999' 'build -C --debug' 'run --exe --' 'test --memcheck --release'; do
         eval "dino $cmd" >/dev/null 2>&1
         code=$?
         [[ $code == 2 ]] || { echo "dino $cmd: exit $code"; return 1; }
@@ -315,6 +338,16 @@ case_clean_memcheck() {
     dino test --memcheck >/dev/null || return 1
     dino clean memcheck >/dev/null || return 1
     [[ ! -e build/memcheck ]]
+}
+
+# `dino test --memcheck` leaves the editor's compile_commands.json on the
+# normal build, not the glibc one valgrind needs.
+case_memcheck_keeps_compdb() {
+    project memcheck_compdb
+    dino build >/dev/null 2>&1 || return 1
+    grep -q 'x86_64-linux-musl' compile_commands.json || return 1
+    dino test --memcheck >out 2>&1 || { cat out; return 1; }
+    grep -q 'x86_64-linux-musl' compile_commands.json || { echo "repointed at the memcheck build"; return 1; }
 }
 
 # C++ entries in compile_commands.json name libc++'s headers.
