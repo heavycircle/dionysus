@@ -82,6 +82,7 @@ case_build_type_kept() {
 # them keeps what they set.
 case_extra_args_reconfigure_once() {
     project extra_args
+    # shellcheck disable=SC2016 # for CMake to expand
     echo 'message(WARNING "FLAVOR=${FLAVOR}")' >>CMakeLists.txt
     dino build -- -DFLAVOR=sweet >out 2>&1 || { cat out; return 1; }
     grep -q 'FLAVOR=sweet' out || { cat out; return 1; }
