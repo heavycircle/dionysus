@@ -24,6 +24,17 @@ static inline int dino__process_valid_env_name(const char *name)
     return name && *name && !strchr(name, '=');
 }
 
+// 0 if an entry isn't NAME=value: Windows would end the block at an empty one
+// and drop every later variable. A name may start with '=' (Windows keeps each
+// drive's directory as "=C:=C:\dir").
+static inline int dino__process_valid_env(const char *const *env)
+{
+    for (int i = 0; env && env[i]; i++)
+        if (!env[i][0] || !strchr(env[i] + 1, '='))
+            return 0;
+    return 1;
+}
+
 // 0 if any mode is outside the enum, which each platform would otherwise
 // treat its own way.
 static inline int dino__process_modes(const dino_process_spawn_opts_t *opts, dino_stdio_t modes[3])

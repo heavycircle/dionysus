@@ -15,6 +15,7 @@
 #include <unistd.h>
 #endif
 
+#include <dino/core/error.h>
 #include <dino/core/pipe.h>
 #include <dino/core/process.h>
 #include <dino/core/time.h>
@@ -293,6 +294,35 @@ UTEST(process, environment_replaces_the_parents)
     EXPECT_STREQ("from env\n", out);
 }
 
+// Windows ends its environment block at an empty entry, dropping every later
+// variable, so both platforms refuse one, and one without '='.
+UTEST(process, environment_entries_must_be_name_value)
+{
+    const char *const         argv[]  = SHELL("exit 0");
+    const char *const         empty[] = { "A=1", "", "B=2", NULL };
+    const char *const         no_eq[] = { "A=1", "JUSTNAME", NULL };
+    dino_process_spawn_opts_t opts    = { 0 };
+    dino_process_t            p;
+    opts.env = empty;
+    EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    opts.env = no_eq;
+    EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+
+    // A name starting with '=' is how Windows keeps each drive's directory.
+#ifdef _WIN32
+    char systemroot[MAX_PATH + 16] = "SYSTEMROOT=";
+    dino_env_get("SYSTEMROOT", systemroot + 11, MAX_PATH);
+    const char *const drive[] = { "=C:=C:\\", systemroot, NULL };
+#else
+    const char *const drive[] = { "=C:=C:\\", NULL };
+#endif
+    opts.env = drive;
+    char out[16];
+    EXPECT_EQ(0, run(argv, &opts, out, sizeof(out)));
+}
+
 UTEST(process, arguments_arrive_unchanged)
 {
     // Spaces, empty strings, quotes and backslashes: everything the MSVCRT
@@ -477,6 +507,24 @@ UTEST(process, invalid_arguments_are_rejected)
     EXPECT_EQ(0u, dino_process_id(DINO_INVALID_PROCESS));
 }
 
+#ifdef _WIN32
+// A parent whose standard handle is stale (it closed it, or was started with
+// handles it didn't inherit) still spawns: the child gets NUL, as on POSIX.
+UTEST(process, stale_standard_handle_inherits_nul)
+{
+    HANDLE saved = GetStdHandle(STD_OUTPUT_HANDLE);
+    SetStdHandle(STD_OUTPUT_HANDLE, (HANDLE)(intptr_t)0x7ff0);
+    const char *const argv[] = SHELL("exit 3");
+    dino_process_t    p;
+    int               rc = dino_process_spawn(&p, argv, NULL, NULL);
+    SetStdHandle(STD_OUTPUT_HANDLE, saved);
+    ASSERT_EQ(0, rc);
+    dino_process_status_t status;
+    EXPECT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(3, status.code);
+}
+#endif
+
 /* ---- wait_timeout ---- */
 
 UTEST(process, wait_timeout_times_out_then_reaps)
@@ -558,6 +606,38 @@ UTEST(process, run_reads_both_outputs_without_deadlock)
     EXPECT_EQ(r.out_len, strlen(r.out));
     dino_process_result_free(&r);
     EXPECT_EQ(NULL, r.out);
+}
+
+// Past max_output the rest is read and dropped: the child isn't blocked and
+// runs to the end.
+UTEST(process, run_caps_collected_output)
+{
+#ifdef _WIN32
+    const char *const argv[] = { self_path, "--child-flood", NULL };
+#else
+    const char *const argv[]
+        = SHELL("i=0; while [ $i -lt 2000 ]; do "
+                "echo 0123456789012345678901234567890123456789012345678901234567890; "
+                "echo abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij >&2; "
+                "i=$((i+1)); done; exit 4");
+#endif
+    dino_process_run_opts_t opts = { 0 };
+    opts.max_output              = 1000;
+    dino_process_result_t r;
+    ASSERT_EQ(0, dino_process_run(argv, &opts, &r));
+    EXPECT_EQ(4, r.status.code);
+    EXPECT_EQ(1, r.truncated);
+    EXPECT_EQ((size_t)1000, r.out_len);
+    EXPECT_EQ((size_t)1000, r.err_len);
+    EXPECT_EQ(r.out_len, strlen(r.out));
+    EXPECT_EQ(0, strncmp(r.out, "0123456789", 10));
+    dino_process_result_free(&r);
+
+    opts.max_output = 1u << 20;
+    ASSERT_EQ(0, dino_process_run(argv, &opts, &r));
+    EXPECT_EQ(0, r.truncated);
+    EXPECT_GT(r.out_len, (size_t)100000);
+    dino_process_result_free(&r);
 }
 
 UTEST(process, run_feeds_input_while_reading)
