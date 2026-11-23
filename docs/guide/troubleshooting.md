@@ -29,11 +29,9 @@ writable directory.
 `DINO_SDK_PATH` must point at the `sdk/` directory of a Dionysus checkout, not at the checkout
 itself. Unset it to use the SDK built into `dino`.
 
-**`.../sdk/<version> is not a complete SDK (an older dino may have been interrupted)`**
+**`dino doctor`: `.../sdk/<version> differs from this dino's SDK (...)`**
 
-`dino` unpacks its SDK into the cache directory (see `dino doctor`) and marks it complete only when
-every file is there. This directory has no mark, most likely from an older dino stopped while
-unpacking. Remove the directory named in the message; the next command unpacks it again.
+`dino` unpacks its SDK into the cache directory once and makes the files read-only (except on Windows), so that an edit made after an editor's go-to-definition jumped into it can't change every project's build. A file there changed anyway. Remove the directory named in the message; the next command unpacks it again.
 
 ## Building
 

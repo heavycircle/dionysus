@@ -15,7 +15,9 @@ to configure, the file is left as it was.
 It isn't CMake's own file. CMake writes every entry as `zig cc -target ...`, which clang tools can't
 parse: they would fall back to the host's own headers. `dino` rewrites it into plain clang commands
 that name the target's real musl or MinGW headers, and for C++ files libc++'s, so the editor sees
-exactly what the build compiles.
+exactly what the build compiles. Entries for other tools, such as a Windows `.rc` file compiled by zig's resource compiler, are kept as CMake wrote them.
+
+Going to the definition of a `dino_*` function opens the SDK's own copy in the cache directory. Those files are read-only: the SDK is shared by every project, so a fix belongs in the [Dionysus repository](https://github.com/heavycircle/dionysus).
 
 It's machine-specific (it holds absolute paths), so the generated `.gitignore` leaves it out of
 version control.
