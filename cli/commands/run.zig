@@ -53,6 +53,8 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     }
     opts.targets = try build.resolveTargets(ctx, if (target_name) |n| &.{n} else &.{});
     const target = opts.targets[0];
+    // Before building: a first build of a target can take a minute.
+    const runner = try targets.requireRunner(ctx, target, "binaries");
     // A test is left out of the default build; one asked for by name has to
     // be built (with the others: they are one CMake target, dino_tests).
     if (exe_name != null) opts.run.tests = true;
@@ -60,30 +62,23 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     const executables = if (no_build)
         try existingExecutables(ctx, opts)
     else blk: {
+        // stdout is the program's alone, so `dino run | jq` sees only its output.
+        const out = ctx.out;
+        ctx.out = ctx.err;
+        ctx.child_stdout_to_stderr = true;
         const results = try build.buildTargets(ctx, opts);
+        ctx.out = out;
+        ctx.child_stdout_to_stderr = false;
         if (ctx.interruptedCode()) |code| return code;
         if (!results[0].ok) return 1;
         break :blk results[0].executables;
     };
-    const exe = try pick(ctx, executables, exe_name);
+    const exe = try pick(ctx, executables, exe_name, target, no_build);
 
     var argv: std.ArrayList([]const u8) = .empty;
     var env: ?*const std.process.Environ.Map = null;
-    switch (targets.runnerFor(target)) {
-        .native => {},
-        .qemu => |name| {
-            const qemu = targets.emulator(ctx, target) orelse
-                return ctx.fail("{s} is needed to run {s} binaries; install qemu-user (or use the dino Docker image)", .{ name, target.name });
-            argv.append(ctx.arena, qemu) catch @panic("OOM");
-        },
-        .wine => {
-            const wine = targets.emulator(ctx, target) orelse
-                return ctx.fail("wine is needed to run {s} binaries on Linux; install wine (or use the dino Docker image)", .{target.name});
-            argv.append(ctx.arena, wine) catch @panic("OOM");
-            env = try quietWine(ctx);
-        },
-        .unsupported => return ctx.fail("{s} binaries cannot be run on this host", .{target.name}),
-    }
+    if (runner) |r| argv.append(ctx.arena, r) catch @panic("OOM");
+    if (targets.runnerFor(target) == .wine) env = try quietWine(ctx);
     argv.append(ctx.arena, exe.path) catch @panic("OOM");
     argv.appendSlice(ctx.arena, program_args) catch @panic("OOM");
     return ctx.exec(argv.items, .{ .env = env });
@@ -108,23 +103,34 @@ fn existingExecutables(ctx: *Ctx, opts: build.Options) Ctx.Error![]const cmake.E
     return cmake.executables(ctx, cfg);
 }
 
-fn pick(ctx: *Ctx, executables: []const cmake.Executable, name: ?[]const u8) Ctx.Error!cmake.Executable {
+fn pick(ctx: *Ctx, executables: []const cmake.Executable, name: ?[]const u8, target: targets.Target, no_build: bool) Ctx.Error!cmake.Executable {
     if (name) |n| {
         for (executables) |exe| {
-            if (std.mem.eql(u8, exe.name, n)) return exe;
+            if (!std.mem.eql(u8, exe.name, n)) continue;
+            if (exe.built) return exe;
+            if (no_build) return notBuilt(ctx, target);
+            return ctx.fail("'{s}' is left out of the build (EXCLUDE_FROM_ALL), so {s} doesn't exist", .{ n, exe.path });
         }
         return ctx.fail("no executable named '{s}'; available: {s}", .{ n, names(ctx, executables) });
     }
     // Tests run through `dino test`; only an explicit --exe picks one here.
+    // Programs the build leaves out (EXCLUDE_FROM_ALL) aren't candidates.
     var programs: std.ArrayList(cmake.Executable) = .empty;
+    var defined = false;
     for (executables) |exe| {
-        if (!exe.is_test) programs.append(ctx.arena, exe) catch @panic("OOM");
+        if (exe.is_test) continue;
+        defined = true;
+        if (exe.built) programs.append(ctx.arena, exe) catch @panic("OOM");
     }
     return switch (programs.items.len) {
-        0 => ctx.fail("the project does not define any executables", .{}),
+        0 => if (defined and no_build) notBuilt(ctx, target) else ctx.fail("the project does not build any executables", .{}),
         1 => programs.items[0],
-        else => ctx.fail("the project defines several executables; choose one with --exe ({s})", .{names(ctx, programs.items)}),
+        else => ctx.fail("the project builds several executables; choose one with --exe ({s})", .{names(ctx, programs.items)}),
     };
+}
+
+fn notBuilt(ctx: *Ctx, target: targets.Target) Ctx.Error {
+    return ctx.fail("{s} has not been built yet; run `dino build {s}`", .{ target.name, target.name });
 }
 
 fn names(ctx: *Ctx, executables: []const cmake.Executable) []const u8 {

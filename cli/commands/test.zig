@@ -90,7 +90,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         opts.targets = if (all) &targets.known else try build.resolveTargets(ctx, names.items);
         for (opts.targets) |t| {
             if (all and targets.runnerFor(t) == .unsupported) continue;
-            try requireRunner(ctx, t);
+            _ = try targets.requireRunner(ctx, t, "tests");
         }
     }
 
@@ -135,17 +135,6 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
 
 /// Checked before building so a missing qemu or wine fails in seconds, not
 /// after compiling every target.
-fn requireRunner(ctx: *Ctx, t: Target) Ctx.Error!void {
-    switch (targets.runnerFor(t)) {
-        .native => {},
-        .qemu => |name| if (targets.emulator(ctx, t) == null)
-            return ctx.fail("{s} is needed to run {s} tests; install qemu-user (or use the dino Docker image)", .{ name, t.name }),
-        .wine => if (targets.emulator(ctx, t) == null)
-            return ctx.fail("wine is needed to run {s} tests on Linux; install wine (or use the dino Docker image)", .{t.name}),
-        .unsupported => return ctx.fail("{s} tests cannot be run on this host", .{t.name}),
-    }
-}
-
 fn ctest(
     ctx: *Ctx,
     build_dir: []const u8,

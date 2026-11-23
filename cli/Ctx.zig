@@ -15,6 +15,9 @@ err: *Io.Writer,
 /// The signal that interrupted a child: commands stop instead of going on
 /// to the next target, and exit 128 + this.
 interrupted: ?u8 = null,
+/// Children write their stdout to stderr: `dino run` keeps its stdout for
+/// the program alone.
+child_stdout_to_stderr: bool = false,
 
 /// Returned after a message has already been shown to the user. Usage is a
 /// mistake on the command line (exit 2), Reported any other failure (exit 1).
@@ -107,7 +110,11 @@ pub fn exec(ctx: *Ctx, argv: []const []const u8, options: ExecOptions) Error!u8 
         .argv = argv,
         .cwd = if (options.cwd) |p| .{ .path = p } else .inherit,
         .environ_map = options.env,
-    }) catch |e| return ctx.fail("unable to start {s}: {t}", .{ argv[0], e });
+        .stdout = if (ctx.child_stdout_to_stderr) .{ .file = Io.File.stderr() } else .inherit,
+    }) catch |e| switch (e) {
+        error.FileNotFound => return ctx.fail("{s} does not exist", .{argv[0]}),
+        else => return ctx.fail("unable to start {s}: {t}", .{ argv[0], e }),
+    };
     guard.forwardTo(child.id.?);
     const term = child.wait(ctx.io) catch |e| return ctx.fail("waiting for {s}: {t}", .{ argv[0], e });
     if (guard.received()) |sig| ctx.interrupted = sig;

@@ -33,6 +33,7 @@ dino targets
 ```
 
 - **With no target**, commands use the one marked `*`, which matches the host.
+- **Names** are matched in any case, and `aarch64`, `amd64` and `i686` work for `arm64`, `x86_64` and `i386`.
 - **`--all`** builds every named target. It can't be combined with explicit targets. `dino test --all` skips the tests of a target this host can never run (Linux targets on a Windows host, `arm` on an ARM64 machine without 32-bit support) and says so in the summary; a runner that is only missing (qemu, wine) fails up front, since installing it fixes that.
 - **CPUs:** each target builds for zig's baseline CPU of its architecture, except `i386`, which builds for the i686 (Pentium Pro and later, no SSE2 needed) as Debian's and Ubuntu's i386 ports do. Older or newer CPUs: `CFLAGS=-mcpu=i486`, `-mcpu=native` and so on, which also reach the link.
 - **Other Zig targets:** any Zig target triple works in place of a name, e.g.
@@ -90,7 +91,7 @@ Some of the C library is slow at any setting: `strlen`, `strcmp`, `memchr` and `
 
 ## Running
 
-`dino run` builds one target, then runs the project's executable:
+`dino run` builds one target, then runs the project's executable. Only the program writes to stdout: the build's output goes to stderr, so `dino run | jq .` or `dino run > out.json` gets the program's output alone.
 
 ```sh
 dino run                     # this machine
@@ -102,12 +103,12 @@ dino run -- --verbose input.txt   # arguments for the program go after --
 - **Runners:** foreign Linux binaries run under qemu-user (`qemu-aarch64-static` is preferred if
   installed) and Windows binaries under wine. `dino doctor` shows which runners it found. An x86_64
   host runs i386 binaries directly; an aarch64 host runs arm binaries directly only if its CPU can
-  run 32-bit ARM code (many newer ones, and Apple silicon, can't), and uses `qemu-arm` otherwise.
+  run 32-bit ARM code (many newer ones, and Apple silicon, can't), and uses `qemu-arm` otherwise. wine runs only Windows binaries for the host's own architecture (x86 and x86_64 on an x86_64 host), and x32 binaries (`*-linux-gnux32`, `*-linux-muslx32`) can't be run at all. A target that can't be run, or whose runner isn't installed, fails before anything is built.
 - **Exit code:** `dino run` exits with the program's exit code.
 - **Signals:** dino waits for the program to exit. Ctrl-C and Ctrl-\\ at the terminal, and the hangup of a closed terminal, reach the program directly, once. A signal sent to dino alone (`kill`, a supervisor's `SIGTERM`) is passed on to the program, and once the program has exited, to anything it left running, so an interrupted `dino build` doesn't leave make and the compilers working in the background. dino doesn't wait for those to finish. A signal that was ignored when dino started (`nohup dino build`, a background job in a script) stays ignored, by dino and by what it runs. On Windows, Ctrl-C and Ctrl-Break reach the program and dino ignores them. The same holds while `dino build` and `dino test` run CMake and CTest, and once interrupted they stop instead of going on to the next target.
 - **wine output:** wine's own `fixme:` chatter is silenced unless you set `WINEDEBUG` yourself.
 - **Several executables:** pick one with `--exe <name>`. Test executables (from `dino_test()`) are
-  never picked automatically, only by name, and `dino run --exe` builds the tests too.
+  never picked automatically, only by name, and `dino run --exe` builds the tests too. Executables the build leaves out (`EXCLUDE_FROM_ALL`, as vendored dependencies often add them) are neither listed nor picked.
 - **Skipping the build:** `--no-build` runs what's already in `build/<target>/`, whichever mode
   was built last. With `--debug` or `--release` as well, it fails if that isn't the mode there.
 

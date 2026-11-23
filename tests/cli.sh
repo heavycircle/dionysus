@@ -168,6 +168,68 @@ case_run_output_outside_build() {
     dino run | grep -qx 'Hello from run_outside!'
 }
 
+# `dino run`'s stdout is the program's alone; the build goes to stderr.
+case_run_stdout_is_the_programs() {
+    project run_stdout
+    [[ $(dino run 2>/dev/null) == 'Hello from run_stdout!' ]] || { dino run; return 1; }
+    [[ $(dino run -v 2>/dev/null) == 'Hello from run_stdout!' ]]
+}
+
+# A program left out of the build (EXCLUDE_FROM_ALL) isn't listed or picked,
+# and asking for it by name says why it isn't there.
+case_excluded_executable() {
+    project excluded
+    mkdir -p extra && echo 'int main(void) { return 0; }' >extra/extra.c
+    echo 'add_executable(extra EXCLUDE_FROM_ALL extra/extra.c)' >>CMakeLists.txt
+    dino build >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'extra' out || { cat out; return 1; }
+    dino run 2>/dev/null | grep -qx 'Hello from excluded!' || return 1
+    dino run --exe extra >out 2>&1 && { cat out; return 1; }
+    grep -q "'extra' is left out of the build (EXCLUDE_FROM_ALL)" out || { cat out; return 1; }
+}
+
+# `dino run --no-build` after `dino init`, which configures but doesn't build.
+case_no_build_before_first_build() {
+    rm -rf "$work/unbuilt"
+    dino init "$work/unbuilt" >/dev/null 2>&1 || return 1
+    cd "$work/unbuilt" || return 1
+    dino run --no-build >out 2>&1 && { cat out; return 1; }
+    grep -q 'x86_64 has not been built yet; run .dino build x86_64.' out || { cat out; return 1; }
+}
+
+# A target this host can't run is refused before anything is built.
+case_run_checks_runner_first() {
+    project runner_first
+    local t
+    for t in aarch64-macos x86_64-linux-muslx32; do
+        dino run "$t" >out 2>&1 && { cat out; return 1; }
+        grep -q "$t binaries cannot be run on this host" out || { cat out; return 1; }
+        ! grep -q '^==>' out || { echo "built before checking"; cat out; return 1; }
+    done
+}
+
+# Targets go by other common spellings too, in any case.
+case_target_aliases() {
+    project aliases
+    dino build AArch64 >out 2>&1 || { cat out; return 1; }
+    grep -q '^==> arm64 ' out || { cat out; return 1; }
+    [[ -d build/arm64 ]]
+}
+
+# A library's executables aren't the project's, even when the library puts
+# its binaries outside _dino_libs.
+case_library_tool_not_listed() {
+    library libs/tooled tooled ''
+    # shellcheck disable=SC2016 # for CMake to expand
+    printf '%s\n' 'set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)' \
+        'add_executable(tool src/lib.c)' >>"$work/libs/tooled/CMakeLists.txt"
+    export DINO_LIBRARY_PATH=$work/libs/tooled
+    project tool_user
+    dino build >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'bin/tool' out || { cat out; return 1; }
+    dino run 2>/dev/null | grep -qx 'Hello from tool_user!'
+}
+
 # `dino run --no-build --debug` doesn't run a release build in its place.
 case_no_build_checks_mode() {
     project no_build_mode
