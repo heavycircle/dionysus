@@ -54,13 +54,34 @@ static int translate_protocol(dino_socket_protocol_t protocol)
     }
 }
 
+// Sockets made by dino_socket_create and dino_socket_accept and not yet
+// closed: dino_net_cleanup refuses to run while there are any, since on
+// Windows WSACleanup breaks every socket that is still open.
+static long open_sockets;
+
+static void opened(void)
+{
+    __atomic_fetch_add(&open_sockets, 1, __ATOMIC_RELAXED);
+}
+
+static void closed(void)
+{
+    __atomic_fetch_sub(&open_sockets, 1, __ATOMIC_RELAXED);
+}
+
+static int any_open(void)
+{
+    return __atomic_load_n(&open_sockets, __ATOMIC_RELAXED) > 0;
+}
+
 int dino_net_init(void)
 {
     return 0;
 }
 
-void dino_net_cleanup(void)
+int dino_net_cleanup(void)
 {
+    return any_open() ? dino__fail(DINO_EINVAL) : 0;
 }
 
 dino_socket_t dino_socket_create(
@@ -95,6 +116,7 @@ dino_socket_t dino_socket_create(
         return DINO_INVALID_SOCKET;
     }
 
+    opened();
     return (dino_socket_t)s;
 }
 
@@ -103,6 +125,8 @@ int dino_socket_close(dino_socket_t sock)
     if (sock == DINO_INVALID_SOCKET)
         return dino__fail(DINO_EINVAL);
 
+    // The descriptor is released even when close reports an error.
+    closed();
     if (close((int)sock) < 0)
         return dino__fail_os();
 
@@ -201,6 +225,7 @@ dino_socket_t dino_socket_accept(dino_socket_t sock)
         return DINO_INVALID_SOCKET;
     }
 
+    opened();
     return (dino_socket_t)client;
 }
 

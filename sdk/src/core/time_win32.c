@@ -52,7 +52,10 @@ void dino__sleep_ns(uint64_t ns)
         uint64_t remaining = deadline - now;
         if (!timer)
         {
-            Sleep((DWORD)((remaining + NS_PER_MS - 1) / NS_PER_MS));
+            // INFINITE is UINT32_MAX, and a plain cast could also make a long
+            // wait 0 and spin: clamp.
+            uint64_t ms = (remaining + NS_PER_MS - 1) / NS_PER_MS;
+            Sleep(ms >= INFINITE ? INFINITE - 1 : (DWORD)ms);
             continue;
         }
         // Negative due times are relative, in 100 ns units.
@@ -64,7 +67,12 @@ void dino__sleep_ns(uint64_t ns)
             timer = NULL;
             continue;
         }
-        WaitForSingleObject(timer, INFINITE);
+        // A wait that fails would spin until the deadline: use Sleep instead.
+        if (WaitForSingleObject(timer, INFINITE) == WAIT_FAILED)
+        {
+            CloseHandle(timer);
+            timer = NULL;
+        }
     }
 
     if (timer)

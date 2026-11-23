@@ -2,6 +2,7 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <time.h>
 
@@ -13,9 +14,38 @@ static int checked(int rc)
     return rc == 0 ? 0 : dino__fail_code(rc);
 }
 
+// The owner and recursion depth are kept alongside, as on Windows, so that a
+// wait while holding the mutex more than once fails instead of sleeping with
+// it still locked. Only the owner writes them; another thread reading owner
+// can't see its own id there.
+struct dino_mutex
+{
+    pthread_mutex_t m;
+    uintptr_t       owner; // pthread_self() of the holder, 0 when free
+    unsigned        depth;
+};
+
+_Static_assert(sizeof(pthread_t) <= sizeof(uintptr_t), "pthread_t fits a uintptr_t");
+
+static uintptr_t self_id(void)
+{
+    return (uintptr_t)pthread_self();
+}
+
+static int held_by_caller(struct dino_mutex *m)
+{
+    return __atomic_load_n(&m->owner, __ATOMIC_RELAXED) == self_id();
+}
+
+static void acquired(struct dino_mutex *m)
+{
+    __atomic_store_n(&m->owner, self_id(), __ATOMIC_RELAXED);
+    m->depth++;
+}
+
 dino_mutex_t dino_mutex_create(void)
 {
-    pthread_mutex_t *m = malloc(sizeof(pthread_mutex_t));
+    struct dino_mutex *m = malloc(sizeof(*m));
     if (!m)
     {
         dino__error_set(DINO_ENOMEM);
@@ -25,7 +55,7 @@ dino_mutex_t dino_mutex_create(void)
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
     pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-    int rc = pthread_mutex_init(m, &attr);
+    int rc = pthread_mutex_init(&m->m, &attr);
     pthread_mutexattr_destroy(&attr);
 
     if (rc != 0)
@@ -34,6 +64,8 @@ dino_mutex_t dino_mutex_create(void)
         dino__error_set(dino__error_from_code(rc));
         return DINO_INVALID_MUTEX;
     }
+    m->owner = 0;
+    m->depth = 0;
     return (dino_mutex_t)m;
 }
 
@@ -41,8 +73,8 @@ void dino_mutex_destroy(dino_mutex_t mutex)
 {
     if (mutex == DINO_INVALID_MUTEX)
         return;
-    pthread_mutex_t *m = (pthread_mutex_t *)mutex;
-    pthread_mutex_destroy(m);
+    struct dino_mutex *m = (struct dino_mutex *)mutex;
+    pthread_mutex_destroy(&m->m);
     free(m);
 }
 
@@ -50,24 +82,64 @@ int dino_mutex_lock(dino_mutex_t mutex)
 {
     if (mutex == DINO_INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
-    return checked(pthread_mutex_lock((pthread_mutex_t *)mutex));
+    struct dino_mutex *m  = (struct dino_mutex *)mutex;
+    int                rc = pthread_mutex_lock(&m->m);
+    if (rc != 0)
+        return dino__fail_code(rc);
+    acquired(m);
+    return 0;
 }
 
 int dino_mutex_unlock(dino_mutex_t mutex)
 {
     if (mutex == DINO_INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
-    return checked(pthread_mutex_unlock((pthread_mutex_t *)mutex));
+    struct dino_mutex *m = (struct dino_mutex *)mutex;
+    if (!held_by_caller(m))
+        return dino__fail(DINO_EACCES);
+    if (--m->depth == 0)
+        __atomic_store_n(&m->owner, 0, __ATOMIC_RELAXED);
+    return checked(pthread_mutex_unlock(&m->m));
 }
 
 int dino_mutex_trylock(dino_mutex_t mutex)
 {
     if (mutex == DINO_INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
+    struct dino_mutex *m = (struct dino_mutex *)mutex;
     // Held by another thread: not a failure, the same answer as a wait that
     // ran out of time.
-    int rc = pthread_mutex_trylock((pthread_mutex_t *)mutex);
-    return rc == EBUSY ? DINO_TIMEOUT : checked(rc);
+    int rc = pthread_mutex_trylock(&m->m);
+    if (rc == EBUSY)
+        return DINO_TIMEOUT;
+    if (rc != 0)
+        return dino__fail_code(rc);
+    acquired(m);
+    return 0;
+}
+
+// The caller must hold the mutex exactly once: a wait releases one level, so
+// at a deeper level it would sleep with the mutex still locked and nobody
+// could signal it.
+static int check_waitable(struct dino_mutex *m)
+{
+    if (!held_by_caller(m))
+        return dino__fail(DINO_EACCES);
+    if (m->depth != 1)
+        return dino__fail(DINO_EINVAL);
+    return 0;
+}
+
+// pthread_cond_*wait release and retake the mutex, so the owner is handed over
+// around them.
+static int sleep_on(pthread_cond_t *c, struct dino_mutex *m, const struct timespec *deadline)
+{
+    __atomic_store_n(&m->owner, 0, __ATOMIC_RELAXED);
+    m->depth = 0;
+    int rc   = deadline ? pthread_cond_timedwait(c, &m->m, deadline) : pthread_cond_wait(c, &m->m);
+    __atomic_store_n(&m->owner, self_id(), __ATOMIC_RELAXED);
+    m->depth = 1;
+    return rc;
 }
 
 dino_cond_t dino_cond_create(void)
@@ -107,7 +179,10 @@ int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex)
 {
     if (cond == DINO_INVALID_COND || mutex == DINO_INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
-    return checked(pthread_cond_wait((pthread_cond_t *)cond, (pthread_mutex_t *)mutex));
+    struct dino_mutex *m = (struct dino_mutex *)mutex;
+    if (check_waitable(m) != 0)
+        return -1;
+    return checked(sleep_on((pthread_cond_t *)cond, m, NULL));
 }
 
 int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
@@ -116,6 +191,9 @@ int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
         return dino__fail(DINO_EINVAL);
     if (timeout_ms < 0)
         return dino_cond_wait(cond, mutex);
+    struct dino_mutex *m = (struct dino_mutex *)mutex;
+    if (check_waitable(m) != 0)
+        return -1;
 
     struct timespec deadline;
     clock_gettime(CLOCK_MONOTONIC, &deadline);
@@ -127,7 +205,7 @@ int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
         deadline.tv_nsec -= 1000000000;
     }
 
-    int rc = pthread_cond_timedwait((pthread_cond_t *)cond, (pthread_mutex_t *)mutex, &deadline);
+    int rc = sleep_on((pthread_cond_t *)cond, m, &deadline);
     if (rc == ETIMEDOUT)
         return DINO_TIMEOUT;
     return checked(rc);

@@ -13,7 +13,7 @@ int dino_runtime_init(void)
     return 0;
 }
 
-void dino_runtime_cleanup(void)
+int dino_runtime_cleanup(void)
 {
-    dino_net_cleanup();
+    return dino_net_cleanup();
 }

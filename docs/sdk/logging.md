@@ -42,10 +42,10 @@ one.
 From lowest to highest: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`. Lines below the current level
 aren't written.
 
-- **Default level:** `DEBUG`, or `INFO` in builds that define `NDEBUG`.
-- **`DINO_LOG`:** the environment variable overrides the default: `trace`, `debug`, `info`, `warn`,
-  `error` or `off`, in any case, e.g. `DINO_LOG=warn ./app`. It's read the first time anything is
-  logged.
+- **Default level:** `DEBUG`, or `INFO` in builds that define `NDEBUG`. A release build, which `dino build` makes by default, defines it, so there `DINO_LOG=debug` shows nothing more: the debug lines aren't compiled in (see below).
+- **`DINO_LOG`:** the environment variable overrides the default: `trace`, `debug`, `info`, `warn`
+  (or `warning`), `error` or `off`, in any case, e.g. `DINO_LOG=warn ./app`. It's read the first time anything is
+  logged. Any other value is reported once on stderr and ignored.
 - **`dino_log_set_level(level)`** overrides both, from any thread. `DINO_LOG_LEVEL_OFF` silences
   everything.
 - **Release builds:** `DINO_LOG_TRACE` and `DINO_LOG_DEBUG` compile to nothing under `NDEBUG`. Their
@@ -53,12 +53,12 @@ aren't written.
 
 ## Functions and macros
 
-|                                                           | Does                                                                                                         |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `DINO_LOG_TRACE(fmt, ...)` ... `DINO_LOG_ERROR(fmt, ...)` | Log a line at that level, `printf`-style. The format must be a string literal.                               |
-| `dino_log_set_level(level)` / `dino_log_get_level()`      | Set or read the lowest level written.                                                                        |
-| `dino_log_set_output(FILE *stream)`                       | Write lines to `stream` instead of stderr; `NULL` goes back to stderr. Set `NULL` before closing the stream. |
-| `dino_log_write(level, file, line, fmt, ...)`             | What the macros call, for wrappers of your own.                                                              |
+|                                                           | Does                                                                                                                                             |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DINO_LOG_TRACE(fmt, ...)` ... `DINO_LOG_ERROR(fmt, ...)` | Log a line at that level, `printf`-style. The format must be a string literal.                                                                   |
+| `dino_log_set_level(level)` / `dino_log_get_level()`      | Set or read the lowest level written.                                                                                                            |
+| `dino_log_set_output(FILE *stream)`                       | Write lines to `stream` instead of stderr; `NULL` goes back to stderr. Once it returns, no thread writes to the old stream, so it may be closed. |
+| `dino_log_write(level, file, line, fmt, ...)`             | What the macros call, for wrappers of your own.                                                                                                  |
 
 - **One write per line:** each line is written with a single call, so lines from different threads
   never interleave.

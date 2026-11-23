@@ -73,6 +73,32 @@ UTEST(file_size, directory_fails)
     EXPECT_EQ(0u, size);
 }
 
+// A device isn't a regular file on either platform, and on Windows a named
+// pipe is refused without being opened, which would take its only instance.
+UTEST(file_size, devices_and_pipes_fail)
+{
+    uint64_t size = 1;
+#ifdef _WIN32
+    EXPECT_EQ(-1, dino_file_size("NUL", &size));
+    const wchar_t *name   = L"\\\\.\\pipe\\dino-test-file-size";
+    HANDLE         server = CreateNamedPipeW(name, PIPE_ACCESS_DUPLEX,
+                PIPE_TYPE_BYTE | PIPE_REJECT_REMOTE_CLIENTS, 1, 512, 512, 0, NULL);
+    ASSERT_TRUE(server != INVALID_HANDLE_VALUE);
+    EXPECT_EQ(-1, dino_file_size("\\\\.\\pipe\\dino-test-file-size", &size));
+    EXPECT_EQ(-1, dino_file_size("//./PIPE/dino-test-file-size", &size));
+    // The instance is still free for a real client.
+    HANDLE client
+        = CreateFileW(name, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    EXPECT_TRUE(client != INVALID_HANDLE_VALUE);
+    if (client != INVALID_HANDLE_VALUE)
+        CloseHandle(client);
+    CloseHandle(server);
+#else
+    EXPECT_EQ(-1, dino_file_size("/dev/null", &size));
+#endif
+    EXPECT_EQ(0u, size);
+}
+
 UTEST(file_size, null_arguments_fail)
 {
     uint64_t size;

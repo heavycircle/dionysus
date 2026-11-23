@@ -37,6 +37,7 @@ int main(void)
 
 - **Never early:** sleeps resume after signals (Linux) and early wake-ups (Windows) until the full time
   has passed. They can last longer than asked, never shorter. `0` returns at once.
+- **Suspend:** the monotonic clock stops while a Linux machine is suspended and keeps counting on Windows, and sleeps and timeouts follow it: `dino_sleep_ms(60000)` across an hour of suspend returns at once on resume on Windows, and after the time still left on Linux.
 - **Durations and timeouts** come from the monotonic clock. The wall clock can jump when the time is
   set or synchronized.
 - **Calendar dates:** `dino_time_unix_ms() / 1000` is a `time_t` value for `gmtime` and `strftime`

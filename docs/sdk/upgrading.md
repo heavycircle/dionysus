@@ -30,6 +30,12 @@ Calls with a `dino_*` replacement that weren't flagged now are: `kill`, `getpid`
 
 The build's progress and CMake's output now go to stderr, so scripts that read `dino run`'s stdout get the program's output alone. A script that filtered the build lines out can stop doing so.
 
+### Runtime cleanup, condition waits and logging
+
+- **`dino_runtime_cleanup` and `dino_net_cleanup` return `int`** and refuse, returning `-1` with `DINO_EINVAL`, while a socket from `dino_socket_create` or `dino_socket_accept` is still open. On Windows they used to break every such socket. Code that ignores the result still compiles.
+- **`dino_cond_wait` and `dino_cond_timedwait`** return `-1` (`DINO_EINVAL`) when the mutex is held more than once, where they used to hang.
+- **`DINO_LOG`** accepts `warning`, and reports any value it doesn't know once on stderr.
+
 ### Target conventions fixed for 1.0
 
 - **`CMAKE_SYSTEM_PROCESSOR`** is now what native CMake reports: `ppc` (was `powerpc`), `armv7l` (was `arm`), `x86` for win32 (was `i686`) and `AMD64` for win64 (was `x86_64`). A project or CMake module that matched the old values has to match the new ones (see the table in [Projects](../guide/projects.md)); modules written for native builds already do.

@@ -17,9 +17,13 @@ int main(void)
     puts("runtime started");
 
     // Repeating init is harmless, and cleanup isn't final: the next socket
-    // call starts the network again.
+    // call starts the network again. It only runs while no socket is open.
     dino_runtime_init();
-    dino_runtime_cleanup();
+    if (dino_runtime_cleanup() != 0)
+    {
+        fprintf(stderr, "cleanup refused: a socket is open\n");
+        return 1;
+    }
 
     dino_socket_t sock = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
     if (sock == DINO_INVALID_SOCKET)

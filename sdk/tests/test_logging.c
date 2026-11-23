@@ -207,6 +207,43 @@ static void emit_from_threads(void)
         dino_thread_join(threads[i], NULL);
 }
 
+static volatile int keep_logging;
+
+static int log_until_stopped(void *arg)
+{
+    (void)arg;
+    while (keep_logging)
+        DINO_LOG_INFO("still logging");
+    return 0;
+}
+
+// Once set_output returns, no thread writes to the old stream, so closing it
+// right away is safe while other threads keep logging.
+UTEST(logging, output_can_be_switched_and_closed_while_threads_log)
+{
+    dino_log_set_level(DINO_LOG_LEVEL_INFO);
+    dino_thread_t threads[NUM_THREADS];
+    keep_logging = 1;
+    for (int i = 0; i < NUM_THREADS; i++)
+        ASSERT_EQ(0, dino_thread_create(&threads[i], log_until_stopped, NULL));
+    FILE *current = NULL;
+    for (int i = 0; i < 200; i++)
+    {
+        FILE *next = fopen(LOG_FILE, "w");
+        ASSERT_TRUE(next != NULL);
+        dino_log_set_output(next);
+        if (current)
+            fclose(current);
+        current = next;
+    }
+    dino_log_set_output(NULL);
+    fclose(current);
+    keep_logging = 0;
+    for (int i = 0; i < NUM_THREADS; i++)
+        dino_thread_join(threads[i], NULL);
+    remove(LOG_FILE);
+}
+
 // Each line is one write, so lines from different threads never interleave.
 UTEST(logging, threads_write_whole_lines)
 {

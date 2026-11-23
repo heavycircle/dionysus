@@ -12,6 +12,7 @@ foreach(test ${tests})
     dino_test(${name} ${test})
 endforeach()
 
-set_tests_properties(test_logging_env PROPERTIES ENVIRONMENT DINO_LOG=WaRn)
+set_tests_properties(test_logging_env PROPERTIES ENVIRONMENT DINO_LOG=WaRnInG)
+set_tests_properties(test_logging_env_unknown PROPERTIES ENVIRONMENT DINO_LOG=warnings)
 # Its sleeping threads are still running, holding their handles, at exit.
 set_tests_properties(test_sleep_forever PROPERTIES ENVIRONMENT DINO_LEAK_CHECK=0)

@@ -34,9 +34,13 @@ int dino_runtime_init(void);
  * Tear down every Dino subsystem.
  *
  * Optional: the OS releases everything at exit. Later calls that need a
- * subsystem initialise it again.
+ * subsystem initialise it again. Fails, doing nothing, while a socket is
+ * still open (see dino_net_cleanup), so a library calling it can't break the
+ * application's sockets.
+ *
+ * @return 0 on success, -1 with DINO_EINVAL while sockets are open.
  */
-void dino_runtime_cleanup(void);
+int dino_runtime_cleanup(void);
 
 #ifdef __cplusplus
 }

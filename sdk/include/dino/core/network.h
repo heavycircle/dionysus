@@ -52,10 +52,14 @@ int dino_net_init(void);
 /**
  * Teardown environment after socket connections (WSACleanup on Windows).
  *
- * Optional: the OS releases everything at exit. No sockets may be in use. Later
- * socket calls initialize again.
+ * Optional: the OS releases everything at exit. Later socket calls initialize
+ * again. While any socket from dino_socket_create or dino_socket_accept is
+ * still open it does nothing and fails, on every platform: on Windows it
+ * would break them all.
+ *
+ * @return 0 on success, -1 with DINO_EINVAL while sockets are open.
  */
-void dino_net_cleanup(void);
+int dino_net_cleanup(void);
 
 /**
  * Create a socket.
@@ -74,6 +78,12 @@ dino_socket_t dino_socket_create(
 
 /**
  * Close the socket connection and free the handle.
+ *
+ * Not a way to stop another thread blocked in dino_socket_accept or
+ * dino_socket_recv on it: Windows wakes that thread, Linux doesn't (there
+ * dino_socket_shutdown does, and the descriptor may meanwhile be reused). To
+ * stop such a thread, wait with dino_poll, a receive timeout or the event loop
+ * instead of blocking.
  *
  * @param  sock     Socket to close.
  * @return 0 on success, -1 on failure.

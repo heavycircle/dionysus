@@ -1,6 +1,7 @@
 #include <dino/core/fs.h>
 
 #include <stdlib.h>
+#include <string.h>
 
 #include <windows.h>
 
@@ -26,13 +27,22 @@ static WCHAR *to_wide(const char *path)
     return wide;
 }
 
-// The attributes come without opening the file, so a file another process has
-// open without sharing still has a size.
+// Opening a named pipe connects to it as a client, taking an instance from
+// whoever serves it, so a pipe path is refused without being opened.
+static int is_pipe_path(const char *path)
+{
+    return (path[0] == '\\' || path[0] == '/') && (path[1] == '\\' || path[1] == '/')
+        && (path[2] == '.' || path[2] == '?') && (path[3] == '\\' || path[3] == '/')
+        && _strnicmp(path + 4, "pipe", 4) == 0 && (path[8] == '\\' || path[8] == '/');
+}
+
 int dino_file_size(const char *path, uint64_t *size)
 {
     if (size)
         *size = 0;
     if (!path || !size)
+        return dino__fail(DINO_EINVAL);
+    if (is_pipe_path(path))
         return dino__fail(DINO_EINVAL);
 
     WCHAR *wide = to_wide(path);
@@ -41,7 +51,9 @@ int dino_file_size(const char *path, uint64_t *size)
 
     // Opening the path follows symbolic links, as stat does on Linux;
     // GetFileAttributesExW would describe the link itself. Backup semantics
-    // let a directory open too, so it can be told apart and rejected.
+    // let a directory open too, so it can be told apart and rejected. Only
+    // FILE_READ_ATTRIBUTES and full sharing are asked for, so a file another
+    // process has open without sharing still has a size.
     HANDLE file = CreateFileW(wide, FILE_READ_ATTRIBUTES,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING,
         FILE_FLAG_BACKUP_SEMANTICS, NULL);
@@ -52,6 +64,12 @@ int dino_file_size(const char *path, uint64_t *size)
         return -1;
     }
     free(wide);
+    // A device (NUL, CON, a serial port) is not a regular file, as on Linux.
+    if (GetFileType(file) != FILE_TYPE_DISK)
+    {
+        CloseHandle(file);
+        return dino__fail(DINO_EINVAL);
+    }
     BY_HANDLE_FILE_INFORMATION info;
     if (!GetFileInformationByHandle(file, &info))
     {
