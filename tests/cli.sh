@@ -62,6 +62,93 @@ endif()' >>CMakeLists.txt
     grep -q '^CMAKE_BUILD_TYPE:STRING=Release$' build/x86_64/CMakeCache.txt
 }
 
+# A build type given with `--` stays for run and test, without reconfiguring,
+# until --debug or --release.
+case_build_type_kept() {
+    project build_type
+    dino build -- -DCMAKE_BUILD_TYPE=RelWithDebInfo >out 2>&1 || { cat out; return 1; }
+    grep -q 'x86_64 (.*, RelWithDebInfo)' out || { cat out; return 1; }
+    local cmd
+    for cmd in 'run -v' 'test -v' 'build -v'; do
+        eval "dino $cmd" >out 2>&1 || { cat out; return 1; }
+        ! grep -q -- '-S .* -B ' out || { echo "dino $cmd reconfigured"; cat out; return 1; }
+    done
+    grep -q '^CMAKE_BUILD_TYPE:STRING=RelWithDebInfo$' build/x86_64/CMakeCache.txt || return 1
+    dino build --release >/dev/null || return 1
+    grep -q '^CMAKE_BUILD_TYPE:STRING=Release$' build/x86_64/CMakeCache.txt
+}
+
+# `--` arguments reconfigure only when they change, and a command without
+# them keeps what they set.
+case_extra_args_reconfigure_once() {
+    project extra_args
+    echo 'message(WARNING "FLAVOR=${FLAVOR}")' >>CMakeLists.txt
+    dino build -- -DFLAVOR=sweet >out 2>&1 || { cat out; return 1; }
+    grep -q 'FLAVOR=sweet' out || { cat out; return 1; }
+    local cmd
+    for cmd in 'build -v' 'run -v' 'build -v -- -DFLAVOR=sweet'; do
+        eval "dino $cmd" >out 2>&1 || { cat out; return 1; }
+        ! grep -q -- '-S .* -B ' out || { echo "dino $cmd reconfigured"; cat out; return 1; }
+    done
+    dino build -- -DFLAVOR=sour >out 2>&1 || { cat out; return 1; }
+    grep -q 'FLAVOR=sour' out || { cat out; return 1; }
+}
+
+# A moved or copied project builds on the first try: CMake refuses a cache
+# made for other directories, so dino starts over.
+case_moved_project() {
+    project moved
+    dino build >/dev/null || return 1
+    cp -r "$work/moved" "$work/moved_copy"
+    mv "$work/moved" "$work/moved_away"
+    cd "$work/moved_away" && dino run | grep -qx 'Hello from moved!' || return 1
+    cd "$work/moved_copy" && dino run | grep -qx 'Hello from moved!'
+}
+
+# A build dir configured with plain CMake isn't taken over: its cache stays.
+case_hand_configured_refused() {
+    project hand_configured
+    cmake -S . -B build/x86_64 -DCMAKE_TOOLCHAIN_FILE="$DINO_SDK_PATH/cmake/toolchain.cmake" \
+        -DCMAKE_PROJECT_INCLUDE="$DINO_SDK_PATH/cmake/Dino.cmake" -DZIG_TARGET=x86_64-linux-musl \
+        -DMINE=kept >/dev/null || return 1
+    dino build >out 2>&1 && { cat out; return 1; }
+    grep -q 'build/x86_64 was configured without dino' out || { cat out; return 1; }
+    grep -q '^MINE:UNINITIALIZED=kept$' build/x86_64/CMakeCache.txt || return 1
+    [[ ! -e build/x86_64/.cmake/api/v1/query ]]
+}
+
+# What CMake generated, deleted by hand, comes back with the next build.
+case_generated_files_deleted() {
+    project generated_deleted
+    dino build >/dev/null || return 1
+    rm -r build/x86_64/.cmake/api/v1/reply
+    dino run | grep -qx 'Hello from generated_deleted!' || return 1
+    rm build/x86_64/build.ninja build/x86_64/Makefile 2>/dev/null
+    dino run | grep -qx 'Hello from generated_deleted!'
+}
+
+# Editing an SDK checkout's toolchain files starts the build over: CMake reads
+# them only on a first configure.
+case_sdk_checkout_edit() {
+    project sdk_edit
+    cp -r "$repo/sdk" "$work/sdk_edit_sdk"
+    export DINO_SDK_PATH=$work/sdk_edit_sdk
+    dino build >/dev/null || return 1
+    echo 'string(APPEND CMAKE_C_FLAGS_RELEASE_INIT " -DEDITED_FLAGS")' >>"$DINO_SDK_PATH/cmake/flags.cmake"
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    grep -q -- '-DEDITED_FLAGS.*mutex_posix\.c' out || { echo "SDK not rebuilt with the new flags"; cat out; return 1; }
+    dino build -v >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'mutex_posix\.c' out
+}
+
+# A library path CMake would split in two is refused by name.
+case_library_path_semicolon() {
+    project library_semicolon
+    mkdir -p "$work/lib;semi/semi" && echo 'add_library(semi INTERFACE)' >"$work/lib;semi/semi/CMakeLists.txt"
+    DINO_LIBRARY_PATH="$work/lib;semi/semi" dino build >out 2>&1 && { cat out; return 1; }
+    grep -q "has a ';' in its path" out || { cat out; return 1; }
+}
+
 # `dino clean` removes a build dir whose first configure failed.
 case_clean_failed() {
     project clean_failed

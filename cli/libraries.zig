@@ -1,6 +1,7 @@
 //! Organization libraries listed in DINO_LIBRARY_PATH. cmake/Dino.cmake adds
 //! each one to every project, next to dino_core and dino_util.
 const std = @import("std");
+const builtin = @import("builtin");
 const Io = std.Io;
 const Ctx = @import("Ctx.zig");
 
@@ -25,6 +26,9 @@ pub fn inspect(ctx: *Ctx) []const Library {
         var lib: Library = .{ .entry = entry, .path = real };
         if (real == null) {
             lib.problem = "does not exist";
+        } else if (std.mem.indexOfScalar(u8, real.?, ';') != null) {
+            // CMake would split it into two paths.
+            lib.problem = "has a ';' in its path, which CMake can't take";
         } else if (!ctx.exists(ctx.join(&.{ real.?, "CMakeLists.txt" }))) {
             lib.problem = "has no CMakeLists.txt";
         } else if (duplicate(list.items, real.?)) |earlier| {
@@ -51,12 +55,18 @@ fn entries(value: []const u8, delimiter: u8) std.mem.TokenIterator(u8, .scalar) 
     return std.mem.tokenizeScalar(u8, value, delimiter);
 }
 
-/// Each library builds in _dino_libs/<directory name>, so names must be unique.
+/// Each library builds in _dino_libs/<directory name>, so names must be unique,
+/// ignoring case where the file system does.
 fn duplicate(earlier: []const Library, path: []const u8) ?Library {
+    return duplicateIn(earlier, path, builtin.os.tag == .windows or builtin.os.tag.isDarwin());
+}
+
+fn duplicateIn(earlier: []const Library, path: []const u8, ignore_case: bool) ?Library {
     const name = std.fs.path.basename(path);
     for (earlier) |lib| {
-        const other = lib.path orelse continue;
-        if (lib.problem == null and std.mem.eql(u8, std.fs.path.basename(other), name)) return lib;
+        const other = std.fs.path.basename(lib.path orelse continue);
+        if (lib.problem != null) continue;
+        if (if (ignore_case) std.ascii.eqlIgnoreCase(other, name) else std.mem.eql(u8, other, name)) return lib;
     }
     return null;
 }
@@ -81,4 +91,6 @@ test "duplicate matches directory names" {
     try std.testing.expectEqualStrings("a", duplicate(&seen, "/srv/logging").?.entry);
     try std.testing.expect(duplicate(&seen, "/opt/org/config") == null);
     try std.testing.expect(duplicate(&seen, "/elsewhere/gone") == null);
+    try std.testing.expectEqualStrings("a", duplicateIn(&seen, "/srv/Logging", true).?.entry);
+    try std.testing.expect(duplicateIn(&seen, "/srv/Logging", false) == null);
 }

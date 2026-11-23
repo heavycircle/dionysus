@@ -53,7 +53,7 @@ export DINO_LIBRARY_PATH=/opt/acme/acme_log:/opt/acme/acme_proto
 - Directory names must be unique, because each library builds in `build/<target>/_dino_libs/<name>`.
   An entry listed twice is used once.
 
-- Empty entries are ignored.
+- Empty entries are ignored. A path containing `;` is refused, since CMake would split it in two.
 
 - `dino build`, `run` and `test` check every entry and stop with an error naming the first bad one.
   `dino doctor` reports them all:
@@ -280,7 +280,7 @@ While libraries are being added, `dino_test()` with `LIBRARIES` does nothing. Wi
 | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DINO_LIBRARY_PATH entry '...' does not exist`                                                    | A typo, or a host path used inside Docker.                                                                                                                 |
 | `DINO_LIBRARY_PATH entry '...' has no CMakeLists.txt`                                             | The entry points at the repository, not at the library directory inside it.                                                                                |
-| `... has the same directory name as '...'`                                                        | Two libraries named alike, e.g. `a/log` and `b/log`. Rename one directory.                                                                                 |
+| `... has the same directory name as '...'`                                                        | Two libraries named alike, e.g. `a/log` and `b/log` (or `a/Log` and `b/log` on Windows and macOS). Rename one directory.                                   |
 | `Target "app" links to: acme::log but the target was not found`                                   | The library isn't on `DINO_LIBRARY_PATH` (check `dino doctor`), or its alias is spelled differently.                                                       |
 | `add_library cannot create target "..." because another target with the same name already exists` | Two libraries, or a library and the SDK or the project, define the same target name.                                                                       |
 | `dino_test(test_main): the library in ... already has a test target with this name`               | A library creates its test targets in every project. Give its `dino_test()` calls `LIBRARIES`, as described under [Writing a library](#writing-a-library). |
