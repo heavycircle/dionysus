@@ -85,12 +85,13 @@ int main(void)
 - **Literals only:** `ip` is a numeric address literal that matches the socket's domain, such as
   `"127.0.0.1"`, `"0.0.0.0"`, `"::1"` or `"::"`. Host names such as `"localhost"` are rejected,
   not resolved.
+- **Link-local IPv6** addresses (`fe80::...`) need their interface after a `%`: `"fe80::1%eth0"` on Linux, or its number, `"fe80::1%2"`, on both platforms (Windows names interfaces only by number). Reported addresses carry the number back.
 - **Any interface:** bind to `"0.0.0.0"` (IPv4) or `"::"` (IPv6).
 - **IPv4 and IPv6 are separate.** An IPv6 socket is v6-only on every platform, so a server for
   both families binds two sockets, `"0.0.0.0"` and `"::"`, on the same port. Or it calls
   `dino_socket_set_v6only(sock, 0)` before binding one IPv6 socket to `"::"`, which then also
   accepts IPv4 peers (shown as `::ffff:a.b.c.d`). Linux and Windows default differently; the SDK
-  sets it either way.
+  sets it either way. Such a dual-stack socket also connects and sends to an IPv4 literal: `"127.0.0.1"` is taken as `"::ffff:127.0.0.1"`.
 - **Ports** are plain integers in host byte order, `0` to `65535`; anything else fails with `-1`.
   Bind to port `0` for any free port, and read back which with `dino_socket_local_addr`.
 - **Reported addresses** come back as a `dino_socket_addr_t`: `ip`, the numeric form, and `port`. Both go straight back into `bind`, `connect` or `sendto`.

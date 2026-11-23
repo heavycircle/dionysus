@@ -74,7 +74,14 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         problems += 1;
     }
     if (sdk_cache.path(ctx)) |sdk| {
-        report(ctx, true, "sdk", sdk);
+        if (sdk_cache.overridden(ctx)) {
+            report(ctx, true, "sdk", sdk);
+        } else if (sdk_cache.verify(ctx, sdk)) |problem| {
+            report(ctx, false, "sdk", problem);
+            problems += 1;
+        } else {
+            report(ctx, true, "sdk", sdk);
+        }
         report(ctx, true, "prebuilt", prebuilt.describe(ctx, sdk));
     } else |_| {
         problems += 1;

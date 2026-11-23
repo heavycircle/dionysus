@@ -7,7 +7,7 @@ threads, or a parent and a child [process](process.md) (its stdin, stdout and st
 you ask for them).
 
 Windows' anonymous pipes can't be waited on or used with an event loop, so the SDK builds its pipes
-from named pipes there. Both platforms then behave the same: 64 KB of buffer, waits with a timeout,
+from named pipes there. Both platforms then behave the same: normally 64 KB of buffer, waits with a timeout,
 and support in the [event loop](event.md).
 
 ## Example: a worker thread writes, the main thread reads
@@ -83,6 +83,6 @@ int main(void)
   on one pipe with `dino_pipe_wait`, or on many alongside sockets with
   [`dino_event_add_pipe`](event.md#pipes-and-processes).
 - **A full pipe blocks:** a writer waits once 64 KB are unread. A thread that writes to a pipe and
-  later reads from it can deadlock unless someone else drains it.
+  later reads from it can deadlock unless someone else drains it. On Linux the 64 KB are asked for, not guaranteed: a user over the kernel's pipe-buffer limit (`/proc/sys/fs/pipe-user-pages-soft`) gets 4 KB pipes, so don't size a write by the 64 KB to be sure it can't block.
 
 See also: [`examples/pipe_example`](../../examples/pipe_example/main.c).

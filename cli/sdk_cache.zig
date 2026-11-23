@@ -11,9 +11,7 @@ const marker = ".dino-sdk";
 
 /// Absolute path of the SDK to build against.
 pub fn path(ctx: *Ctx) Ctx.Error![]const u8 {
-    if (ctx.env.get("DINO_SDK_PATH")) |override| {
-        if (override.len != 0) return checkOverride(ctx, override);
-    }
+    if (overridden(ctx)) return checkOverride(ctx, ctx.env.get("DINO_SDK_PATH").?);
     const dir = ctx.join(&.{ try home(ctx), "sdk", ctx.sprint("{s}-{s}", .{ build_options.sdk_version, &contentHash() }) });
     if (!ctx.exists(ctx.join(&.{ dir, marker }))) try unpack(ctx, dir);
     // CMake resolves a relative CMAKE_TOOLCHAIN_FILE against the build directory.
@@ -31,6 +29,27 @@ pub fn home(ctx: *Ctx) Ctx.Error![]const u8 {
             if (nonEmpty(ctx.env.get("HOME"))) |h| ctx.join(&.{ h, ".cache" }) else null,
     } orelse return ctx.fail("cannot locate a cache directory; set DINO_HOME", .{});
     return ctx.join(&.{ base, "dino" });
+}
+
+/// DINO_SDK_PATH names a working tree, which is expected to change.
+pub fn overridden(ctx: *Ctx) bool {
+    return nonEmpty(ctx.env.get("DINO_SDK_PATH")) != null;
+}
+
+/// What differs between the unpacked SDK at `dir` and the one inside this
+/// dino, for `dino doctor`; null when nothing does.
+pub fn verify(ctx: *Ctx, dir: []const u8) ?[]const u8 {
+    var changed: usize = 0;
+    var first: []const u8 = "";
+    for (embedded.files) |file| {
+        const on_disk = Io.Dir.cwd().readFileAlloc(ctx.io, ctx.join(&.{ dir, file.path }), ctx.arena, .limited(file.data.len + 1)) catch "";
+        if (std.mem.eql(u8, on_disk, file.data)) continue;
+        if (changed == 0) first = file.path;
+        changed += 1;
+    }
+    if (changed == 0) return null;
+    const which = if (changed == 1) first else ctx.sprint("{s} and {d} more", .{ first, changed - 1 });
+    return ctx.sprint("{s} differs from this dino's SDK ({s}); remove the directory and the next command unpacks it again", .{ dir, which });
 }
 
 fn nonEmpty(value: ?[]const u8) ?[]const u8 {
@@ -60,6 +79,11 @@ pub fn contentHash() [16]u8 {
     return out;
 }
 
+/// The unpacked files are read-only, so an edit made by following an editor's
+/// go-to-definition into the SDK can't change every project's build. Windows
+/// keeps them writable: a read-only file can't be deleted there.
+const file_permissions: Io.File.Permissions = if (builtin.os.tag == .windows) .default_file else .fromMode(0o444);
+
 /// Unpacks into a temporary sibling and renames it into place, so a concurrent
 /// or interrupted unpack never leaves a half-written SDK behind.
 fn unpack(ctx: *Ctx, dir: []const u8) Ctx.Error!void {
@@ -74,21 +98,46 @@ fn unpack(ctx: *Ctx, dir: []const u8) Ctx.Error!void {
         if (std.fs.path.dirname(dest)) |parent| {
             cwd.createDirPath(ctx.io, parent) catch |e| return ctx.fail("creating {s}: {t}", .{ parent, e });
         }
-        cwd.writeFile(ctx.io, .{ .sub_path = dest, .data = file.data }) catch |e|
+        cwd.writeFile(ctx.io, .{ .sub_path = dest, .data = file.data, .flags = .{ .permissions = file_permissions } }) catch |e|
             return ctx.fail("writing {s}: {t}", .{ dest, e });
     }
     cwd.writeFile(ctx.io, .{ .sub_path = ctx.join(&.{ tmp, marker }), .data = build_options.sdk_version }) catch |e|
         return ctx.fail("writing SDK marker in {s}: {t}", .{ tmp, e });
+    removeLeftovers(ctx, dir, tmp);
 
     if (ctx.exists(ctx.join(&.{ dir, marker }))) return;
-    // Never delete what's there: another dino may have renamed its complete
-    // SDK into place since the check above. A rename onto it fails, and then
-    // its marker is there.
+    // Never delete a complete SDK: another dino may have renamed its own into
+    // place since the check above. The marker is written before the rename,
+    // so a directory without one is never that; it is left from an older dino
+    // or an interrupted cleanup, and moved aside.
+    if (ctx.exists(dir)) {
+        const stale = ctx.sprint("{s}.stale-{x}", .{ dir, &suffix });
+        Io.Dir.rename(cwd, dir, cwd, stale, ctx.io) catch {};
+        cwd.deleteTree(ctx.io, stale) catch {};
+    }
     Io.Dir.rename(cwd, tmp, cwd, dir, ctx.io) catch |e| {
         if (ctx.exists(ctx.join(&.{ dir, marker }))) return;
-        if (ctx.exists(dir)) return ctx.fail("{s} is not a complete SDK (an older dino may have been interrupted); remove it and try again", .{dir});
         return ctx.fail("installing SDK to {s}: {t}", .{ dir, e });
     };
+}
+
+/// Temporaries of unpacks that were killed (Ctrl-C on a first run) and stale
+/// directories whose removal failed. Only ones older than ten minutes, measured
+/// against `tmp` just written, so a concurrent unpack's are left alone.
+fn removeLeftovers(ctx: *Ctx, dir: []const u8, tmp: []const u8) void {
+    const cwd = Io.Dir.cwd();
+    const now = (cwd.statFile(ctx.io, ctx.join(&.{ tmp, marker }), .{}) catch return).mtime.nanoseconds;
+    const parent_path = std.fs.path.dirname(dir) orelse return;
+    var parent = cwd.openDir(ctx.io, parent_path, .{ .iterate = true }) catch return;
+    defer parent.close(ctx.io);
+    var it = parent.iterate();
+    while (it.next(ctx.io) catch return) |entry| {
+        if (entry.kind != .directory) continue;
+        if (std.mem.indexOf(u8, entry.name, ".tmp-") == null and std.mem.indexOf(u8, entry.name, ".stale-") == null) continue;
+        const stat = parent.statFile(ctx.io, entry.name, .{}) catch continue;
+        if (now - stat.mtime.nanoseconds < 10 * std.time.ns_per_min) continue;
+        parent.deleteTree(ctx.io, entry.name) catch {};
+    }
 }
 
 test "embedded sdk contents" {

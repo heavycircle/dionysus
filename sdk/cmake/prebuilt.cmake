@@ -81,7 +81,7 @@ else()
         IMPORTED_LOCATION "${_dino_lib}/libdino_core.a"
         INTERFACE_INCLUDE_DIRECTORIES "${DINO_SDK_PATH}/include;${_dino_lib}/include")
     if(WIN32)
-        set_property(TARGET dino_core APPEND PROPERTY INTERFACE_LINK_LIBRARIES ws2_32)
+        set_property(TARGET dino_core APPEND PROPERTY INTERFACE_LINK_LIBRARIES "ws2_32;advapi32")
     endif()
     add_library(dino_util STATIC IMPORTED GLOBAL)
     set_target_properties(dino_util PROPERTIES

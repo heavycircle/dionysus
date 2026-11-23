@@ -18,6 +18,9 @@ interrupted: ?u8 = null,
 /// Children write their stdout to stderr: `dino run` keeps its stdout for
 /// the program alone.
 child_stdout_to_stderr: bool = false,
+/// The last child's exit code in full: on Windows it is 32 bits, which the
+/// u8 that exec returns can't hold (a crash is 0xC0000005).
+last_status: u32 = 0,
 
 /// Returned after a message has already been shown to the user. Usage is a
 /// mistake on the command line (exit 2), Reported any other failure (exit 1).
@@ -76,13 +79,26 @@ pub fn findProgram(ctx: *Ctx, name: []const u8) ?[]const u8 {
     var it = std.mem.tokenizeScalar(u8, path_var, std.fs.path.delimiter);
     while (it.next()) |dir| {
         const candidate = ctx.join(&.{ dir, name });
-        if (ctx.isExecutable(candidate)) return candidate;
-        if (builtin.os.tag == .windows) {
-            const with_ext = ctx.sprint("{s}.exe", .{candidate});
+        if (builtin.os.tag != .windows) {
+            if (ctx.isExecutable(candidate)) return candidate;
+            continue;
+        }
+        // As Windows looks programs up: by the extensions in PATHEXT, never
+        // an extensionless file (an MSYS or Git Bash shell script), which
+        // CreateProcess can't start.
+        if (std.fs.path.extension(name).len != 0 and ctx.isExecutable(candidate)) return candidate;
+        var exts = std.mem.tokenizeScalar(u8, nonEmpty(ctx.env.get("PATHEXT")) orelse ".COM;.EXE;.BAT;.CMD", ';');
+        while (exts.next()) |ext| {
+            const with_ext = ctx.sprint("{s}{s}", .{ candidate, ext });
             if (ctx.isExecutable(with_ext)) return with_ext;
         }
     }
     return null;
+}
+
+fn nonEmpty(value: ?[]const u8) ?[]const u8 {
+    const v = value orelse return null;
+    return if (v.len == 0) null else v;
 }
 
 fn isExecutable(ctx: *Ctx, path: []const u8) bool {
@@ -116,10 +132,51 @@ pub fn exec(ctx: *Ctx, argv: []const []const u8, options: ExecOptions) Error!u8 
         else => return ctx.fail("unable to start {s}: {t}", .{ argv[0], e }),
     };
     guard.forwardTo(child.id.?);
+    // std reports only the low byte of a Windows exit code, so 256 would pass
+    // for success: read the whole code before std's wait closes the handle.
+    const full: ?u32 = if (builtin.os.tag == .windows) windowsExitCode(child.id.?) else null;
     const term = child.wait(ctx.io) catch |e| return ctx.fail("waiting for {s}: {t}", .{ argv[0], e });
     if (guard.received()) |sig| ctx.interrupted = sig;
     if (guard.forwarded()) |sig| signals.signalDescendants(ctx.io, ctx.arena, sig);
-    return exitCode(term);
+    const code = exitCode(term);
+    ctx.last_status = full orelse code;
+    return statusByte(ctx.last_status);
+}
+
+/// A failure stays a failure in one byte: codes that don't fit become 1.
+fn statusByte(status: u32) u8 {
+    return std.math.cast(u8, status) orelse 1;
+}
+
+test statusByte {
+    try std.testing.expectEqual(@as(u8, 0), statusByte(0));
+    try std.testing.expectEqual(@as(u8, 3), statusByte(3));
+    try std.testing.expectEqual(@as(u8, 1), statusByte(256));
+    try std.testing.expectEqual(@as(u8, 1), statusByte(0xC0000005));
+}
+
+const windows = std.os.windows;
+extern "kernel32" fn WaitForSingleObject(handle: windows.HANDLE, milliseconds: u32) callconv(.winapi) u32;
+extern "kernel32" fn GetExitCodeProcess(process: windows.HANDLE, code: *u32) callconv(.winapi) c_int;
+extern "kernel32" fn ExitProcess(code: u32) callconv(.winapi) noreturn;
+
+fn windowsExitCode(process: windows.HANDLE) ?u32 {
+    const infinite = 0xffffffff;
+    if (WaitForSingleObject(process, infinite) != 0) return null;
+    var code: u32 = 0;
+    if (GetExitCodeProcess(process, &code) == 0) return null;
+    return code;
+}
+
+/// Exits with the last child's code in full, which on Windows may not fit
+/// the u8 a command returns: `dino run` passes a program's 0xC0000005 on.
+pub fn exitWithLastStatus(ctx: *Ctx, code: u8) u8 {
+    if (builtin.os.tag == .windows and ctx.last_status != code) {
+        ctx.out.flush() catch {};
+        ctx.err.flush() catch {};
+        ExitProcess(ctx.last_status);
+    }
+    return code;
 }
 
 /// The exit code for a command a signal interrupted, if one did.

@@ -9,6 +9,9 @@
 #define PIPE_BYTES 65536
 
 #include <windows.h>
+// clang-format off: <ntsecapi.h> needs <windows.h> first.
+#include <ntsecapi.h>
+// clang-format on
 
 #include <dino/core/time.h>
 
@@ -48,10 +51,15 @@ static int create_pair(
 {
     *server_end = *client_end = DINO_INVALID_PIPE;
 
-    WCHAR name[64];
-    _snwprintf(name, 64, L"\\\\.\\pipe\\dino-%lu-%ld", GetCurrentProcessId(),
-        InterlockedIncrement(&pipe_counter));
-    name[63] = 0;
+    // Random bits make the name unguessable: with only the pid and a counter,
+    // another local process could open the pipe between the two calls below
+    // and make every pipe creation and process spawn fail.
+    unsigned long long key = 0;
+    RtlGenRandom(&key, sizeof(key));
+    WCHAR name[96];
+    _snwprintf(name, 96, L"\\\\.\\pipe\\dino-%lu-%ld-%016llx", GetCurrentProcessId(),
+        InterlockedIncrement(&pipe_counter), key);
+    name[95] = 0;
 
     // FIRST_PIPE_INSTANCE and one instance: nobody else can create or hold a
     // second end under this name.

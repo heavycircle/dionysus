@@ -267,9 +267,12 @@ static HANDLE child_handle(int i, dino_stdio_t mode, dino_process_pipes_t *pipes
     if (mode == DINO_STDIO_INHERIT)
     {
         HANDLE own = GetStdHandle(std_ids[i]);
-        // GUI programs have no standard handles; the child gets NUL instead.
-        if (own && own != INVALID_HANDLE_VALUE)
-            return inheritable(own);
+        // GUI programs have no standard handles, and a parent can hold a stale
+        // one (it closed its stdout, or was started without inheriting the
+        // handles it was given): the child gets NUL instead, as on POSIX.
+        HANDLE dup = own && own != INVALID_HANDLE_VALUE ? inheritable(own) : NULL;
+        if (dup)
+            return dup;
     }
     return open_null();
 }
@@ -289,7 +292,8 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
     }
     pipes->in = pipes->out = pipes->err = DINO_INVALID_PIPE;
     dino_stdio_t modes[3];
-    if (!argv || !argv[0] || !dino__process_modes(opts, modes))
+    if (!argv || !argv[0] || !dino__process_modes(opts, modes)
+        || !dino__process_valid_env(opts ? opts->env : NULL))
         return dino__fail(DINO_EINVAL);
 
     HANDLE   std[3] = { NULL, NULL, NULL };
@@ -357,9 +361,12 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
     si.StartupInfo.hStdError  = std[2];
     si.lpAttributeList        = attrs;
     PROCESS_INFORMATION pi    = { 0 };
-    if (CreateProcessW(app, cmd, NULL, NULL, TRUE,
-            EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT, env, cwd, &si.StartupInfo,
-            &pi))
+    DWORD               flags = EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT;
+    // A parent without a console (a GUI program, a service) would otherwise
+    // open a console window for every console child.
+    if (!GetConsoleWindow())
+        flags |= CREATE_NO_WINDOW;
+    if (CreateProcessW(app, cmd, NULL, NULL, TRUE, flags, env, cwd, &si.StartupInfo, &pi))
     {
         CloseHandle(pi.hThread);
         *process = (dino_process_t)pi.hProcess;

@@ -4,6 +4,7 @@ const Ctx = @import("../Ctx.zig");
 const Args = @import("../Args.zig");
 const cmake = @import("../cmake.zig");
 const targets = @import("../targets.zig");
+const build = @import("build.zig");
 
 pub const usage =
     \\Usage: dino clean [targets...] [-C <dir>]
@@ -34,11 +35,15 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         }
     }
 
-    const build_root = ctx.join(&.{ project, "build" });
+    // As every other command prints it: `build`, not `./build`.
+    const build_root = std.fs.path.dirname(build.buildDir(ctx, project, targets.memcheck)).?;
     if (names.items.len == 0) {
-        var dir = Io.Dir.cwd().openDir(ctx.io, build_root, .{ .iterate = true }) catch {
-            ctx.print("nothing to clean\n", .{});
-            return 0;
+        var dir = Io.Dir.cwd().openDir(ctx.io, build_root, .{ .iterate = true }) catch |e| switch (e) {
+            error.FileNotFound => {
+                ctx.print("nothing to clean\n", .{});
+                return 0;
+            },
+            else => return ctx.fail("reading {s}: {t}", .{ build_root, e }),
         };
         defer dir.close(ctx.io);
         var it = dir.iterate();
@@ -57,7 +62,11 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         ctx.print("    removed  {s}\n", .{dir});
         removed += 1;
     }
+    if (removed == 0) {
+        ctx.print("nothing to clean\n", .{});
+        return 0;
+    }
+    // Only when emptied here: an empty build/ that was never dino's stays.
     cwd.deleteDir(ctx.io, build_root) catch {};
-    if (removed == 0) ctx.print("nothing to clean\n", .{});
     return 0;
 }

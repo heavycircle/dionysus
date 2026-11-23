@@ -61,8 +61,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         } else if (try args.value(ctx, arg, &.{"-R"})) |v| {
             filter = v;
         } else if (try args.value(ctx, arg, &.{"--timeout"})) |v| {
-            timeout_s = std.fmt.parseInt(u32, v, 10) catch 0;
-            if (timeout_s == 0) return ctx.usage("invalid timeout '{s}'", .{v});
+            timeout_s = Args.count(v, std.math.maxInt(u32)) orelse return ctx.usage("invalid timeout '{s}'", .{v});
         } else if (try build.parseCommon(ctx, &args, arg, &opts)) {
             continue;
         } else if (std.mem.startsWith(u8, arg, "-")) {
@@ -74,12 +73,14 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
 
     if (memcheck) {
         if (all or names.items.len != 0) return ctx.usage("--memcheck runs on the host only; it takes no targets", .{});
+        if (opts.mode_given and opts.mode == .release) return ctx.usage("--memcheck builds Debug, for valgrind's stack traces; it takes no --release", .{});
         if (targets.runnerFor(targets.memcheck) != .native) return ctx.fail("--memcheck needs an x86_64 Linux host", .{});
         const valgrind = ctx.findProgram("valgrind") orelse
             return ctx.fail("--memcheck needs valgrind; install it (or use the dino Docker image)", .{});
         opts.targets = &.{targets.memcheck};
         // Symbols for valgrind's stack traces; the counter would only duplicate valgrind.
         opts.mode = .debug;
+        opts.export_compdb = false;
         opts.extra = std.mem.concat(ctx.arena, []const u8, &.{ &.{
             ctx.sprint("-DCMAKE_CROSSCOMPILING_EMULATOR={s};--quiet;--error-exitcode=99;--leak-check=full;--errors-for-leak-kinds=definite,indirect;--track-origins=yes", .{valgrind}),
             "-DDINO_DYNAMIC=ON",

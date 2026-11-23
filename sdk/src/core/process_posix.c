@@ -40,16 +40,36 @@ static dino_process_status_t decode_status(int status)
     return s;
 }
 
+// Without /proc (a chroot, an initramfs, a container that doesn't mount it):
+// every descriptor up to the limit is checked instead, which is slower but
+// bounded.
+static int close_inherited_up_to_limit(posix_spawn_file_actions_t *actions)
+{
+    long max = sysconf(_SC_OPEN_MAX);
+    if (max < 0 || max > (1L << 20))
+        max = 1L << 20;
+    for (long fd = 3; fd < max; fd++)
+    {
+        int flags = fcntl((int)fd, F_GETFD);
+        if (flags >= 0 && !(flags & FD_CLOEXEC))
+        {
+            int rc = posix_spawn_file_actions_addclose(actions, (int)fd);
+            if (rc != 0)
+                return rc;
+        }
+    }
+    return 0;
+}
+
 // Windows passes a child only the handles it lists. Here every descriptor
 // without close-on-exec would reach it, so close those in the child, as
 // posix_spawn_file_actions_addclosefrom_np would (musl has none). One that
-// another thread opens meanwhile can slip through; without /proc, children
-// inherit as before.
+// another thread opens meanwhile can slip through.
 static int close_inherited(posix_spawn_file_actions_t *actions)
 {
     DIR *dir = opendir("/proc/self/fd");
     if (!dir)
-        return 0;
+        return close_inherited_up_to_limit(actions);
     int            self = dirfd(dir);
     int            rc   = 0;
     struct dirent *e;
@@ -82,7 +102,8 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
     }
     pipes->in = pipes->out = pipes->err = DINO_INVALID_PIPE;
     dino_stdio_t modes[3];
-    if (!argv || !argv[0] || !dino__process_modes(opts, modes))
+    if (!argv || !argv[0] || !dino__process_modes(opts, modes)
+        || !dino__process_valid_env(opts ? opts->env : NULL))
         return dino__fail(DINO_EINVAL);
 
     dino_pipe_t child[3] = { DINO_INVALID_PIPE, DINO_INVALID_PIPE, DINO_INVALID_PIPE };

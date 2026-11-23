@@ -11,8 +11,8 @@ that matter are handled for you:
 - **How it ended** comes back the same way, as a `dino_process_status_t`: `signal` is `0` when the program exited and `code` is its exit code. A signal on Linux, or a crash on Windows, sets `signal` to the matching `<signal.h>` number (`SIGSEGV` for an access violation, ...), so `if (status.signal)` is a portable crash test. After `dino_process_kill`, both platforms report `signal` `9` and `code` `DINO_EXIT_KILLED` (137).
 - **Inheritance:** the child gets only its stdin, stdout and stderr, never the parent's other files,
   sockets or pipes. That includes descriptors you opened yourself without close-on-exec: on Linux
-  the SDK closes them in the child by listing `/proc/self/fd`. Two gaps remain there: one another
-  thread opens during the spawn can still get through, and without `/proc` they're inherited.
+  the SDK closes them in the child by listing `/proc/self/fd`, or, without `/proc` (a chroot, an initramfs, a container that doesn't mount it), by checking every descriptor up to the limit, which is slower. One another thread opens during the spawn can still get through. On Windows the SDK's own spawns are airtight, but a `CreateProcess` with inheritance on another thread outside the SDK (`system()`, `_popen`, a library) can inherit the child's pipe ends while a spawn runs; the pipe then sees no end of file until that program exits.
+- **Console windows:** on Windows, a parent without a console (a GUI program, a service) starts console programs without a window of their own, instead of flashing one per child.
 
 The program you run is still platform-specific. There's no `/bin/sh` on Windows, so the examples
 pick the shell per platform.
@@ -57,13 +57,13 @@ everything it writes to stdout and stderr, and waits for it to exit.
 
 - **No deadlocks:** it reads both outputs and writes the input at the same time, so a child that
   fills one pipe while the parent is busy with another can't deadlock.
-- **Options:** `dino_process_run_opts_t` has `cwd`, `env`, `input`/`input_len` (`NULL`: stdin is empty) and
+- **Options:** `dino_process_run_opts_t` has `cwd`, `env`, `input`/`input_len` (`NULL`: stdin is empty),
   `timeout_ms` (`0`: no limit; otherwise it gives up after that long, killing the child if it's
-  still running).
-- **Results:** `dino_process_result_t` has `out`/`out_len`, `err`/`err_len` (both NUL-terminated) and
-  `status`, how the child ended.
+  still running) and `max_output` (`0`: no limit; otherwise at most that many bytes of stdout, and as many of stderr, are kept and the rest is read and dropped, so the child isn't blocked). Without `max_output`, a child that writes without end (`yes`, a tool that logs gigabytes) grows the parent until memory runs out.
+- **Results:** `dino_process_result_t` has `out`/`out_len`, `err`/`err_len` (both NUL-terminated),
+  `status`, how the child ended, and `truncated`, `1` when an output was cut at `max_output`.
 - **Return value:** `0` when the child ran to the end, `DINO_TIMEOUT` when it was killed for taking
-  too long (`result` still holds what it wrote first), or `-1` if it couldn't be started. Call
+  too long (`result` still holds what it wrote first), or `-1` if it couldn't be started or reading an output failed (then `dino_error()` says why, and the output is incomplete). Call
   `dino_process_result_free` in every case.
 - **Background processes:** a process the child started that keeps stdout, stderr or stdin open
   keeps `dino_process_run` waiting after the child exits. With a timeout it stops at the deadline
@@ -113,6 +113,18 @@ dino_process_wait(child, &status);
   parent's own, the default), `DINO_STDIO_NULL` (`/dev/null` or `NUL`) or `DINO_STDIO_PIPE` (a new
   [pipe](pipe.md), whose parent end appears in `pipes.in`, `.out` or `.err`).
 - **Wait for every process exactly once.** On Linux an unwaited child stays a zombie.
+- **A handle is dead after a successful wait.** It is the raw process ID (a `HANDLE` on Windows), and the system may give that ID to another process, so a `dino_process_kill` or a second wait on it can reach a stranger. Set it to `DINO_INVALID_PROCESS` right after the wait, and have cleanup paths kill only a handle that isn't:
+
+  ```c
+  if (dino_process_wait(p, &status) == 0)
+      p = DINO_INVALID_PROCESS;
+  /* ... on every exit path: */
+  if (p != DINO_INVALID_PROCESS) {
+      dino_process_kill(p);
+      dino_process_wait(p, NULL);
+  }
+  ```
+
 - **Leave `SIGCHLD` alone, and let nothing else wait for the child** (Linux). If the program ignores `SIGCHLD` (`SIG_IGN` or `SA_NOCLDWAIT`), or other code in it calls `wait()` or `waitpid(-1, ...)`, the exit status goes there. Every wait then returns `-1` although the child ran, `dino_process_run` included, and the exit code is lost. The process ID may also be reused by then, so don't `dino_process_kill` that handle afterwards.
 - **Killing ends one process, not what it started.** `dino_process_kill` and the timeout of `dino_process_run` end the process you spawned. Programs it started keep running: whatever a `sh -c` command launched without `exec`, and everything a `.bat` or `.cmd` file started, because the process you hold there is the `cmd.exe` that runs the script.
 - **A watchdog doesn't kill from another thread.** While one thread is in `dino_process_wait`, a `dino_process_kill` from another can land after the wait ended the process, and reach whatever got its ID next. Wait with `dino_process_wait_timeout` instead, and kill from that thread when the time runs out.
@@ -121,7 +133,7 @@ dino_process_wait(child, &status);
   forever, while the parent waits on stdout. Read both (or use `dino_process_run`), or send the one
   you don't need to `DINO_STDIO_NULL`.
 - **`opts.env`:** a complete environment for the child as `"NAME=value"` strings ending with `NULL`;
-  `NULL` copies the parent's. Many Windows programs need `SYSTEMROOT` in it.
+  `NULL` copies the parent's. An entry that is empty or has no `=` fails the spawn with `DINO_EINVAL` (Windows would otherwise end the environment there and drop every later variable). Many Windows programs need `SYSTEMROOT` in it.
 - **Waiting in an event loop:** to wait for a process along with sockets and timers, use
   [`dino_event_add_process`](event.md#pipes-and-processes).
 

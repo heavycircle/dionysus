@@ -53,7 +53,9 @@ typedef struct
     const char *cwd;
     /**
      * The child's whole environment as "NAME=value" strings, ending with NULL;
-     * NULL for a copy of the parent's. On Windows many programs need SYSTEMROOT.
+     * NULL for a copy of the parent's. An entry that is empty or has no '='
+     * fails the spawn with DINO_EINVAL. On Windows many programs need
+     * SYSTEMROOT.
      */
     const char *const *env;
     dino_stdio_t       stdin_mode, stdout_mode, stderr_mode;
@@ -94,8 +96,16 @@ typedef struct
  * The child inherits only its stdin, stdout and stderr, never other handles or
  * sockets of the parent, even ones opened without the SDK and without
  * close-on-exec. On Linux those are closed in the child by listing
- * /proc/self/fd: one another thread opens during the spawn can still reach it,
- * and without /proc they are inherited.
+ * /proc/self/fd, or without /proc by checking every descriptor up to the
+ * limit (slower). Either way one that another thread opens during the spawn
+ * can still reach it. On Windows the SDK's own spawns pass only the three
+ * handles, but a CreateProcess with inheritance on another thread, outside the
+ * SDK (system(), _popen, a library), can inherit the child's pipe ends while
+ * a spawn runs, and then the pipe sees no end of file until that program
+ * exits.
+ *
+ * On Windows a parent without a console (a GUI program, a service) starts
+ * console programs without a console window of their own.
  *
  * Reading only stdout while the child also fills a stderr pipe can deadlock
  * once that pipe's 64 KB are full; read both, or redirect one to
@@ -115,7 +125,17 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes);
 
 /**
- * Wait for a process to end and release it. The handle is invalid afterwards.
+ * Wait for a process to end and release it. The handle is invalid afterwards:
+ * it is the raw process ID (a HANDLE on Windows), which the system may give
+ * to another process. Passing it to dino_process_kill or a second wait can
+ * reach that process, so set it to DINO_INVALID_PROCESS after the wait, and
+ * have cleanup paths kill only a handle that isn't:
+ *
+ *     if (dino_process_wait(p, &status) == 0)
+ *         p = DINO_INVALID_PROCESS;
+ *     ...
+ *     if (p != DINO_INVALID_PROCESS)
+ *         dino_process_kill(p), dino_process_wait(p, NULL);
  *
  * Every spawned process must be waited for exactly once; on POSIX it stays a
  * zombie until then.
@@ -136,7 +156,8 @@ int dino_process_wait(dino_process_t process, dino_process_status_t *status);
 
 /**
  * End a process immediately (SIGKILL / TerminateProcess). It can't clean up.
- * Still wait for it afterwards. A process that already exited is left as it
+ * Still wait for it afterwards. Never after a successful wait: see
+ * dino_process_wait. A process that already exited is left as it
  * was, keeping its own exit code.
  *
  * Only this one process ends. What it started keeps running: the programs a
@@ -190,6 +211,11 @@ typedef struct
      *  running; 0 waits forever. As with dino_process_kill, what the child
      *  started is not killed. */
     int timeout_ms;
+    /** Keep at most this many bytes of stdout, and as many of stderr; 0 for no
+     *  limit. The rest is read and dropped, so the child isn't blocked, and
+     *  truncated is set in the result. Without a limit a child that writes
+     *  without end (`yes`) grows the parent until memory runs out. */
+    size_t max_output;
 } dino_process_run_opts_t;
 
 /** What dino_process_run collected; release with dino_process_result_free. */
@@ -201,6 +227,8 @@ typedef struct
     size_t err_len;
     /** As from dino_process_wait; { -1, 0 } if it couldn't be waited for. */
     dino_process_status_t status;
+    /** 1 if out or err was cut at opts->max_output. */
+    int truncated;
 } dino_process_result_t;
 
 /**
