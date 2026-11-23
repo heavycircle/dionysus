@@ -13,6 +13,7 @@ pub const Target = struct {
     description: []const u8,
     arch: Arch,
     os: Os,
+    abi: ?std.Target.Abi = null,
 
     pub fn exeSuffix(t: Target) []const u8 {
         return if (t.os == .windows) ".exe" else "";
@@ -41,10 +42,21 @@ pub const memcheck: Target = .{
 
 pub const ResolveError = error{UnknownTarget};
 
-/// Accepts a known short name or, as an escape hatch, any `arch-os[-abi]` triple zig understands.
+/// Other spellings of the short names, as other tools write them.
+const aliases = [_]struct { []const u8, []const u8 }{
+    .{ "aarch64", "arm64" },
+    .{ "amd64", "x86_64" },
+    .{ "i686", "i386" },
+};
+
+/// Accepts a known short name or alias in any case or, as an escape hatch,
+/// any `arch-os[-abi]` triple zig understands.
 pub fn resolve(name: []const u8) ResolveError!Target {
     for (known) |t| {
-        if (std.mem.eql(u8, t.name, name)) return t;
+        if (std.ascii.eqlIgnoreCase(t.name, name)) return t;
+    }
+    for (aliases) |a| {
+        if (std.ascii.eqlIgnoreCase(a[0], name)) return resolve(a[1]);
     }
     for (known) |t| {
         if (std.mem.eql(u8, t.triple, name)) return t;
@@ -57,6 +69,7 @@ pub fn resolve(name: []const u8) ResolveError!Target {
         .description = "custom zig target",
         .arch = query.cpu_arch orelse return error.UnknownTarget,
         .os = query.os_tag orelse return error.UnknownTarget,
+        .abi = query.abi,
     };
 }
 
@@ -68,6 +81,8 @@ fn hostFor(os: Os, arch: Arch) ?Target {
     for (known) |t| {
         if (t.os == os and t.arch == arch) return t;
     }
+    // Windows on ARM runs x86_64 programs.
+    if (os == .windows and arch == .aarch64) return resolve("win64") catch unreachable;
     return null;
 }
 
@@ -111,16 +126,37 @@ pub fn emulator(ctx: *Ctx, t: Target) ?[]const u8 {
     };
 }
 
+/// The way `t`'s binaries are run, failing with a message naming `what`
+/// ("binaries", "tests") when that can't be done here. Returns the program
+/// to run them with, or null when they run directly.
+pub fn requireRunner(ctx: *Ctx, t: Target, what: []const u8) Ctx.Error!?[]const u8 {
+    return switch (runnerFor(t)) {
+        .native => null,
+        .qemu => |name| emulator(ctx, t) orelse
+            ctx.fail("{s} is needed to run {s} {s}; install qemu-user (or use the dino Docker image)", .{ name, t.name, what }),
+        .wine => emulator(ctx, t) orelse
+            ctx.fail("wine is needed to run {s} {s} on Linux; install wine (or use the dino Docker image)", .{ t.name, what }),
+        .unsupported => ctx.fail("{s} {s} cannot be run on this host", .{ t.name, what }),
+    };
+}
+
 fn runnerOn(t: Target, host_os: Os, host_arch: Arch, host_aarch32: bool) Runner {
-    if (t.os == host_os) {
-        if (t.arch == host_arch) return .native;
-        // 64-bit x86 kernels run 32-bit binaries directly.
-        if (host_arch == .x86_64 and t.arch == .x86) return .native;
-        if (host_arch == .aarch64 and t.arch == .arm and host_os == .linux and host_aarch32) return .native;
-        if (t.os == .linux) return .{ .qemu = qemuName(t.arch) orelse return .unsupported };
-        return .unsupported;
+    // x32 needs a kernel option that distributions leave off, and qemu has no
+    // user-mode emulator for it.
+    if (t.abi) |abi| if (abi == .gnux32 or abi == .muslx32) return .unsupported;
+    if (t.os == .windows and (host_os == .windows or host_os == .linux)) {
+        // wine runs Windows programs for the machine's own architecture.
+        const runs = t.arch == host_arch or (host_arch == .x86_64 and t.arch == .x86) or
+            (host_os == .windows and host_arch == .aarch64 and (t.arch == .x86 or t.arch == .x86_64));
+        if (!runs) return .unsupported;
+        return if (host_os == .windows) .native else .wine;
     }
-    if (t.os == .windows and host_os == .linux) return .wine;
+    if (t.os != host_os) return .unsupported;
+    if (t.arch == host_arch) return .native;
+    // 64-bit x86 kernels run 32-bit binaries directly.
+    if (host_arch == .x86_64 and t.arch == .x86) return .native;
+    if (host_arch == .aarch64 and t.arch == .arm and host_os == .linux and host_aarch32) return .native;
+    if (t.os == .linux) return .{ .qemu = qemuName(t.arch) orelse return .unsupported };
     return .unsupported;
 }
 
@@ -136,7 +172,13 @@ fn qemuName(arch: Arch) ?[]const u8 {
         .powerpc64le => "qemu-ppc64le",
         .mips => "qemu-mips",
         .mipsel => "qemu-mipsel",
+        .mips64 => "qemu-mips64",
+        .mips64el => "qemu-mips64el",
+        .riscv32 => "qemu-riscv32",
         .riscv64 => "qemu-riscv64",
+        .loongarch64 => "qemu-loongarch64",
+        .sparc64 => "qemu-sparc64",
+        .m68k => "qemu-m68k",
         .s390x => "qemu-s390x",
         else => null,
     };
@@ -147,6 +189,11 @@ test "resolve known names and triples" {
     try std.testing.expectEqualStrings("win64", (try resolve("x86_64-windows-gnu")).name);
     try std.testing.expectError(error.UnknownTarget, resolve("bogus"));
     try std.testing.expectError(error.UnknownTarget, resolve("notanarch-linux"));
+    try std.testing.expectEqualStrings("arm64", (try resolve("aarch64")).name);
+    try std.testing.expectEqualStrings("arm64", (try resolve("ARM64")).name);
+    try std.testing.expectEqualStrings("x86_64", (try resolve("AMD64")).name);
+    try std.testing.expectEqualStrings("i386", (try resolve("i686")).name);
+    try std.testing.expectEqualStrings("win64", (try resolve("Win64")).name);
 }
 
 test "resolve custom triple" {
@@ -160,6 +207,7 @@ test "host target" {
     try std.testing.expectEqualStrings("x86_64", hostFor(.linux, .x86_64).?.name);
     try std.testing.expectEqualStrings("win64", hostFor(.windows, .x86_64).?.name);
     try std.testing.expect(hostFor(.macos, .aarch64) == null);
+    try std.testing.expectEqualStrings("win64", hostFor(.windows, .aarch64).?.name);
 }
 
 test "runner selection" {
@@ -177,4 +225,11 @@ test "runner selection" {
     try std.testing.expectEqual(Runner.unsupported, r.of("x86_64", .macos, .aarch64));
     try std.testing.expectEqual(Runner.native, r.of("arm", .linux, .aarch64));
     try std.testing.expectEqualStrings("qemu-arm", runnerOn(try resolve("arm"), .linux, .aarch64, false).qemu);
+    try std.testing.expectEqual(Runner.unsupported, r.of("x86_64-linux-muslx32", .linux, .x86_64));
+    try std.testing.expectEqual(Runner.unsupported, r.of("x86_64-linux-gnux32", .linux, .x86_64));
+    try std.testing.expectEqual(Runner.unsupported, r.of("win64", .linux, .aarch64));
+    try std.testing.expectEqual(Runner.unsupported, r.of("aarch64-windows-gnu", .linux, .x86_64));
+    try std.testing.expectEqual(Runner.wine, r.of("aarch64-windows-gnu", .linux, .aarch64));
+    try std.testing.expectEqual(Runner.native, r.of("win64", .windows, .aarch64));
+    try std.testing.expectEqualStrings("qemu-mips64el", r.of("mips64el-linux-musl", .linux, .x86_64).qemu);
 }

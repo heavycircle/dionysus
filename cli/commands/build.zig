@@ -152,7 +152,8 @@ pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
         result.executables = try cmake.executables(ctx, cfg);
         result.ok = true;
         for (result.executables) |exe| {
-            if (exe.is_test and !opts.run.tests) continue;
+            // Left out of the build (EXCLUDE_FROM_ALL).
+            if (!exe.built or (exe.is_test and !opts.run.tests)) continue;
             ctx.print("    {s} ({s})\n", .{ exe.path, size(ctx, exe.path) });
         }
     }

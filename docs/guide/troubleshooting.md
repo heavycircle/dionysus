@@ -43,7 +43,7 @@ Run `dino` in the project directory, or pass `-C <dir>`.
 
 **``unknown target 'x' (see `dino targets`)``**
 
-Use a name from `dino targets` (`arm`, `arm64`, `i386`, `ppc`, `win32`, `win64`, `x86_64`) or a
+Use a name from `dino targets` (`arm`, `arm64`, `i386`, `ppc`, `win32`, `win64`, `x86_64`, in any case, or `aarch64`, `amd64`, `i686`) or a
 full Zig target triple.
 
 **A Windows build fails with `undefined reference to ...`**

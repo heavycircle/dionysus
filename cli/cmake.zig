@@ -270,6 +270,9 @@ pub const Executable = struct {
     path: []const u8,
     /// Defined with dino_test(); `dino run` skips these unless asked for by name.
     is_test: bool = false,
+    /// Exists on disk: an EXCLUDE_FROM_ALL target, or anything before the
+    /// first build, doesn't.
+    built: bool = true,
 };
 
 const Index = struct {
@@ -280,7 +283,8 @@ const Index = struct {
 
 const Codemodel = struct {
     configurations: []const struct {
-        targets: []const struct { name: []const u8, jsonFile: []const u8 },
+        directories: []const struct { build: []const u8 } = &.{},
+        targets: []const struct { name: []const u8, jsonFile: []const u8, directoryIndex: usize = 0 },
     },
 };
 
@@ -294,7 +298,7 @@ const TargetInfo = struct {
 };
 
 /// Where cmake/Dino.cmake builds DINO_LIBRARY_PATH libraries.
-const library_build_dir = "_dino_libs/";
+const library_build_dir = "_dino_libs";
 
 /// The FOLDER dino_test() puts test targets in (cmake/Dino.cmake).
 const test_folder = "dino_tests";
@@ -313,21 +317,41 @@ pub fn executables(ctx: *Ctx, cfg: Config) Ctx.Error![]const Executable {
     const codemodel = try readJson(ctx, Codemodel, ctx.join(&.{ reply_dir, codemodel_file }));
     if (codemodel.configurations.len == 0) return &.{};
 
+    const configuration = codemodel.configurations[0];
     var list: std.ArrayList(Executable) = .empty;
-    for (codemodel.configurations[0].targets) |t| {
+    for (configuration.targets) |t| {
+        // Executables of DINO_LIBRARY_PATH libraries (cmake/Dino.cmake) are never
+        // built here, wherever they would put their binaries.
+        if (t.directoryIndex < configuration.directories.len and
+            isLibraryDir(configuration.directories[t.directoryIndex].build)) continue;
         const info = try readJson(ctx, TargetInfo, ctx.join(&.{ reply_dir, t.jsonFile }));
         if (!std.mem.eql(u8, info.type, "EXECUTABLE")) continue;
         const artifact = pickArtifact(info.artifacts, cfg.target.exeSuffix()) orelse continue;
-        // Executables of DINO_LIBRARY_PATH libraries (cmake/Dino.cmake) are never built here.
-        if (std.mem.startsWith(u8, artifact, library_build_dir)) continue;
+        // Absolute when CMAKE_RUNTIME_OUTPUT_DIRECTORY is outside the build dir.
+        const path = if (std.fs.path.isAbsolute(artifact)) artifact else ctx.join(&.{ cfg.build_dir, artifact });
         list.append(ctx.arena, .{
             .name = info.name,
-            // Absolute when CMAKE_RUNTIME_OUTPUT_DIRECTORY is outside the build dir.
-            .path = if (std.fs.path.isAbsolute(artifact)) artifact else ctx.join(&.{ cfg.build_dir, artifact }),
+            .path = path,
             .is_test = if (info.folder) |f| std.mem.eql(u8, f.name, test_folder) else false,
+            .built = ctx.exists(path),
         }) catch @panic("OOM");
     }
     return list.items;
+}
+
+/// A directory's build path is relative to the build dir, "." for the top.
+fn isLibraryDir(dir: []const u8) bool {
+    var parts = std.mem.tokenizeAny(u8, dir, "/\\");
+    const first = parts.next() orelse return false;
+    return std.mem.eql(u8, first, library_build_dir);
+}
+
+test isLibraryDir {
+    try std.testing.expect(isLibraryDir("_dino_libs/acme_log"));
+    try std.testing.expect(isLibraryDir("_dino_libs/acme_log/tools"));
+    try std.testing.expect(!isLibraryDir("."));
+    try std.testing.expect(!isLibraryDir("_dino"));
+    try std.testing.expect(!isLibraryDir("src/_dino_libs"));
 }
 
 fn pickArtifact(artifacts: []const Artifact, suffix: []const u8) ?[]const u8 {

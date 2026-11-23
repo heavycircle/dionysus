@@ -26,6 +26,10 @@ Calls with a `dino_*` replacement that weren't flagged now are: `kill`, `getpid`
 - **A moved or copied project** builds on the first try instead of failing once with CMake cache errors.
 - **A `build/<target>` configured with plain CMake** is no longer taken over: `dino` stops instead of deleting its cache. Remove the directory, or configure it elsewhere.
 
+### `dino run` writes only the program's output to stdout
+
+The build's progress and CMake's output now go to stderr, so scripts that read `dino run`'s stdout get the program's output alone. A script that filtered the build lines out can stop doing so.
+
 ### Target conventions fixed for 1.0
 
 - **`CMAKE_SYSTEM_PROCESSOR`** is now what native CMake reports: `ppc` (was `powerpc`), `armv7l` (was `arm`), `x86` for win32 (was `i686`) and `AMD64` for win64 (was `x86_64`). A project or CMake module that matched the old values has to match the new ones (see the table in [Projects](../guide/projects.md)); modules written for native builds already do.
