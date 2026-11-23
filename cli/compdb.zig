@@ -30,9 +30,10 @@ const OutEntry = struct {
     output: ?[]const u8,
 };
 
-/// Writes `src` to `dest`, rewritten for clang tools. Falls back to a plain
-/// copy if anything about the database or zig's output is unexpected, so the
-/// build never fails over editor support.
+/// Writes `src` to `dest`, rewritten for clang tools. Entries that aren't a
+/// zig compile (a resource compiler, an assembler) are kept as they are. Falls
+/// back to a plain copy if the database can't be read or zig can't be probed,
+/// so the build never fails over editor support.
 pub fn write(ctx: *Ctx, src: []const u8, dest: []const u8, target: []const u8) void {
     const cwd = Io.Dir.cwd();
     const rewritten = rewriteFile(ctx, src, target) catch |e| {
@@ -45,7 +46,7 @@ pub fn write(ctx: *Ctx, src: []const u8, dest: []const u8, target: []const u8) v
         ctx.warn("could not write {s}: {t}", .{ dest, e });
 }
 
-const RewriteError = error{ UnreadableDatabase, ProbeFailed, UnexpectedEntry } || std.mem.Allocator.Error;
+const RewriteError = error{ UnreadableDatabase, ProbeFailed } || std.mem.Allocator.Error;
 
 fn rewriteFile(ctx: *Ctx, src: []const u8, target: []const u8) RewriteError![]const u8 {
     const bytes = Io.Dir.cwd().readFileAlloc(ctx.io, src, ctx.arena, .limited(64 << 20)) catch
@@ -58,28 +59,28 @@ fn rewriteFile(ctx: *Ctx, src: []const u8, target: []const u8) RewriteError![]co
     var probes: std.EnumArray(Driver, ?Probe) = .initFill(null);
     const out = try ctx.arena.alloc(OutEntry, entries.len);
     for (entries, out) |entry, *o| {
-        const command = entry.command orelse return error.UnexpectedEntry;
-        const args = entry.arguments orelse if (builtin.os.tag == .windows)
-            try splitWindowsCommand(ctx.arena, command)
+        const args = entry.arguments orelse if (entry.command) |command|
+            if (builtin.os.tag == .windows) try splitWindowsCommand(ctx.arena, command) else try splitCommand(ctx.arena, command)
         else
-            try splitCommand(ctx.arena, command);
-        const driver = try driverOf(args);
-        const probe = probes.get(driver) orelse try probeZig(ctx, target, driver, entry.file);
-        probes.set(driver, probe);
-        o.* = .{
-            .directory = entry.directory,
-            .file = entry.file,
-            .arguments = try rewriteArgs(ctx.arena, args, probe),
-            .output = entry.output,
-        };
+            return error.UnreadableDatabase;
+        o.* = .{ .directory = entry.directory, .file = entry.file, .arguments = args, .output = entry.output };
+        const compile = zigCompile(args) orelse continue;
+        const probe = probes.get(compile.driver) orelse try probeZig(ctx, target, compile.driver);
+        probes.set(compile.driver, probe);
+        o.arguments = try rewriteArgs(ctx.arena, args, probe);
     }
     return std.json.Stringify.valueAlloc(ctx.arena, out, .{ .whitespace = .indent_2, .emit_null_optional_fields = false });
 }
 
-fn probeZig(ctx: *Ctx, target: []const u8, driver: Driver, file: []const u8) RewriteError!Probe {
-    // -### prints the clang -cc1 line zig would run, without compiling. Any
-    // existing source file in the language will do as input.
-    const result = ctx.capture(&.{ "zig", @tagName(driver), "-target", target, "-###", "-c", file, "-o", "probe.o" }) catch
+fn probeZig(ctx: *Ctx, target: []const u8, driver: Driver) RewriteError!Probe {
+    // -### prints the clang -cc1 line zig would run, without compiling or
+    // reading the input, so stdin stands in for a source file: a project's
+    // own may be generated and not exist yet.
+    const language = switch (driver) {
+        .cc => "c",
+        .@"c++" => "c++",
+    };
+    const result = ctx.capture(&.{ "zig", @tagName(driver), "-target", target, "-###", "-x", language, "-c", "-", "-o", "probe.o" }) catch
         return error.ProbeFailed;
     if (result.code != 0) return error.ProbeFailed;
     return parseProbe(ctx.arena, result.stderr) catch error.ProbeFailed;
@@ -114,15 +115,24 @@ pub fn parseProbe(arena: std.mem.Allocator, stderr: []const u8) !Probe {
 /// The zig subcommand an entry compiles with, named as on the command line.
 const Driver = enum { cc, @"c++" };
 
-fn driverOf(args: []const []const u8) error{UnexpectedEntry}!Driver {
-    if (args.len < 2 or !isZig(args[0])) return error.UnexpectedEntry;
-    return std.meta.stringToEnum(Driver, args[1]) orelse error.UnexpectedEntry;
+const ZigCompile = struct { driver: Driver, rest: usize };
+
+/// Where `zig cc`/`zig c++` starts in an entry, after any launcher (ccache,
+/// CMAKE_<LANG>_COMPILER_LAUNCHER), or null when the entry isn't one.
+fn zigCompile(args: []const []const u8) ?ZigCompile {
+    for (0..args.len -| 1) |i| {
+        if (!isZig(args[i])) continue;
+        const driver = std.meta.stringToEnum(Driver, args[i + 1]) orelse return null;
+        return .{ .driver = driver, .rest = i + 2 };
+    }
+    return null;
 }
 
-/// `zig cc -target T <rest>` becomes `clang --target=<triple> <probe flags> <rest>`,
-/// and `zig c++` becomes `clang++`.
+/// `[launcher] zig cc -target T <rest>` becomes `clang --target=<triple> <probe
+/// flags> <rest>`, and `zig c++` becomes `clang++`. Anything else is kept.
 pub fn rewriteArgs(arena: std.mem.Allocator, args: []const []const u8, probe: Probe) ![]const []const u8 {
-    const driver: []const u8 = switch (try driverOf(args)) {
+    const compile = zigCompile(args) orelse return args;
+    const driver: []const u8 = switch (compile.driver) {
         .cc => "clang",
         .@"c++" => "clang++",
     };
@@ -130,7 +140,7 @@ pub fn rewriteArgs(arena: std.mem.Allocator, args: []const []const u8, probe: Pr
     var out: std.ArrayList([]const u8) = .empty;
     try out.appendSlice(arena, &.{ driver, try std.fmt.allocPrint(arena, "--target={s}", .{probe.triple}) });
     try out.appendSlice(arena, probe.flags);
-    var i: usize = 2;
+    var i: usize = compile.rest;
     while (i < args.len) : (i += 1) {
         if (std.mem.eql(u8, args[i], "-target")) {
             i += 1;
@@ -301,6 +311,10 @@ test rewriteArgs {
     try std.testing.expectEqual(expected.len, got.len);
     for (expected, got) |e, g| try std.testing.expectEqualStrings(e, g);
     try std.testing.expectEqualStrings("clang++", (try rewriteArgs(a, &.{ "zig", "c++", "-c", "a.cpp" }, probe))[0]);
-    try std.testing.expectError(error.UnexpectedEntry, rewriteArgs(a, &.{ "gcc", "-c", "a.c" }, probe));
-    try std.testing.expectError(error.UnexpectedEntry, rewriteArgs(a, &.{ "zig", "ar", "a.o" }, probe));
+    const launched = try rewriteArgs(a, &.{ "/usr/bin/ccache", "/opt/zig/zig", "cc", "-target", "x86_64-linux-musl", "-O0", "-c", "a.c" }, probe);
+    try std.testing.expectEqual(expected.len, launched.len);
+    for (expected, launched) |e, g| try std.testing.expectEqualStrings(e, g);
+    const rc = [_][]const u8{ "zig", "rc", "/fo", "app.res", "app.rc" };
+    try std.testing.expectEqual(@as(usize, rc.len), (try rewriteArgs(a, &rc, probe)).len);
+    try std.testing.expectEqualStrings("gcc", (try rewriteArgs(a, &.{ "gcc", "-c", "a.c" }, probe))[0]);
 }
