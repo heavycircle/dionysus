@@ -12,7 +12,7 @@ Every project `dino` builds can use it: `dino_executable()` links it, or link it
 
 | Module                   | Header                | Library     | For                                                           |
 | ------------------------ | --------------------- | ----------- | ------------------------------------------------------------- |
-| [Runtime](runtime.md)    | `dino/core/runtime.h` | `dino_core` | process-wide setup, which is automatic                        |
+| [Runtime](runtime.md)    | none                  | `dino_core` | process-wide setup, which is automatic                        |
 | [Errors](error.md)       | `dino/core/error.h`   | `dino_core` | why a call failed, with the same codes on every platform      |
 | [Network](network.md)    | `dino/core/network.h` | `dino_core` | TCP and UDP sockets over IPv4 and IPv6                        |
 | [Poll and select](io.md) | `dino/core/io.h`      | `dino_core` | waiting on a few sockets at once                              |

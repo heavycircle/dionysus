@@ -1,8 +1,8 @@
 #include <stddef.h>
 #include <utest.h>
 
+#include <dino/core/fs.h>
 #include <dino/core/network.h>
-#include <dino/core/runtime.h>
 #include <dino/core/thread.h>
 
 // Its own executable, so nothing has initialised the network before these run
@@ -49,12 +49,12 @@ UTEST(runtime_auto, explicit_init_is_repeatable)
     for (int i = 0; i < 3; i++)
     {
         EXPECT_EQ(0, dino_net_init());
-        EXPECT_EQ(0, dino_runtime_init());
+        EXPECT_EQ(0, dino_fs_init());
     }
     dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
     EXPECT_NE(DINO_INVALID_SOCKET, s);
     dino_socket_close(s);
-    dino_runtime_cleanup();
+    dino_net_cleanup();
 }
 
 #ifndef _WIN32

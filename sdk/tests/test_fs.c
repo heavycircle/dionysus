@@ -20,7 +20,7 @@
 
 #include <dino/core/error.h>
 #include <dino/core/fs.h>
-#include <dino/core/runtime.h>
+#include <dino/core/network.h>
 
 static int resize(const char *path, uint64_t size)
 {
@@ -289,7 +289,7 @@ UTEST(fs_init, keeps_stdio_open_and_is_repeatable)
     for (int fd = 0; fd <= 2; fd++)
         EXPECT_NE(-1, fcntl(fd, F_GETFD));
 #endif
-    dino_runtime_cleanup();
+    dino_net_cleanup();
 #ifndef _WIN32
     // Cleanup must not close stdio (#61).
     for (int fd = 0; fd <= 2; fd++)

@@ -410,8 +410,7 @@ of `core` and `DINO_CORE_` below.
    any platform if either half is missing.
 4. If it needs process-wide setup (like `WSAStartup`), make it lazy: an idempotent, thread-safe
    `dino_<name>_init()` that the module's entry points call first, returning their usual failure
-   value if it fails (see `dino_net_init()` and `dino_socket_create()`), and call it from
-   `dino_runtime_init()`. Only setup that must happen before `main()` and can't fail goes in
+   value if it fails (see `dino_net_init()` and `dino_socket_create()`). Only setup that must happen before `main()` and can't fail goes in
    `src/core/runtime_auto.c`, which is linked into every program on Linux.
 5. Add `sdk/tests/test_<name>.c` covering every function, including the error paths
    (`DINO_INVALID_*` handles, bad arguments). `dino test --all` and CI pick it up automatically;

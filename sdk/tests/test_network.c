@@ -555,4 +555,27 @@ UTEST(network, sockets_are_not_inherited_by_children)
     dino_socket_close(udp);
 }
 
+// On Windows a cleanup would break every open socket, so it is refused while
+// any is open, on both platforms, and the socket keeps working.
+UTEST(network, cleanup_is_refused_while_a_socket_is_open)
+{
+    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    EXPECT_EQ(-1, dino_net_cleanup());
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(0, dino_socket_bind(s, "127.0.0.1", 0));
+    EXPECT_EQ(2, dino_socket_sendto(s, "hi", 2, "127.0.0.1", 9));
+    dino_socket_close(s);
+    EXPECT_EQ(0, dino_net_cleanup());
+}
+
+UTEST(network, init_and_cleanup_can_repeat)
+{
+    for (int i = 0; i < 3; i++)
+    {
+        ASSERT_EQ(0, dino_net_init());
+        EXPECT_EQ(0, dino_net_cleanup());
+    }
+}
+
 UTEST_MAIN()

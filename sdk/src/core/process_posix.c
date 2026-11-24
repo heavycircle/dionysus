@@ -292,11 +292,6 @@ int dino_process_wait_timeout(dino_process_t process, int timeout_ms, dino_proce
     }
 }
 
-uint64_t dino_process_current_id(void)
-{
-    return (uint64_t)getpid();
-}
-
 int dino_env_get(const char *name, char *buf, size_t size)
 {
     if (!buf && size)

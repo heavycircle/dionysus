@@ -7,9 +7,9 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <dino/core/thread.h>
-#include <dino/core/time.h>
 
 #define LINE_BYTES 1024
 #define MS_PER_DAY 86400000ULL
@@ -122,9 +122,12 @@ void dino_log_write(dino_log_level_t level, const char *file, int line, const ch
     int  saved_errno = errno;
     char buf[LINE_BYTES];
 
-    unsigned ms     = (unsigned)(dino_time_unix_ms() % MS_PER_DAY);
-    int      prefix = snprintf(buf, sizeof buf, "%02u:%02u:%02u.%03u [%c] %s:%d: ", ms / 3600000,
-             ms / 60000 % 60, ms / 1000 % 60, ms % 1000, level_letters[level], base_name(file), line);
+    struct timespec now = { 0, 0 };
+    timespec_get(&now, TIME_UTC);
+    unsigned ms
+        = (unsigned)(((uint64_t)now.tv_sec * 1000 + (uint64_t)now.tv_nsec / 1000000) % MS_PER_DAY);
+    int prefix = snprintf(buf, sizeof buf, "%02u:%02u:%02u.%03u [%c] %s:%d: ", ms / 3600000,
+        ms / 60000 % 60, ms / 1000 % 60, ms % 1000, level_letters[level], base_name(file), line);
     if (prefix < 0)
         prefix = 0;
     if ((size_t)prefix < sizeof buf)

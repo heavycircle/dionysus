@@ -776,18 +776,6 @@ UTEST(process, run_reports_a_missing_program)
     EXPECT_EQ(-1, dino_process_run(argv, NULL, NULL));
 }
 
-UTEST(process, current_id_is_the_childs_parent)
-{
-    EXPECT_NE(0u, dino_process_current_id());
-#ifndef _WIN32
-    const char *const     argv[] = SHELL("echo $PPID");
-    dino_process_result_t r;
-    ASSERT_EQ(0, dino_process_run(argv, NULL, &r));
-    EXPECT_EQ(dino_process_current_id(), strtoull(r.out, NULL, 10));
-    dino_process_result_free(&r);
-#endif
-}
-
 UTEST_STATE();
 
 #ifdef _WIN32

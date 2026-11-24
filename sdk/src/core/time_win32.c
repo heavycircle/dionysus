@@ -8,9 +8,6 @@
 #define CREATE_WAITABLE_TIMER_HIGH_RESOLUTION 0x00000002
 #endif
 
-// FILETIME counts 100 ns intervals since 1601-01-01.
-#define FILETIME_UNIX_EPOCH 116444736000000000ULL
-
 uint64_t dino_time_monotonic_ns(void)
 {
     LARGE_INTEGER freq, count;
@@ -21,14 +18,6 @@ uint64_t dino_time_monotonic_ns(void)
     uint64_t f = (uint64_t)freq.QuadPart;
     uint64_t c = (uint64_t)count.QuadPart;
     return c / f * NS_PER_S + c % f * NS_PER_S / f;
-}
-
-uint64_t dino_time_unix_ms(void)
-{
-    FILETIME ft;
-    GetSystemTimePreciseAsFileTime(&ft);
-    uint64_t t = ((uint64_t)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
-    return (t - FILETIME_UNIX_EPOCH) / 10000;
 }
 
 // Sleep() and plain waitable timers wake on the scheduler tick (15.6 ms by
