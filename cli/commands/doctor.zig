@@ -100,7 +100,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         }
     }
 
-    ctx.print("\nRunners for `dino run` (optional):\n", .{});
+    ctx.print("\nRunners for `dino run` and `dino test` (optional):\n", .{});
     for (targets.known) |t| {
         switch (targets.runnerFor(t)) {
             .native => report(ctx, true, t.name, "native"),

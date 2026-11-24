@@ -69,7 +69,7 @@ export DINO_LIBRARY_PATH=/opt/acme/acme_log:/opt/acme/acme_proto
 Only local directories are supported. Getting the libraries onto a machine (a git clone, a package,
 a volume mount, a derived Docker image) is up to you; see [Docker and CI](#docker-and-ci).
 
-Without `dino`, pass the list to CMake yourself, as a CMake list (`;`-separated), next to the
+Without `dino`, pass the list to CMake yourself, as a CMake list (`;`-separated) of absolute paths (a relative entry is resolved against the project's source directory, not the current one), next to the
 settings shown in [CONTRIBUTING.md](../../CONTRIBUTING.md#c-projects-and-examples):
 
 ```sh
@@ -107,7 +107,7 @@ dino_test(test_log tests/test_log.c LIBRARIES acme::log)
 
 Rules and recommendations:
 
-- **Static libraries.** Every dino executable is fully static, so define `STATIC` (or `INTERFACE`,
+- **Static libraries.** Every dino executable is static (on Windows, all but the system's C runtime DLL), so define `STATIC` (or `INTERFACE`,
   for header-only) libraries.
 - **Link the SDK like any project.** `dino_core`, `dino_util` and the `dino_*` CMake functions are
   available in a library's `CMakeLists.txt`. Link them `PUBLIC` if your headers include SDK headers,
@@ -248,7 +248,7 @@ or build a derived image that has them baked in, so CI and developers share exac
 libraries:
 
 ```dockerfile
-FROM ghcr.io/heavycircle/dionysus:0.9.0
+FROM ghcr.io/heavycircle/dionysus:0.9
 COPY acme-dino /opt/acme
 ENV DINO_LIBRARY_PATH=/opt/acme/acme_log:/opt/acme/acme_proto
 ```

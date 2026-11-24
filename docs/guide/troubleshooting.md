@@ -29,9 +29,9 @@ writable directory.
 `DINO_SDK_PATH` must point at the `sdk/` directory of a Dionysus checkout, not at the checkout
 itself. Unset it to use the SDK built into `dino`.
 
-**`dino doctor`: `.../sdk/<version> differs from this dino's SDK (...)`**
+**`dino doctor`: `.../sdk/<version>-<hash> differs from this dino's SDK (...)`**
 
-`dino` unpacks its SDK into the cache directory once and makes the files read-only (except on Windows), so that an edit made after an editor's go-to-definition jumped into it can't change every project's build. A file there changed anyway. Remove the directory named in the message; the next command unpacks it again.
+`dino` unpacks its SDK into the cache directory once per SDK content (`sdk/<version>-<hash>`) and makes the files read-only (except on Windows), so that an edit made after an editor's go-to-definition jumped into it can't change every project's build. A file there changed anyway. Remove the directory named in the message; the next command unpacks it again.
 
 ## Building
 
@@ -109,7 +109,7 @@ the `--debug`/`--release` that asks for the other mode.
 **`'test' can't be a project name: CMake or dino already has a target by that name`**
 
 `dino init` names the project after its directory, and CMake and dino already define targets named
-`all`, `clean`, `help`, `install`, `package`, `preinstall`, `test`, `test_main` and `dino_*`; `CMakeFiles`, `Testing`, `_dino` and `_dino_libs` are directories in `build/<target>/`, where the program would have to go. Use a directory with
+`all`, `clean`, `help`, `install`, `package`, `preinstall`, `test`, `test_main`, CMake's other target names (`package_source`, `edit_cache`, `rebuild_cache`, ...) and `dino_*`; `CMakeFiles`, `Testing`, `_dino` and `_dino_libs` are directories in `build/<target>/`, where the program would have to go. Use a directory with
 another name.
 
 **A program that works on Linux fails under wine, or the other way round**

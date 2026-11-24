@@ -122,7 +122,9 @@ else()
 endif()
 foreach(target dino_core dino_libc dino_util dino_test_output dino_leakcheck dino_utf8_console)
     if(TARGET ${target})
-        target_compile_definitions(${target} PRIVATE _GNU_SOURCE DINO__SDK_SOURCE)
+        # dino_util sees the warning wrappers through dino_core's interface;
+        # the SDK is where the platform calls belong, so it never warns.
+        target_compile_definitions(${target} PRIVATE _GNU_SOURCE DINO__SDK_SOURCE DINO_ALLOW_PLATFORM_CALLS)
         if(WIN32)
             # The POSIX socket headers dino/core/network.h includes; MinGW has none.
             target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/portability/win32-posix")

@@ -21,7 +21,7 @@ The calls are marked deprecated _for dino projects_: the functions are fine in g
 a `dino_*` replacement that works the same on every target. A deprecation is used, rather than a
 custom warning, because the compiler keeps it quiet when the call is inside a system header, such
 as an inline function in a header-only library you include. You can't change that code, so it never
-warns.
+warns. A macro such a header defines is different: it expands in your code, so a flagged call inside it warns there.
 
 It doesn't depend on which clangd or clang-tidy version is installed (see
 [Tool versions](#tool-versions)). It's a warning, never an error, unless the project builds with
@@ -158,9 +158,7 @@ same calls. dino doesn't use it: clang-tidy 19 and older silently ignore it, and
 
 ## How it works
 
-`sdk/portability/` holds a small wrapper for each system header that declares a flagged call:
-`unistd.h`, `pthread.h`, `sys/socket.h`, `poll.h`, `sys/select.h`, `spawn.h`, `sys/wait.h` and
-`time.h` on Linux, and `windows.h`, `winsock2.h` and `process.h` on Windows. Each wrapper includes
+`sdk/portability/` holds a small wrapper for each system header that declares a flagged call: `unistd.h`, `pthread.h` and `stdlib.h` on every target (`common/`); `poll.h`, `signal.h`, `spawn.h`, `sys/epoll.h`, `sys/select.h`, `sys/socket.h`, `sys/wait.h`, `threads.h` and `time.h` on Linux (`posix/`); and `windows.h`, `winsock.h`, `winsock2.h` and `process.h` on Windows (`win32/`). Each wrapper includes
 the real header with `#include_next`, then redeclares the calls with a warning attached:
 
 ```c
@@ -180,16 +178,13 @@ __typeof__(pipe) pipe __attribute__((deprecated(
   warnings you can't fix.
 - **`#pragma GCC system_header`** keeps the wrapper itself out of warnings and out of clang-tidy's
   results.
-- **Nothing else changes.** A wrapper only takes effect when your code includes that header itself.
-  It adds no declarations and no includes of its own. Linux-only wrappers are only on the include
-  path for Linux targets and Windows-only ones only for Windows, so `__has_include(<poll.h>)` still
-  gives the right answer.
+- **Nothing else changes.** A wrapper takes effect wherever that header is included, by your code or by another header (musl's `<sys/types.h>` includes `<sys/select.h>`, for example). It adds no declarations and no includes of its own. Linux-only wrappers are only on the include path for Linux targets and Windows-only ones only for Windows, so `__has_include` still gives the right answer. (`win32-posix/` is separate: the POSIX socket and `poll.h` headers the SDK provides on Windows, which MinGW lacks, so `__has_include(<poll.h>)` is true there too.)
 - **When unsure, no warning.** A redeclaration that depends on feature macros (`usleep`, `pipe2`,
   the POSIX clocks) is only made when the header surely declared the function, and nothing is redeclared unless the C library's own header was included: a header of your own with the same name, such as a library's `process.h` found through the wrapper, is passed through untouched. A wrapper can miss a warning, but it can't break a build.
 
 The SDK adds the directory to `dino_core`'s interface include path. Everything that links the SDK
 gets it: `dino_executable()`, `dino_test()`, a plain `target_link_libraries(app PRIVATE dino_core)`,
-and [organization libraries](libraries.md). The SDK's own sources never see it.
+and [organization libraries](libraries.md). The SDK's own sources build with `DINO_ALLOW_PLATFORM_CALLS`, so they never warn.
 
 `tests/warnings.sh` checks all of this in CI on every target. It builds
 [`tests/fixtures/raw_calls`](../../tests/fixtures/raw_calls), which calls every flagged function, in

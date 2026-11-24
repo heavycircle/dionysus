@@ -21,7 +21,7 @@ dino targets
 
 ```
   NAME     ZIG TARGET                 RUNS VIA       DESCRIPTION
-  arm      arm-linux-musleabihf       qemu-arm       ARM 32-bit, hard float
+  arm      arm-linux-musleabihf       qemu-arm       ARMv7-A 32-bit, hard float
   arm64    aarch64-linux-musl         qemu-aarch64   ARM 64-bit
   i386     x86-linux-musl             native         Intel x86 32-bit, i686
   ppc      powerpc-linux-musleabihf   qemu-ppc       PowerPC 32-bit, big endian
@@ -156,7 +156,7 @@ dino clean            # remove every build/<target>/ dino created
 dino clean arm win32  # just these
 ```
 
-`dino clean` leaves alone any directory under `build/` that it didn't create.
+`dino clean` leaves alone any directory under `build/` that dino hasn't built in.
 
 ## The first build
 
@@ -195,4 +195,10 @@ cmake -S . -B build/arm64 -G Ninja \
 cmake --build build/arm64
 ```
 
-`dino build -v` prints the exact commands it runs. `dino` won't build in a directory configured this way: it stops rather than replace the cache and its settings, so use another directory for one or the other.
+`dino` also passes these, which a plain build adds as it needs them:
+
+- `-DCMAKE_CROSSCOMPILING_EMULATOR=qemu-aarch64` (or `wine` for Windows), so `ctest` can run the tests of a foreign target. Without it they fail to start.
+- `-DDINO_LIBRARY_PATH=/abs/a;/abs/b` for [organization libraries](libraries.md). Use absolute paths: a relative entry is resolved against the project's source directory, not the current one.
+- `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON`, for `compile_commands.json`.
+
+`dino build -v` prints the commands it runs, without shell quoting: an argument with spaces needs quotes added before it can be pasted into a shell. `dino` won't build in a directory configured this way: it stops rather than replace the cache and its settings, so use another directory for one or the other.

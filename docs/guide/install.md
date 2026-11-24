@@ -16,6 +16,7 @@ from the [latest release](https://github.com/heavycircle/dionysus/releases/lates
 your `PATH`:
 
 ```sh
+sha256sum --check --ignore-missing SHA256SUMS   # SHA256SUMS is attached to the same release
 tar -xJf dino-<version>-x86_64-linux.tar.xz
 install -m755 dino-<version>-x86_64-linux/dino ~/.local/bin/
 ```
@@ -82,7 +83,7 @@ Required:
 Libraries (DINO_LIBRARY_PATH):
   none
 
-Runners for `dino run` (optional):
+Runners for `dino run` and `dino test` (optional):
   [ ok ] arm        /usr/bin/qemu-arm
   [ ok ] arm64      /usr/bin/qemu-aarch64
   [ ok ] i386       native
@@ -100,7 +101,7 @@ All required tools found.
 - **Required** must all be `ok`, or `dino doctor` exits non-zero. A missing generator means
   neither `ninja` nor `make` is on `PATH`, and CMake older than 3.20 is reported as a problem.
   So is a Zig that isn't 0.17 (any 0.17.x passes; dino is tested with 0.17.1), and a `zig` or `cmake` that is on `PATH` but fails to run.
-- **sdk** is where `dino` unpacked its built-in SDK, once per version, under `$DINO_HOME` (by
+- **sdk** is where `dino` unpacked its built-in SDK, once per SDK content (`sdk/<version>-<hash>`), under `$DINO_HOME` (by
   default `~/.cache/dino`). Its files are read-only (except on Windows), and doctor checks that they still match the SDK inside `dino`. Set `DINO_SDK_PATH` to build against another SDK checkout instead. What `dino` keeps under `$DINO_HOME` and how it's laid out is internal and may change between versions; don't script against it.
 - **Libraries** lists your [organization libraries](libraries.md), and any broken entry counts as a
   problem.
