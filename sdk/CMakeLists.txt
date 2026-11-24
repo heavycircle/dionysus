@@ -14,7 +14,6 @@ add_library(dino_core STATIC
     src/core/error.c
     src/core/event.c
     src/core/process.c
-    src/core/runtime.c
     src/core/runtime_auto.c
     src/core/time.c
 )

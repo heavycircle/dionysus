@@ -43,13 +43,6 @@ void dino_sleep_us(uint64_t us);
  */
 uint64_t dino_time_monotonic_ns(void);
 
-/**
- * Read the wall clock.
- *
- * @return Milliseconds since 1970-01-01 00:00:00 UTC.
- */
-uint64_t dino_time_unix_ms(void);
-
 #ifdef __cplusplus
 }
 #endif

@@ -68,7 +68,7 @@ void raw_win32(void)
     SetEnvironmentVariableA("X", "1");              // expected-warning {{use dino_env_set()}}
     SetEnvironmentVariableW(L"X", NULL);            // expected-warning {{use dino_env_set()}}
     FILETIME ft;
-    GetSystemTimeAsFileTime(&ft);                   // expected-warning {{use dino_time_unix_ms()}}
+    GetSystemTimeAsFileTime(&ft);                   // expected-warning {{use timespec_get(&ts, TIME_UTC)}}
     GetFileSizeEx(r, &now);                         // expected-warning {{use dino_file_size()}}
     HANDLE port = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0, 0); // expected-warning {{use dino_event_loop_create()}}
     DWORD        bytes;

@@ -7,6 +7,15 @@ almost everything here: a removed or renamed name fails to build, and the error 
 
 0.9 brings the SDK back to plain C: a `dino_*` call stays only where the platforms can't be made to agree behind the standard name, where there is no standard name, or where it is measurably smaller or faster.
 
+### Removed: calls the C library already covers
+
+| Removed                                        | Use instead                                                                                                                            |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `dino_process_current_id()`                    | `getpid()` from `<unistd.h>`, on every target                                                                                          |
+| `dino_time_unix_ms()`                          | `timespec_get(&ts, TIME_UTC)` from `<time.h>`: `ts.tv_sec * 1000 + ts.tv_nsec / 1000000`                                               |
+| `dino_runtime_init()`, `<dino/core/runtime.h>` | nothing: setup is automatic. To fail early, call `dino_net_init()`; a program built with `DINO_NO_AUTO_RUNTIME` calls `dino_fs_init()` |
+| `dino_runtime_cleanup()`                       | nothing, or `dino_net_cleanup()`, which it called (and which 0.8 made return `int`)                                                    |
+
 ### Windows: 64-bit file offsets and `gmtime_r`
 
 Windows targets now build with `_FILE_OFFSET_BITS=64` and `_POSIX_THREAD_SAFE_FUNCTIONS`, as musl always has. `off_t` and `struct stat`'s `st_size` are 64-bit, so `stat`, `fseeko`, `ftello` and `ftruncate` work past 2 GB, and `gmtime_r`/`localtime_r` are declared. A prebuilt Windows library compiled without the flag that passes `off_t` or `struct stat` across its API no longer matches; rebuild it with dino.

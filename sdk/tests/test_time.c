@@ -56,15 +56,4 @@ UTEST(time, zero_sleep_returns_promptly)
     EXPECT_LT(dino_time_monotonic_ns() - start, SLACK_NS);
 }
 
-UTEST(time, unix_ms_matches_libc)
-{
-    time_t   before = time(NULL);
-    uint64_t ms     = dino_time_unix_ms();
-    time_t   after  = time(NULL);
-    // 2023-11-14, well before this module existed.
-    EXPECT_GT(ms, 1700000000000ULL);
-    EXPECT_GE(ms / 1000, (uint64_t)before);
-    EXPECT_LE(ms / 1000, (uint64_t)after);
-}
-
 UTEST_MAIN()

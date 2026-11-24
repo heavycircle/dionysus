@@ -24,7 +24,7 @@ endif()
 
 # Links runtime_auto.c's constructor into every program, which wouldn't otherwise
 # pull that object from the archive. Its only job (closed stdio) is Linux-only.
-option(DINO_NO_AUTO_RUNTIME "Don't run the SDK's setup before main() (see dino/core/runtime.h)" OFF)
+option(DINO_NO_AUTO_RUNTIME "Don't run the SDK's setup before main() (see docs/sdk/runtime.md)" OFF)
 if(NOT WIN32 AND NOT DINO_NO_AUTO_RUNTIME)
     target_link_options(dino_core INTERFACE "LINKER:-u,dino__runtime_auto")
 endif()

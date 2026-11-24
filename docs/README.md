@@ -28,7 +28,7 @@ target. Start with the [overview](sdk/README.md), which explains the conventions
 | Page                          | What it covers                                                                       |
 | ----------------------------- | ------------------------------------------------------------------------------------ |
 | [Overview](sdk/README.md)     | The modules, the two libraries, handles, return values, timeouts, ownership, threads |
-| [Runtime](sdk/runtime.md)     | Automatic setup, checking it up front, opting out                                    |
+| [Runtime](sdk/runtime.md)     | Automatic setup, failing early, opting out                                           |
 | [Errors](sdk/error.md)        | Why a call failed: `dino_error()` and its codes; non-blocking connects               |
 | [Network](sdk/network.md)     | TCP and UDP sockets over IPv4 and IPv6                                               |
 | [Poll and select](sdk/io.md)  | Waiting on a few sockets                                                             |

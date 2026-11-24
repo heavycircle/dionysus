@@ -44,7 +44,7 @@ WINBASEAPI __typeof__(SetEnvironmentVariableA) SetEnvironmentVariableA __attribu
 WINBASEAPI __typeof__(SetEnvironmentVariableW) SetEnvironmentVariableW __attribute__((deprecated(
     "SetEnvironmentVariableW() is Windows-only; use dino_env_set() or dino_env_unset() from <dino/core/process.h>")));
 WINBASEAPI __typeof__(GetSystemTimeAsFileTime) GetSystemTimeAsFileTime __attribute__((deprecated(
-    "GetSystemTimeAsFileTime() is Windows-only; use dino_time_unix_ms() from <dino/core/time.h>")));
+    "GetSystemTimeAsFileTime() is Windows-only; use timespec_get(&ts, TIME_UTC) from <time.h>, which works on every target")));
 WINBASEAPI __typeof__(GetFileSizeEx) GetFileSizeEx __attribute__((deprecated(
     "GetFileSizeEx() is Windows-only; use dino_file_size() from <dino/core/fs.h>")));
 WINBASEAPI __typeof__(CreateIoCompletionPort) CreateIoCompletionPort __attribute__((deprecated(

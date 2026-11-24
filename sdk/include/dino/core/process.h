@@ -259,14 +259,6 @@ int dino_process_run(
  */
 void dino_process_result_free(dino_process_result_t *result);
 
-/* ---- The current process ---- */
-
-/**
- * Get the calling process's OS process ID.
- *
- * @return getpid() / GetCurrentProcessId().
- */
-uint64_t dino_process_current_id(void);
 
 /**
  * Read an environment variable of this process. UTF-8 on every platform.
