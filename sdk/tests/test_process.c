@@ -424,7 +424,6 @@ UTEST(process, exit_and_crash_are_told_apart)
 #endif
 }
 
-#ifndef _WIN32
 // Nothing is left to kill, which isn't an error; the exit code stands.
 UTEST(process, kill_after_the_child_exited_succeeds)
 {
@@ -442,6 +441,7 @@ UTEST(process, kill_after_the_child_exited_succeeds)
     EXPECT_EQ(0, status.code);
 }
 
+#ifndef _WIN32
 UTEST(process, signal_is_reported_as_128_plus_its_number)
 {
     const char *const argv[] = SHELL("kill -TERM $$");

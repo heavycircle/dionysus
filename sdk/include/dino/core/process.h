@@ -46,7 +46,7 @@ typedef enum
     DINO_STDIO_PIPE,        /**< A new pipe; the parent's end is in dino_process_pipes_t. */
 } dino_stdio_t;
 
-/** Options for dino_process_spawn; zero-initialise and set what you need. */
+/** Options for dino_process_spawn; zero-initialize and set what you need. */
 typedef struct
 {
     /** Working directory of the child; NULL for the parent's. */
@@ -106,6 +106,9 @@ typedef struct
  *
  * On Windows a parent without a console (a GUI program, a service) starts
  * console programs without a console window of their own.
+ *
+ * On POSIX the child keeps the signals the parent ignores, as POSIX says,
+ * except SIGPIPE, which it gets at its default; none is blocked in it.
  *
  * Reading only stdout while the child also fills a stderr pipe can deadlock
  * once that pipe's 64 KB are full; read both, or redirect one to
@@ -199,7 +202,7 @@ int dino_process_wait_timeout(
 
 /* ---- Run to completion ---- */
 
-/** Options for dino_process_run; zero-initialise and set what you need. */
+/** Options for dino_process_run; zero-initialize and set what you need. */
 typedef struct
 {
     const char        *cwd; /**< As in dino_process_spawn_opts_t. */

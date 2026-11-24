@@ -8,7 +8,7 @@ that matter are handled for you:
 
 - **Arguments** reach the child exactly as given. Windows has no argument array, only one command
   line, so the SDK quotes each argument by the rules the child's C runtime uses to split it again. The exception is a Windows program that reads its command line itself; `cmd.exe` is one, as described under the function table below.
-- **How it ended** comes back the same way, as a `dino_process_status_t`: `signal` is `0` when the program exited and `code` is its exit code. A signal on Linux, or a crash on Windows, sets `signal` to the matching `<signal.h>` number (`SIGSEGV` for an access violation, ...), so `if (status.signal)` is a portable crash test. After `dino_process_kill`, both platforms report `signal` `9` and `code` `DINO_EXIT_KILLED` (137).
+- **How it ended** comes back the same way, as a `dino_process_status_t`: `signal` is `0` when the program exited and `code` is its exit code (`0`-`255` on Linux, the full 32-bit value on Windows). A signal on Linux, or a crash on Windows, sets `signal` to the matching `<signal.h>` number (`SIGSEGV` for an access violation, ...), so `if (status.signal)` is a portable crash test. After `dino_process_kill`, both platforms report `signal` `9` and `code` `DINO_EXIT_KILLED` (137).
 - **Inheritance:** the child gets only its stdin, stdout and stderr, never the parent's other files,
   sockets or pipes. That includes descriptors you opened yourself without close-on-exec: on Linux
   the SDK closes them in the child by listing `/proc/self/fd`, or, without `/proc` (a chroot, an initramfs, a container that doesn't mount it), by checking every descriptor up to the limit, which is slower. One another thread opens during the spawn can still get through. On Windows the SDK's own spawns are airtight, but a `CreateProcess` with inheritance on another thread outside the SDK (`system()`, `_popen`, a library) can inherit the child's pipe ends while a spawn runs; the pipe then sees no end of file until that program exits.
@@ -39,6 +39,11 @@ int main(void)
     opts.timeout_ms = 10000; // killed if it takes longer
 
     int rc = dino_process_run(argv, &opts, &result);
+    if (rc == -1) // couldn't start it: out and err may be NULL
+    {
+        dino_process_result_free(&result);
+        return 1;
+    }
     printf("rc %d, exit code %d\n", rc, result.status.code);
     printf("stdout: %s", result.out);
     printf("stderr: %s", result.err);
@@ -63,7 +68,7 @@ everything it writes to stdout and stderr, and waits for it to exit.
 - **Results:** `dino_process_result_t` has `out`/`out_len`, `err`/`err_len` (both NUL-terminated),
   `status`, how the child ended, and `truncated`, `1` when an output was cut at `max_output`.
 - **Return value:** `0` when the child ran to the end, `DINO_TIMEOUT` when it was killed for taking
-  too long (`result` still holds what it wrote first), or `-1` if it couldn't be started or reading an output failed (then `dino_error()` says why, and the output is incomplete). Call
+  too long (`result` still holds what it wrote first), or `-1` if it couldn't be started or something failed afterwards: reading an output, waiting for the child, running out of memory (then `dino_error()` says why; `out` and `err` may be `NULL`, or hold what was read so far). Call
   `dino_process_result_free` in every case.
 - **Background processes:** a process the child started that keeps stdout, stderr or stdin open
   keeps `dino_process_run` waiting after the child exits. With a timeout it stops at the deadline
@@ -93,13 +98,13 @@ dino_process_status_t status;
 dino_process_wait(child, &status);
 ```
 
-| Function                                            | Does                                                                                                   | Returns                             |
-| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------- |
-| `dino_process_spawn(&p, argv, opts, &pipes)`        | Start `argv[0]` with arguments. `opts` and `pipes` may be `NULL`.                                      | `0`, `-1` if it couldn't be started |
-| `dino_process_wait(p, &status)`                     | Wait for it to end, store how it ended, release it.                                                    | `0`, `-1`                           |
-| `dino_process_wait_timeout(p, timeout_ms, &status)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid. | `0`, `DINO_TIMEOUT`, `-1`           |
-| `dino_process_kill(p)`                              | End it now (`SIGKILL` / `TerminateProcess`); `0` if it already exited. Still wait for it afterwards.   | `0`, `-1`                           |
-| `dino_process_id(p)`                                | Its OS process ID, for logs.                                                                           | the ID                              |
+| Function                                            | Does                                                                                                       | Returns                             |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `dino_process_spawn(&p, argv, opts, &pipes)`        | Start `argv[0]` with arguments. `opts` may be `NULL`, and `pipes` too when no stream is `DINO_STDIO_PIPE`. | `0`, `-1` if it couldn't be started |
+| `dino_process_wait(p, &status)`                     | Wait for it to end, store how it ended, release it.                                                        | `0`, `-1`                           |
+| `dino_process_wait_timeout(p, timeout_ms, &status)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid.     | `0`, `DINO_TIMEOUT`, `-1`           |
+| `dino_process_kill(p)`                              | End it now (`SIGKILL` / `TerminateProcess`); `0` if it already exited. Still wait for it afterwards.       | `0`, `-1`                           |
+| `dino_process_id(p)`                                | Its OS process ID, for logs.                                                                               | the ID                              |
 
 - **`argv[0]`:** a path, or a bare name looked up on `PATH`. Windows also adds `.exe` and looks in a
   few system directories first. A relative path such as `./tool` or `bin/tool` is found from `cwd`
@@ -125,6 +130,7 @@ dino_process_wait(child, &status);
   }
   ```
 
+- **Signals the parent ignores stay ignored** in the child on Linux, as POSIX says (that is how `nohup` works), except `SIGPIPE`, which the child gets at its default; no signal is blocked in it. A parent that ignores `SIGINT` starts children that ignore it too.
 - **Leave `SIGCHLD` alone, and let nothing else wait for the child** (Linux). If the program ignores `SIGCHLD` (`SIG_IGN` or `SA_NOCLDWAIT`), or other code in it calls `wait()` or `waitpid(-1, ...)`, the exit status goes there. Every wait then returns `-1` although the child ran, `dino_process_run` included, and the exit code is lost. The process ID may also be reused by then, so don't `dino_process_kill` that handle afterwards.
 - **Killing ends one process, not what it started.** `dino_process_kill` and the timeout of `dino_process_run` end the process you spawned. Programs it started keep running: whatever a `sh -c` command launched without `exec`, and everything a `.bat` or `.cmd` file started, because the process you hold there is the `cmd.exe` that runs the script.
 - **A watchdog doesn't kill from another thread.** While one thread is in `dino_process_wait`, a `dino_process_kill` from another can land after the wait ended the process, and reach whatever got its ID next. Wait with `dino_process_wait_timeout` instead, and kill from that thread when the time runs out.

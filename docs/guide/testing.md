@@ -61,12 +61,17 @@ UTEST_MAIN()
   tolerance), `STREQ`, `STRNE`, `STRNEQ`/`STRNNE` (the first _n_ characters) and `MEMEQ`, each as
   `EXPECT_` and `ASSERT_`, and each with a `_MSG` form that adds a message.
 
-- Fixtures share setup and teardown across cases:
+- Every case, setup and teardown needs at least one `ASSERT_*` or `EXPECT_*`: one without leaves utest's result parameter unused, which `-Wextra -Werror` rejects.
+
+- Fixtures share setup and teardown across cases. A failed check in setup skips the case and the teardown, so setup must clean up after itself before it fails:
 
   ```
   struct server { dino_socket_t s; };
-  UTEST_F_SETUP(server) { utest_fixture->s = dino_socket_create(...); }
-  UTEST_F_TEARDOWN(server) { dino_socket_close(utest_fixture->s); }
+  UTEST_F_SETUP(server) {
+      utest_fixture->s = dino_socket_create(...);
+      ASSERT_NE(DINO_INVALID_SOCKET, utest_fixture->s);
+  }
+  UTEST_F_TEARDOWN(server) { EXPECT_EQ(0, dino_socket_close(utest_fixture->s)); }
   UTEST_F(server, accepts) { ... utest_fixture->s ... }
   ```
 

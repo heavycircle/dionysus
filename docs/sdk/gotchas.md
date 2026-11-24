@@ -54,7 +54,7 @@ Linux.
   paths you build.
 - **Case and names:** Windows paths are case-insensitive, and names such as `CON`, `NUL` and
   `COM1` are reserved.
-- **No `/dev/null` or `/tmp`:** use `NUL` and `%TEMP%` on Windows.
+- **No `/dev/null` or `/tmp` on Windows.** Discard a child's output with `DINO_STDIO_NULL`, and make temporary files with `tmpfile()` or `mkstemp` in a directory you choose; the temporary directory has no portable name yet.
 
 ## Programs started without stdio
 
@@ -79,7 +79,7 @@ Tell a crash from an exit with `status.signal`, not with `status.code`: a signal
 
 ## Stack size
 
-Stacks differ by platform. The main thread has 8 MB on Linux and 16 MB on Windows, and a thread from `pthread_create` gets 128 KiB with musl but 1 MiB on Windows, so recursion or a large local array that works on Windows can overflow on Linux. Set a thread's size with `pthread_attr_setstacksize`, and allocate big buffers with `malloc`.
+Stacks differ by platform. The main thread has 8 MB on Linux and 16 MB on Windows, and a thread from `pthread_create` gets 128 KiB with musl but 16 MiB on Windows (the same reserve as the main thread), so recursion or a large local array that works on Windows can overflow on Linux. Set a thread's size with `pthread_attr_setstacksize`, and allocate big buffers with `malloc`.
 
 ## Line endings in output
 

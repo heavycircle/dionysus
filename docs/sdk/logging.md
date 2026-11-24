@@ -16,7 +16,7 @@ Levelled, timestamped log lines on stderr, safe from any thread. Part of `dino_u
 int main(void)
 {
     DINO_LOG_INFO("starting, pid file at %s", "/run/app.pid");
-    DINO_LOG_DEBUG("debug lines show unless the build defines NDEBUG");
+    DINO_LOG_DEBUG("compiled out of release builds, the default, so not below");
     DINO_LOG_WARN("disk %d%% full", 91);
 
     dino_log_set_level(DINO_LOG_LEVEL_ERROR);

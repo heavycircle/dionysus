@@ -14,7 +14,7 @@ typedef struct dino_pipe *dino_pipe_t;
 #define DINO_INVALID_PIPE ((dino_pipe_t)0)
 
 #ifndef DINO_TIMEOUT
-/** Returned by dino_pipe_wait when the time ran out (as in dino/core/mutex.h). */
+/** Returned by dino_pipe_wait when the time ran out (as in dino/core/thread.h). */
 #define DINO_TIMEOUT 1
 #endif
 
@@ -23,7 +23,7 @@ typedef struct dino_pipe *dino_pipe_t;
  *
  * Both ends normally hold 64 KB before a write blocks (on Linux a user over
  * the kernel's pipe-buffer limit gets 4 KB), and neither is inherited by child
- * processes unless passed to one explicitly.
+ * processes. (A child's stdio pipes come from dino_process_spawn.)
  *
  * Pipes are not sockets: poll and select don't accept them on Windows. Wait on
  * one read end with dino_pipe_wait, or on many alongside sockets with

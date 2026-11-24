@@ -22,15 +22,14 @@ Every project `dino` builds can use it: `dino_executable()` links it, or link it
 | [Processes](process.md)  | `dino/core/process.h` | `dino_core` | running programs, their stdio and exit codes; the environment |
 | [Files](fs.md)           | `dino/core/fs.h`      | `dino_core` | file sizes over 2 GB; stdio for programs the kernel starts    |
 | [Time](time.md)          | `dino/core/time.h`    | `dino_core` | sleeping, a monotonic clock, the wall clock                   |
-| [Logging](logging.md)    | `dino/util/logging.h` | `dino_util` | levelled log lines on stderr                                  |
+| [Logging](logging.md)    | `dino/util/logging.h` | `dino_util` | leveled log lines on stderr                                  |
 
 Also: [dino vs libc](libc.md), when the C library is already portable,
 [gotchas](gotchas.md), the platform differences the API can't hide, and
 [upgrading](upgrading.md), what changed between SDK versions.
 
 `dino/version.h` has the SDK's version as the numbers `DINO_VERSION_MAJOR`, `DINO_VERSION_MINOR`
-and `DINO_VERSION_PATCH`, and the string `DINO_VERSION` (for example `"0.6.0"`, with a suffix such as
-`-dev` between releases).
+and `DINO_VERSION_PATCH`, and the string `DINO_VERSION` (for example `"0.9.0"`, or `"0.10.0-dev"` between releases). The suffix alone, empty in a release, is `DINO_VERSION_PRERELEASE`.
 
 ## Conventions
 

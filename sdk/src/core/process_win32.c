@@ -155,7 +155,6 @@ static wchar_t *batch_command_line(const char *const argv[], wchar_t **applicati
     return w;
 }
 
-// "A=1\0B=2\0\0" in UTF-16.
 // A program path with a separator but no root (./tool, bin\tool) is looked up
 // in the child's working directory, as on Linux; CreateProcessW alone would
 // look in the parent's. The match becomes lpApplicationName, so the child's
@@ -212,6 +211,7 @@ static wchar_t *find_in(const wchar_t *dir, const char *program)
     return found;
 }
 
+// "A=1\0B=2\0\0" in UTF-16.
 static wchar_t *environment_block(const char *const env[])
 {
     struct buf b = { 0 };
