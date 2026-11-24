@@ -259,7 +259,6 @@ int dino_process_run(
  */
 void dino_process_result_free(dino_process_result_t *result);
 
-
 /**
  * Read an environment variable of this process. UTF-8 on every platform.
  *
