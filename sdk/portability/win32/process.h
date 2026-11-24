@@ -13,7 +13,7 @@ _CRTIMP __typeof__(_beginthreadex) _beginthreadex __attribute__((deprecated(
     "_beginthreadex() is Windows-only; use dino_thread_create() from <dino/core/thread.h>")));
 
 _CRTIMP __typeof__(_getpid) _getpid __attribute__((deprecated(
-    "_getpid() is Windows-only; use dino_process_current_id() from <dino/core/process.h>")));
+    "_getpid() is Windows-only; use getpid() from <unistd.h>, which works on every target")));
 _CRTIMP __typeof__(_cwait) _cwait __attribute__((deprecated(
     "_cwait() is Windows-only; use dino_process_wait() from <dino/core/process.h>")));
 _CRTIMP __typeof__(_spawnl) _spawnl __attribute__((deprecated(

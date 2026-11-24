@@ -8,5 +8,5 @@ void raw_winsock1(void)
 {
     SOCKET s = socket(AF_INET, SOCK_STREAM, 0); // expected-warning {{use dino_socket_create()}}
     closesocket(s);                             // expected-warning {{use dino_socket_close()}}
-    (void)WSAGetLastError();                    // expected-warning {{use dino_error()}}
+    (void)WSAGetLastError();                    // expected-warning {{report errors through dino_error()}}
 }

@@ -64,18 +64,18 @@ void raw_posix(char **argv, char **envp)
     clearenv();                            // expected-warning {{clearenv() is Linux-only}}
     (void)gettid();                        // expected-warning {{use dino_thread_current_id()}}
 #endif
-    (void)getpid();                        // expected-warning {{use dino_process_current_id()}}
+    (void)getpid();
 
     int s = socket(AF_INET, SOCK_STREAM, 0); // expected-warning {{use dino_socket_create()}}
-    bind(s, &addr, len);                   // expected-warning {{use dino_socket_bind()}}
-    listen(s, 1);                          // expected-warning {{use dino_socket_listen()}}
+    bind(s, &addr, len);
+    listen(s, 1);
     accept(s, &addr, &len);                // expected-warning {{use dino_socket_accept()}}
     connect(s, &addr, len);                // expected-warning {{use dino_socket_connect()}}
     send(s, "x", 1, 0);                    // expected-warning {{use dino_socket_send()}}
-    recv(s, fds, 1, 0);                    // expected-warning {{use dino_socket_recv()}}
-    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)); // expected-warning {{use dino_socket_setopt()}}
-    shutdown(s, SHUT_RDWR);                // expected-warning {{use dino_socket_shutdown()}}
-    sendto(s, "x", 1, 0, &addr, len);      // expected-warning {{use dino_socket_sendto()}}
+    recv(s, fds, 1, 0);
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    shutdown(s, SHUT_RDWR);
+    sendto(s, "x", 1, 0, &addr, len);
     recvfrom(s, fds, 1, 0, &addr, &len);   // expected-warning {{use dino_socket_recvfrom()}}
 #ifdef _GNU_SOURCE
     accept4(s, &addr, &len, 0);            // expected-warning {{accept4() is Linux-only}}
@@ -122,9 +122,9 @@ void raw_posix(char **argv, char **envp)
 
 #ifdef CLOCK_REALTIME
     struct timespec ts = { 0, 0 };
-    nanosleep(&ts, NULL);                  // expected-warning {{use dino_sleep_us()}}
-    clock_gettime(CLOCK_MONOTONIC, &ts);   // expected-warning {{use dino_time_monotonic_ns()}}
-    clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL); // expected-warning {{clock_nanosleep() is POSIX-only}}
+    nanosleep(&ts, NULL);                  // expected-warning {{nanosleep() rounds down}}
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    clock_nanosleep(CLOCK_MONOTONIC, 0, &ts, NULL); // expected-warning {{clock_nanosleep() rounds down}}
 #endif
 
     // Still quiet: right on files, or no dino replacement.

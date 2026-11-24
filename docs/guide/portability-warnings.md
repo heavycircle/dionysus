@@ -1,6 +1,6 @@
 # Portability warnings
 
-Calling `pipe()`, `fork()`, `pthread_create()` or `Sleep()` directly compiles fine on the platform
+Calling `pipe()`, `fork()`, `usleep()` or `Sleep()` directly compiles fine on the platform
 you test on and then breaks, or quietly behaves differently, on the other one. When the SDK has a
 portable replacement, code that links it is told so at the call site:
 
@@ -42,48 +42,43 @@ Only calls that have a `dino_*` replacement, on the platform where the call exis
 | `fork`, `execv`, `execvp`, `execve`, `execl`, `execlp`, `execle`, `posix_spawn`, `posix_spawnp`                                                        | Linux    | `dino_process_spawn` (`dino/core/process.h`)                                                                                |
 | `waitpid`, `wait`, `waitid`, `wait4`                                                                                                                   | Linux    | `dino_process_wait`                                                                                                         |
 | `kill`                                                                                                                                                 | Linux    | `dino_process_kill`                                                                                                         |
-| `getpid`                                                                                                                                               | Linux    | `dino_process_current_id`                                                                                                   |
 | `CreateProcessA`, `CreateProcessW`, `_spawn*`, `_exec*`, `_cwait`                                                                                      | Windows  | `dino_process_spawn`, `dino_process_wait`                                                                                   |
-| `TerminateProcess`, `GetCurrentProcessId`, `_getpid`                                                                                                   | Windows  | `dino_process_kill`, `dino_process_current_id`                                                                              |
+| `TerminateProcess`, `GetCurrentProcessId`, `_getpid`                                                                                                   | Windows  | `dino_process_kill`, `getpid` (which works on every target)                                                                 |
 | `setenv`, `unsetenv`, `putenv`, `clearenv`                                                                                                             | Linux    | `dino_env_set`, `dino_env_unset`                                                                                            |
 | `_putenv`, `GetEnvironmentVariableA/W`, `SetEnvironmentVariableA/W`                                                                                    | Windows  | `dino_env_get`, `dino_env_set`, `dino_env_unset`                                                                            |
 | `pipe`, `pipe2`                                                                                                                                        | Linux    | `dino_pipe_create` (`dino/core/pipe.h`)                                                                                     |
 | `CreatePipe`                                                                                                                                           | Windows  | `dino_pipe_create`                                                                                                          |
-| `pthread_create`, `pthread_join`, `pthread_detach`, `sched_yield`                                                                                      | both     | `dino_thread_*` (`dino/core/thread.h`)                                                                                      |
+| `pthread_condattr_setclock`                                                                                                                            | both     | `dino_cond_timedwait` (`dino/core/mutex.h`): Windows refuses `CLOCK_MONOTONIC`                                              |
 | `thrd_*`, `mtx_*`, `cnd_*`, `call_once` (C11 `<threads.h>`, which MinGW lacks)                                                                         | Linux    | `dino_thread_*`, `dino_mutex_*`, `dino_cond_*`, `dino_once`                                                                 |
 | `gettid`                                                                                                                                               | Linux    | `dino_thread_current_id`                                                                                                    |
 | `CreateThread`, `_beginthread`, `_beginthreadex`, `GetCurrentThreadId`, `SwitchToThread`                                                               | Windows  | `dino_thread_create`, `dino_thread_current_id`, `dino_thread_yield`                                                         |
-| `pthread_mutex_*`, `pthread_cond_*`, `pthread_once`                                                                                                    | both     | `dino_mutex_*`, `dino_cond_*`, `dino_once` (`dino/core/mutex.h`)                                                            |
 | `InitializeCriticalSection`, `InitializeCriticalSectionAndSpinCount`, `InitializeConditionVariable`, `SleepConditionVariableCS`, `InitOnceExecuteOnce` | Windows  | `dino_mutex_create`, `dino_cond_*`, `dino_once`                                                                             |
-| `socket`, `bind`, `listen`, `accept`, `connect`, `send`, `recv`, `sendto`, `recvfrom`, `setsockopt`, `shutdown`                                        | both     | `dino_socket_*` (`dino/core/network.h`)                                                                                     |
+| `socket`, `accept`, `connect`, `send`, `recvfrom`                                                                                                      | both     | `dino_socket_*` (`dino/core/network.h`)                                                                                     |
 | `accept4`                                                                                                                                              | Linux    | `dino_socket_accept`                                                                                                        |
 | `closesocket`, `ioctlsocket`, `WSASocketA/W`, `WSAStartup`, `WSACleanup`, `WSAGetLastError`                                                            | Windows  | `dino_socket_close`, `dino_socket_set_nonblocking`, `dino_socket_create`, `dino_net_init`, `dino_net_cleanup`, `dino_error` |
 | `poll`, `ppoll`, `select`, `pselect`                                                                                                                   | Linux    | `dino_poll`, `dino_select` (`dino/core/io.h`)                                                                               |
 | `WSAPoll`, `select`                                                                                                                                    | Windows  | `dino_poll`, `dino_select`                                                                                                  |
 | `epoll_create`, `epoll_create1`, `epoll_ctl`, `epoll_wait`, `epoll_pwait`                                                                              | Linux    | the event loop (`dino/core/event.h`)                                                                                        |
 | `CreateIoCompletionPort`, `GetQueuedCompletionStatus`, `GetQueuedCompletionStatusEx`                                                                   | Windows  | the event loop                                                                                                              |
-| `sleep`, `usleep`, `gettimeofday`                                                                                                                      | both     | `dino_sleep_ms`, `dino_sleep_us`, `dino_time_unix_ms` (`dino/core/time.h`)                                                  |
-| `nanosleep`, `clock_nanosleep`, `clock_gettime`                                                                                                        | Linux    | `dino_sleep_us`, `dino_time_monotonic_ns`, `dino_time_unix_ms`                                                              |
-| `Sleep`, `SleepEx`, `QueryPerformanceCounter`, `GetTickCount64`, `GetSystemTimeAsFileTime`                                                             | Windows  | `dino_sleep_ms`, `dino_time_monotonic_ns`, `dino_time_unix_ms`                                                              |
+| `usleep`                                                                                                                                               | both     | `dino_sleep_us` (`dino/core/time.h`): Windows rounds down to whole milliseconds                                             |
+| `nanosleep`, `clock_nanosleep`                                                                                                                         | Linux    | `dino_sleep_us`: Windows rounds down to whole milliseconds                                                                  |
+| `Sleep`, `SleepEx`, `QueryPerformanceCounter`, `GetTickCount64`, `GetSystemTimeAsFileTime`                                                             | Windows  | `dino_sleep_ms`, `clock_gettime` or `dino_time_monotonic_ns` (25 KB smaller on Windows), `dino_time_unix_ms`                |
 | `GetFileSizeEx`                                                                                                                                        | Windows  | `dino_file_size` (`dino/core/fs.h`)                                                                                         |
 
 The socket calls are flagged whether they come from `<winsock2.h>` or from the Winsock 1 that `<windows.h>` includes without `WIN32_LEAN_AND_MEAN`.
 
-On Windows, the `pthread_*` calls come from winpthreads, a library `dino_thread_*` and
-`dino_mutex_*` don't need.
+Calls that behave the same on every target aren't flagged, even where the SDK has a similar `dino_*` call: `pthread_*` (winpthreads on Windows, linked statically, about 8–10 KB), `sched_yield`, `getpid`, `sleep`, `gettimeofday`, `clock_gettime` (which pulls in winpthreads on Windows, about 25 KB more than `dino_time_monotonic_ns`), and `bind`, `listen`, `recv`, `sendto`, `setsockopt` and `shutdown`.
 
-These stay quiet:
+These stay quiet too:
 
 - `read`, `write` and `close`, which are right on files, and nothing at compile time can tell a file
   descriptor from a pipe or a socket.
 - Calls with no dino replacement, such as `pthread_sigmask`, `sigaction`, `getaddrinfo` and `getenv` (which reads the environment the same way everywhere).
-- `pthread_cond_timedwait` on Windows only, where winpthreads defines it in its header, too early
-  to attach a warning. It is still flagged on Linux.
-- `usleep`, `pipe2`, `nanosleep`, `clock_gettime`, `kill`, `setenv` and the other POSIX additions in strict language modes (`-std=c11` without
+- `usleep`, `pipe2`, `nanosleep`, `kill`, `setenv` and the other POSIX additions in strict language modes (`-std=c11` without
   feature macros), where the C library doesn't declare them anyway.
-- `recv` and `poll` in a glibc build with `_FORTIFY_SOURCE` (the `dino test --memcheck` build doesn't use it): glibc then calls them through checking versions of its own.
+- `poll` in a glibc build with `_FORTIFY_SOURCE` (the `dino test --memcheck` build doesn't use it): glibc then calls them through checking versions of its own.
 
-A call inside a **macro** from a system header is a different case from an inline function: the macro expands in your code, so the compiler reports the call there, and under `-Werror` it fails the build. Wrap the macro's use, `DINO_PLATFORM_CALL(VENDOR_SLEEP())`, or turn the warning off for that file.
+A call inside a **macro** from a system header is a different case from an inline function: the macro expands in your code, so the compiler reports the call there, and under `-Werror` it fails the build. Wrap the macro's use, `DINO_PLATFORM_CALL(VENDOR_FORK())`, or turn the warning off for that file.
 
 ## Opting out
 

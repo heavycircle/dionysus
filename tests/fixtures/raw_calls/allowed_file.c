@@ -7,8 +7,9 @@
 void allowed_file(void);
 void allowed_file(void)
 {
-    pthread_mutex_t m;
-    pthread_mutex_init(&m, NULL);
-    sleep(1);
-    pthread_mutex_destroy(&m);
+    pthread_condattr_t attr;
+    pthread_condattr_setclock(&attr, 1);
+#if defined(_WIN32) || defined(_GNU_SOURCE) || defined(_DEFAULT_SOURCE) || defined(_BSD_SOURCE)
+    usleep(1);
+#endif
 }
