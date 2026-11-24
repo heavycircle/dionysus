@@ -7,7 +7,7 @@ set -euo pipefail
 
 range=${1:?usage: scripts/lintcommit.sh <revision-range>}
 
-types='build|chore|ci|docs|feat|fix|perf|refactor|revert|test'
+types='build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test'
 conventional="^($types)(\([a-z0-9_./-]+\))?!?: [^ A-Z].*[^.]\$"
 release='^release: v[0-9]+\.[0-9]+\.[0-9]+$'
 
