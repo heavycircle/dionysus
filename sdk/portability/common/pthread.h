@@ -10,7 +10,10 @@
 #if defined(DINO__WARNINGS) && !defined(DINO__PTHREAD_H) && (defined(_PTHREAD_H) || defined(WIN_PTHREADS_H))
 #define DINO__PTHREAD_H
 
+// glibc declares it only with POSIX feature macros, which strict C modes leave out.
+#if !defined(__GLIBC__) || defined(__USE_XOPEN2K)
 __typeof__(pthread_condattr_setclock) pthread_condattr_setclock __attribute__((deprecated(
     "pthread_condattr_setclock() fails with EINVAL for CLOCK_MONOTONIC on Windows; for a timed wait that ignores clock changes use dino_cond_timedwait() from <dino/core/mutex.h>")));
+#endif
 
 #endif

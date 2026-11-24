@@ -8,10 +8,12 @@
 
 #include <pthread.h>
 
+#if !defined(__GLIBC__) || defined(__USE_XOPEN2K)
 static inline int vendor_set_clock(pthread_condattr_t *attr)
 {
     return pthread_condattr_setclock(attr, 1);
 }
+#endif
 
 // A macro's call is checked where it's used, in the project's own code.
 #define VENDOR_CLOCK_MACRO(attr) pthread_condattr_setclock(attr, 1)
