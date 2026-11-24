@@ -357,6 +357,15 @@ where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same w
 
 ### Design rules
 
+**Plain C first.** Users should write the C they already know. Before adding a `dino_*` call, a portability warning or a wrapper, check in this order, and say in the PR which case applies:
+
+1. **The C library already agrees** on every target (musl, and MinGW over the UCRT, with the flags `toolchain.cmake` sets): add nothing. Document it in [docs/sdk/libc.md](docs/sdk/libc.md), and don't flag it, even if a `dino_*` call exists.
+2. **A standard name exists and Windows can be made to match** faithfully, `errno` included: fix it behind that name with a compile flag, a link-level definition or an existing wrapper header, with an opt-out. A new wrapper header name is a last resort: wrappers sit in front of every project header of the same name (#152).
+3. **The platforms differ in a way the name can't hide**, or **there is no standard form**: add a `dino_*` call, in POSIX shape where possible (the same argument order and return conventions).
+4. **It is measurably smaller or faster** on Linux or Windows: a `dino_*` call is justified, with the numbers in the PR and in libc.md. Measure with `dino build --release`, on every target the claim covers.
+
+Each `dino_*` area's reason is listed in libc.md; a call that loses its reason gets removed.
+
 - **Handles are opaque, and each type is its own C type**, so passing one where another is expected doesn't compile (`tests/headers.sh` checks it). A handle is a pointer to an undefined struct, `typedef struct dino_<thing> *dino_<thing>_t`, with `NULL` as its `DINO_INVALID_<THING>`. Where a platform has no struct behind it (a POSIX pipe's descriptor, a pid), the value is carried in the pointer type through `uintptr_t` and never dereferenced. The one exception is `dino_socket_t`, an integer holding the OS socket so that it can be passed to platform calls, with `DINO_INVALID_SOCKET` as all bits set.
 - **Names:** `dino_<thing>_<verb>` for functions, where the thing is what the call acts on, usually but not always the module (`dino_socket_send`, `dino_cond_wait` in the mutex module, `dino_env_get` in the process module), and `dino_<thing>_t` for every type (`dino_process_spawn_opts_t`, `dino_thread_fn_t`). Adding something to a container reads `dino_<container>_add_<thing>` (`dino_event_add_socket`, `dino_event_add_timer`). `DINO_` for macros and constants. Nothing outside these prefixes; `tests/headers.sh` checks it.
 - **Return values:** `0` for success and `-1` for failure, never a platform error code.
@@ -368,8 +377,9 @@ where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same w
 - **Strings are UTF-8** on every platform; Windows code converts them for the `W` APIs.
 - **Headers** are self-contained, in `extern "C"` guards, and documented with `/** */` comments
   (`tests/headers.sh` checks the first two).
-- **No winpthreads.** Threads and mutexes use the Win32 API directly (`CreateThread`,
-  `CRITICAL_SECTION`); winpthreads works but makes binaries much larger.
+- **No winpthreads in the SDK's own code.** Its threads and mutexes use the Win32 API directly
+  (`CreateThread`, `CRITICAL_SECTION`), so a program that never calls pthreads doesn't carry
+  winpthreads (8–10 KB, or about 25 KB with `clock_gettime`). User code may use pthreads.
 - **Handles aren't inherited.** Every socket, pipe or file the SDK opens is close-on-exec on
   POSIX and non-inheritable on Windows, so child processes only get what they're explicitly given.
 - **Internal names use `dino__`.** Helpers private to one file are `static`. When an SDK
@@ -405,7 +415,7 @@ of `core` and `DINO_CORE_` below.
 5. Add `sdk/tests/test_<name>.c` covering every function, including the error paths
    (`DINO_INVALID_*` handles, bad arguments). `dino test --all` and CI pick it up automatically;
    make sure it passes on all seven targets and under `--memcheck`.
-6. If the module replaces platform calls (a `pipe()`, a `CreateThread()`), make them warn. Add a
+6. If the module replaces platform calls that misbehave somewhere (a `pipe()`, a `CreateThread()`), make them warn. Add a
    redeclaration to the wrapper for the header that declares each one, in `sdk/portability/common`
    (headers on both platforms), `posix` or `win32`, creating the wrapper if there isn't one yet (copy
    an existing wrapper's shape). Then add the call with its `expected-warning` comment to
