@@ -4,27 +4,26 @@
 
 #include "dino_portability.h"
 
-// Changing the environment: setenv() and friends are POSIX, _putenv() is
-// Windows', and neither side's calls exist on the other. getenv() reads it
-// the same everywhere and stays quiet.
+// MinGW has no setenv or unsetenv; the SDK defines them
+// (sdk/src/libc/setenv_win32.c).
+#if defined(_WIN32) && defined(_INC_STDLIB) && !defined(DINO_NO_LIBC_SHIMS) && !defined(DINO__STDLIB_SHIMS)
+#define DINO__STDLIB_SHIMS
+int setenv(const char *name, const char *value, int overwrite);
+int unsetenv(const char *name);
+#endif
+
+// Changing the environment: setenv() and unsetenv() work on every target (the
+// SDK provides them on Windows); the platforms' other ways don't.
 #if defined(DINO__WARNINGS) && !defined(DINO__STDLIB_H) && (defined(_STDLIB_H) || defined(_INC_STDLIB))
 #define DINO__STDLIB_H
 
 #ifdef _WIN32
 _CRTIMP __typeof__(_putenv) _putenv __attribute__((deprecated(
-    "_putenv() is Windows-only; use dino_env_set() or dino_env_unset() from <dino/core/process.h>")));
-// Strict modes leave each of these out: when unsure, no warning.
+    "_putenv() is Windows-only and treats an empty value as unset; use setenv() or unsetenv() from <stdlib.h>, which work on every target")));
 #else
-#if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) \
-    || defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
-__typeof__(setenv) setenv __attribute__((deprecated(
-    "setenv() is POSIX-only; use dino_env_set() from <dino/core/process.h>")));
-__typeof__(unsetenv) unsetenv __attribute__((deprecated(
-    "unsetenv() is POSIX-only; use dino_env_unset() from <dino/core/process.h>")));
-#endif
 #if defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
 __typeof__(putenv) putenv __attribute__((deprecated(
-    "putenv() keeps the caller's string and is _putenv() on Windows; use dino_env_set() from <dino/core/process.h>")));
+    "putenv() keeps the caller's string and is _putenv() on Windows; use setenv() from <stdlib.h>, which works on every target")));
 #endif
 #ifdef _GNU_SOURCE
 __typeof__(clearenv) clearenv __attribute__((deprecated(

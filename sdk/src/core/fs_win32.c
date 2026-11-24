@@ -85,61 +85,6 @@ int dino_file_size(const char *path, uint64_t *size)
     return 0;
 }
 
-// No MOVEFILE_COPY_ALLOWED: across volumes it copies, which isn't a rename and
-// isn't atomic. Linux fails there too (EXDEV).
-int dino_file_rename(const char *from, const char *to)
-{
-    if (!from || !to)
-        return dino__fail(DINO_EINVAL);
-    WCHAR *wfrom = to_wide(from);
-    if (!wfrom)
-        return -1;
-    WCHAR *wto = to_wide(to);
-    if (!wto)
-    {
-        free(wfrom);
-        return -1;
-    }
-    BOOL ok = MoveFileExW(wfrom, wto, MOVEFILE_REPLACE_EXISTING);
-    if (!ok)
-        dino__error_set_os();
-    free(wto);
-    free(wfrom);
-    return ok ? 0 : -1;
-}
-
-int dino_file_remove(const char *path)
-{
-    if (!path)
-        return dino__fail(DINO_EINVAL);
-    WCHAR *wide = to_wide(path);
-    if (!wide)
-        return -1;
-    DWORD attributes = GetFileAttributesW(wide);
-    BOOL  ok;
-    if (attributes == INVALID_FILE_ATTRIBUTES)
-        ok = FALSE;
-    else if (attributes & FILE_ATTRIBUTE_DIRECTORY)
-        ok = RemoveDirectoryW(wide);
-    else
-    {
-        if (attributes & FILE_ATTRIBUTE_READONLY)
-            SetFileAttributesW(wide, attributes & ~(DWORD)FILE_ATTRIBUTE_READONLY);
-        ok = DeleteFileW(wide);
-        // Left as it was if the file stays.
-        if (!ok && (attributes & FILE_ATTRIBUTE_READONLY))
-        {
-            DWORD err = GetLastError();
-            SetFileAttributesW(wide, attributes);
-            SetLastError(err);
-        }
-    }
-    if (!ok)
-        dino__error_set_os();
-    free(wide);
-    return ok ? 0 : -1;
-}
-
 // The missing-stdio problem only affects processes spawned by the Linux kernel's
 // call_usermodehelper, so there is nothing to set up on Windows.
 int dino_fs_init(void)

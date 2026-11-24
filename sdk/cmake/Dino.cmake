@@ -50,7 +50,7 @@ endif()
 # one later (or changes it) changes nothing, silently. Note what was used, and
 # warn at the end of the top-level CMakeLists.txt about any that differ now.
 set(DINO__OPTIONS DINO_NO_PLATFORM_WARNINGS DINO_NO_AUTO_RUNTIME DINO_NO_LEAK_CHECK
-    DINO_NO_UTF8_MANIFEST DINO_SDK_WERROR DINO_LINK_FOR)
+    DINO_NO_UTF8_MANIFEST DINO_NO_LIBC_SHIMS DINO_SDK_WERROR DINO_LINK_FOR)
 foreach(_dino_option IN LISTS DINO__OPTIONS)
     set(DINO__USED_${_dino_option} "${${_dino_option}}")
 endforeach()

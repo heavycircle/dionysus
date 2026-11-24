@@ -83,6 +83,12 @@ else()
     if(WIN32)
         set_property(TARGET dino_core APPEND PROPERTY INTERFACE_LINK_LIBRARIES "ws2_32;advapi32")
     endif()
+    if(DINO__PREBUILT_LIBC)
+        add_library(dino_libc STATIC IMPORTED GLOBAL)
+        set_target_properties(dino_libc PROPERTIES
+            IMPORTED_LOCATION "${_dino_lib}/libdino_libc.a"
+            INTERFACE_LINK_LIBRARIES advapi32)
+    endif()
     add_library(dino_util STATIC IMPORTED GLOBAL)
     set_target_properties(dino_util PROPERTIES
         IMPORTED_LOCATION "${_dino_lib}/libdino_util.a"

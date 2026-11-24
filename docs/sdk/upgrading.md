@@ -16,6 +16,20 @@ almost everything here: a removed or renamed name fails to build, and the error 
 | `dino_runtime_init()`, `<dino/core/runtime.h>` | nothing: setup is automatic. To fail early, call `dino_net_init()`; a program built with `DINO_NO_AUTO_RUNTIME` calls `dino_fs_init()` |
 | `dino_runtime_cleanup()`                       | nothing, or `dino_net_cleanup()`, which it called (and which 0.8 made return `int`)                                                    |
 
+### `rename`, `remove`, `setenv`, `unsetenv` and `getentropy` work on Windows
+
+The SDK now defines these on Windows under their standard names, behaving as on Linux and setting `errno`: `rename` replaces an existing file, `remove` deletes read-only files and empty directories, and `setenv`, `unsetenv` and `getentropy`, which MinGW lacks, exist. A project with its own Windows definitions sets `DINO_NO_LIBC_SHIMS` before `project()`.
+
+| Removed                         | Use instead                                                 |
+| ------------------------------- | ----------------------------------------------------------- |
+| `dino_file_rename(from, to)`    | `rename(from, to)`; check `errno` instead of `dino_error()` |
+| `dino_file_remove(path)`        | `remove(path)`                                              |
+| `dino_env_get(name, buf, size)` | `getenv(name)`, copying the value if you keep it            |
+| `dino_env_set(name, value)`     | `setenv(name, value, 1)`                                    |
+| `dino_env_unset(name)`          | `unsetenv(name)`                                            |
+
+On Windows, `getenv` can't see a variable set to an empty value, which `dino_env_get` could.
+
 ### Windows: 64-bit file offsets and `gmtime_r`
 
 Windows targets now build with `_FILE_OFFSET_BITS=64` and `_POSIX_THREAD_SAFE_FUNCTIONS`, as musl always has. `off_t` and `struct stat`'s `st_size` are 64-bit, so `stat`, `fseeko`, `ftello` and `ftruncate` work past 2 GB, and `gmtime_r`/`localtime_r` are declared. A prebuilt Windows library compiled without the flag that passes `off_t` or `struct stat` across its API no longer matches; rebuild it with dino.

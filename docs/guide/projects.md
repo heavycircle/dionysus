@@ -168,6 +168,7 @@ project(app C)
 | Option                      | Effect                                                                                                                                                     |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DINO_NO_AUTO_RUNTIME`      | don't run the SDK's setup before `main()` (see [runtime](../sdk/runtime.md))                                                                               |
+| `DINO_NO_LIBC_SHIMS`        | don't provide the SDK's Windows `rename`, `remove`, `setenv`, `unsetenv` and `getentropy` (see [dino vs libc](../sdk/libc.md)), for a project with its own |
 | `DINO_NO_LEAK_CHECK`        | don't link the leak check into `dino_test()` executables                                                                                                   |
 | `DINO_NO_UTF8_MANIFEST`     | don't make Windows executables use UTF-8, for a project with its own manifest (see [UTF-8 on Windows](../sdk/fs.md#utf-8-on-windows))                      |
 | `DINO_NO_PLATFORM_WARNINGS` | don't warn about platform calls that have a `dino_*` replacement                                                                                           |

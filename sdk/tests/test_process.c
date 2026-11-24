@@ -280,8 +280,9 @@ UTEST(process, environment_replaces_the_parents)
 #ifdef _WIN32
     const char *const argv[] = SHELL("echo %DINO_TEST_VAR%");
     // cmd.exe needs SYSTEMROOT; the parent's DINO_TEST_OTHER must not leak in.
-    char systemroot[MAX_PATH + 16] = "SYSTEMROOT=";
-    dino_env_get("SYSTEMROOT", systemroot + 11, MAX_PATH);
+    char        systemroot[MAX_PATH + 16] = "SYSTEMROOT=";
+    const char *root                      = getenv("SYSTEMROOT");
+    snprintf(systemroot + 11, MAX_PATH, "%s", root ? root : "");
     const char *const env[] = { "DINO_TEST_VAR=from env", systemroot, NULL };
 #else
     const char *const argv[] = SHELL("echo \"$DINO_TEST_VAR${HOME:+ home leaked}\"");
@@ -312,8 +313,9 @@ UTEST(process, environment_entries_must_be_name_value)
 
     // A name starting with '=' is how Windows keeps each drive's directory.
 #ifdef _WIN32
-    char systemroot[MAX_PATH + 16] = "SYSTEMROOT=";
-    dino_env_get("SYSTEMROOT", systemroot + 11, MAX_PATH);
+    char        systemroot[MAX_PATH + 16] = "SYSTEMROOT=";
+    const char *root                      = getenv("SYSTEMROOT");
+    snprintf(systemroot + 11, MAX_PATH, "%s", root ? root : "");
     const char *const drive[] = { "=C:=C:\\", systemroot, NULL };
 #else
     const char *const drive[] = { "=C:=C:\\", NULL };

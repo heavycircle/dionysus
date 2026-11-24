@@ -50,8 +50,8 @@ void raw_posix(char **argv, char **envp)
     siginfo_t info;
     waitid(P_PID, (id_t)pid, &info, WEXITED); // expected-warning {{waitid() is POSIX-only}}
     kill(pid, SIGTERM);                    // expected-warning {{use dino_process_kill()}}
-    setenv("X", "1", 1);                   // expected-warning {{use dino_env_set()}}
-    unsetenv("X");                         // expected-warning {{use dino_env_unset()}}
+    setenv("X", "1", 1);
+    unsetenv("X");
 #endif
 #if defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
     wait4(pid, NULL, 0, NULL);             // expected-warning {{wait4() is POSIX-only}}

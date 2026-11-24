@@ -41,7 +41,7 @@ These hold across every module, so each page only mentions exceptions.
 
 `dino_socket_t` is the one integer among them: it holds the operating system's socket (the descriptor on Linux, the `SOCKET` on Windows), so it can be passed to platform calls the SDK doesn't wrap. The other handles are pointers; keep them in variables of their own type, and pass them through a `void *` (thread arguments, event-loop userdata) with a cast back to that type.
 
-**Names.** Everything the SDK defines starts with `dino_` (functions and types) or `DINO_` (macros and constants), followed by the thing acted on: `dino_socket_send`, `dino_event_add_timer`, `dino_mutex_lock`, `dino_cond_wait`, `dino_env_get`. Types end in `_t`. Names with a double underscore (`dino__*`, `DINO__*`) are internal.
+**Names.** Everything the SDK defines starts with `dino_` (functions and types) or `DINO_` (macros and constants), followed by the thing acted on: `dino_socket_send`, `dino_event_add_timer`, `dino_mutex_lock`, `dino_cond_wait`. Types end in `_t`. Names with a double underscore (`dino__*`, `DINO__*`) are internal.
 
 **Creating handles.** Functions that only construct something return the new handle, or its invalid
 value on failure: `dino_socket_create`, `dino_mutex_create`, `dino_event_loop_create`. Functions that

@@ -256,12 +256,6 @@ UTEST(error, processes)
     EXPECT_EQ(DINO_EINVAL, dino_error());
     EXPECT_EQ(-1, dino_process_wait(DINO_INVALID_PROCESS, NULL));
     EXPECT_EQ(DINO_EINVAL, dino_error());
-
-    char value[8];
-    EXPECT_EQ(-1, dino_env_get("DINO_TEST_NO_SUCH_VARIABLE", value, sizeof(value)));
-    EXPECT_EQ(DINO_ENOENT, dino_error());
-    EXPECT_EQ(-1, dino_env_set("not=a=name", "x"));
-    EXPECT_EQ(DINO_EINVAL, dino_error());
 }
 
 static int join_invalid(void *arg)

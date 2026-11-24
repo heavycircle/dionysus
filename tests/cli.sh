@@ -771,6 +771,63 @@ CMAKE
     ! grep -q 'not rewritten' out || { cat out; return 1; }
 }
 
+# The SDK's Windows setenv and rename are used by default; with
+# DINO_NO_LIBC_SHIMS a project's own definitions link without clashing.
+case_libc_shims() {
+    project libc_shims
+    cat >src/main.c <<'C'
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void)
+{
+    if (setenv("DINO_SHIM", "on", 1) != 0 || rename("missing", "other") == 0)
+        return 1;
+    puts(getenv("DINO_SHIM"));
+    return 0;
+}
+C
+    dino build win64 -v >out 2>&1 || { cat out; return 1; }
+    grep -q 'libdino_libc.a' out || { echo "dino_libc not linked"; return 1; }
+    cat >src/main.c <<'C'
+#include <stdio.h>
+#include <stdlib.h>
+
+int setenv(const char *name, const char *value, int overwrite)
+{
+    (void)name, (void)value, (void)overwrite;
+    return 0;
+}
+
+int main(void)
+{
+    return setenv("X", "1", 1);
+}
+C
+    dino build win64 -v -- -DDINO_NO_LIBC_SHIMS=ON >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'libdino_libc.a' out || { echo "DINO_NO_LIBC_SHIMS ignored"; return 1; }
+}
+
+# The prebuilt SDK's wrapper headers come before the C library's, as in the
+# source build: as -isystem, zig would search its own headers first, and
+# neither the warnings nor the Windows declarations would be seen.
+case_prebuilt_wrappers() {
+    project prebuilt_wrappers
+    cat >src/main.c <<'C'
+#include <stdlib.h>
+#include <unistd.h>
+
+int main(void)
+{
+    (void)usleep(1);
+    return setenv("X", "1", 1);
+}
+C
+    prebuilt build win64 -v >out 2>&1 || { cat out; return 1; }
+    grep -q "mutex_win32\.c" out && { echo "prebuilt SDK not used"; return 1; }
+    grep -q "usleep() rounds down" out || { echo "no portability warning"; return 1; }
+}
+
 # An SDK option set after project() is too late, and the configure says so.
 case_late_sdk_option_warns() {
     project late_option

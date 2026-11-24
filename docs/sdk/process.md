@@ -139,13 +139,8 @@ dino_process_wait(child, &status);
 
 ## This process and the environment
 
-| Function                        | Does                                                                                                                                                           | Returns                   |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| `dino_env_get(name, buf, size)` | Read a variable, truncated to fit `buf` like `snprintf`. A return of `size` or more means it was cut; `buf` may be `NULL` with `size` 0 to ask for the length. | its length, `-1` if unset |
-| `dino_env_set(name, value)`     | Set a variable. Children spawned afterwards with a `NULL` env see it.                                                                                          | `0`, `-1`                 |
-| `dino_env_unset(name)`          | Remove a variable (removing one that isn't set succeeds).                                                                                                      | `0`, `-1`                 |
+Use the C library: `getpid()` from `<unistd.h>` for this process's ID, and `getenv`, `setenv` and `unsetenv` from `<stdlib.h>` for the environment, on every target. MinGW has no `setenv` or `unsetenv`, so the SDK defines them on Windows (opt out with `DINO_NO_LIBC_SHIMS`). Children spawned afterwards with a `NULL` env see the changes.
 
-This process's ID is plain `getpid()` from `<unistd.h>`, on every target. All strings are UTF-8, including on Windows, where the SDK converts them for the wide-character
-APIs. Changing the environment isn't safe while other threads read or change it.
+Values are UTF-8 on Windows too (Windows 10 1903 and later), through the manifest dino links. One difference remains: Windows' C runtime can't hold an empty variable, so after `setenv(name, "", 1)` `getenv` returns `NULL` there. Changing the environment isn't safe while other threads read or change it.
 
 See also: [`examples/process_example`](../../examples/process_example/main.c).

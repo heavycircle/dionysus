@@ -4,6 +4,12 @@
 
 #include "dino_portability.h"
 
+// MinGW has no getentropy; the SDK defines it (sdk/src/libc/getentropy_win32.c).
+#if defined(_WIN32) && defined(_UNISTD_H) && !defined(DINO_NO_LIBC_SHIMS) && !defined(DINO__UNISTD_SHIMS)
+#define DINO__UNISTD_SHIMS
+int getentropy(void *buffer, size_t length);
+#endif
+
 #if defined(DINO__WARNINGS) && !defined(DINO__UNISTD_H) && (defined(_UNISTD_H))
 #define DINO__UNISTD_H
 
