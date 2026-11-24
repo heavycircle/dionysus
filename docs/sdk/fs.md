@@ -3,7 +3,7 @@
 `#include <dino/core/fs.h>` · `dino_core`
 
 Most file work needs nothing from the SDK: `fopen`, `fread`, `fwrite` and `fclose` from `stdio.h`
-behave the same on every target (see [dino vs libc](libc.md)), with UTF-8 paths on Windows too (see [UTF-8 on Windows](#utf-8-on-windows)). This module covers what doesn't: file sizes over 2 GB, renaming over a file and removing one, and stdio for programs the kernel starts.
+behave the same on every target (see [dino vs libc](libc.md)), with UTF-8 paths on Windows too (see [UTF-8 on Windows](#utf-8-on-windows)). So do `rename` and `remove`, which the SDK makes behave on Windows as on Linux (see [renaming and removing](#renaming-and-removing)). This module covers what's left: file sizes over 2 GB and stdio for programs the kernel starts.
 
 ## File sizes over 2 GB
 
@@ -47,22 +47,18 @@ directory, or one whose target is gone, fails as the directory or the missing fi
 
 ## Renaming and removing
 
-The C library's `rename` and `remove` differ on Windows: `rename` fails when the destination exists, so the usual save (write `conf.tmp`, then rename it over `conf`) works once and then fails every time, and `remove` refuses a read-only file. Use these instead:
+Use the C library's `rename` and `remove`; they behave as on Linux on every target. On Windows the UCRT's own versions differ, so the SDK defines them there under the same names: `rename` replaces a file already at the destination, so the usual save (write `conf.tmp`, then rename it over `conf`) works every time, and `remove` deletes a read-only file and an empty directory too. Both set `errno` as Linux would (`ENOENT`, `EACCES`, `ENOTEMPTY`, `EXDEV`, ...).
 
 ```c
 FILE *f = fopen("conf.tmp", "wb");
 /* ... write it, check fclose ... */
-if (dino_file_rename("conf.tmp", "conf") != 0)
-    fprintf(stderr, "save failed: %s\n", dino_error_message(dino_error()));
+if (rename("conf.tmp", "conf") != 0)
+    perror("save failed");
 ```
 
-| Function                     | Does                                                                                  | Returns                                     |
-| ---------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `dino_file_rename(from, to)` | Rename a file or directory, replacing a file already at `to`. Within one file system. | `0`, `-1`                                   |
-| `dino_file_remove(path)`     | Remove a file, read-only ones included, or an empty directory.                        | `0`, `-1` (`DINO_ENOENT` if it isn't there) |
-
 - **Open files on Windows** can't be renamed or removed while open, by this program or another, unless they were opened with delete sharing, which `fopen` doesn't do. Close the file first.
-- **Replacing a directory** with `dino_file_rename` works on Linux when the destination is an empty directory; Windows refuses. Rename directories only to new names.
+- **Replacing a directory** with `rename` works on Linux when the destination is an empty directory; Windows refuses. Rename directories only to new names.
+- **Opting out:** a project with its own Windows `rename` or `remove` sets `DINO_NO_LIBC_SHIMS` before `project()` (see [projects](../guide/projects.md)).
 
 ## UTF-8 on Windows
 

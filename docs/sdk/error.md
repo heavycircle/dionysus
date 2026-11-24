@@ -64,25 +64,25 @@ int main(void)
 
 ## The codes
 
-| Code                | Means                                                                   | Typical sources                                                                         |
-| ------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `DINO_EAGAIN`       | Not now: a non-blocking call would have had to wait.                    | `recv`, `send`, `accept` on a non-blocking socket                                       |
-| `DINO_EINPROGRESS`  | A non-blocking connect has started.                                     | `dino_socket_connect`                                                                   |
-| `DINO_EINVAL`       | An argument is invalid: a null pointer, an invalid handle, a bad value. | every module                                                                            |
-| `DINO_ENOMEM`       | Out of memory.                                                          | anything that creates a handle                                                          |
-| `DINO_ENOENT`       | No such file, directory, program or variable; not added to this loop.   | `dino_process_spawn`, `dino_file_size`, `dino_env_get`, `dino_event_mod_*` and `_del_*` |
-| `DINO_EACCES`       | Permission denied, or not yours: a mutex another thread holds.          | `dino_process_spawn`, `dino_socket_bind`, `dino_mutex_unlock`                           |
-| `DINO_EEXIST`       | It already exists: already in this loop.                                | `dino_event_add_*`                                                                      |
-| `DINO_EMFILE`       | Too many open files, sockets or handles.                                | `dino_socket_create`, `dino_socket_accept`, `dino_pipe_create`                          |
-| `DINO_ECONNREFUSED` | Nothing is listening at the address.                                    | `dino_socket_connect`, `dino_socket_error`                                              |
-| `DINO_ECONNRESET`   | The peer reset or aborted the connection.                               | `dino_socket_recv`, `dino_socket_send`                                                  |
-| `DINO_EPIPE`        | The other end is closed: nothing can be written any more.               | `dino_socket_send`, `dino_pipe_write`                                                   |
-| `DINO_EADDRINUSE`   | The address is already in use.                                          | `dino_socket_bind`                                                                      |
-| `DINO_ETIMEDOUT`    | The operation itself timed out.                                         | `dino_socket_connect`, `dino_socket_error`                                              |
-| `DINO_EUNREACH`     | The network or the host can't be reached.                               | `dino_socket_connect`                                                                   |
-| `DINO_ENOTCONN`     | Not connected.                                                          | `dino_socket_send`, `dino_socket_shutdown`                                              |
-| `DINO_ENOTSUP`      | This platform, or this kernel, can't do it.                             | `dino_event_add_process` before Linux 5.3                                               |
-| `DINO_EOTHER`       | A failure with no code of its own.                                      | anything                                                                                |
+| Code                | Means                                                                   | Typical sources                                                         |
+| ------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `DINO_EAGAIN`       | Not now: a non-blocking call would have had to wait.                    | `recv`, `send`, `accept` on a non-blocking socket                       |
+| `DINO_EINPROGRESS`  | A non-blocking connect has started.                                     | `dino_socket_connect`                                                   |
+| `DINO_EINVAL`       | An argument is invalid: a null pointer, an invalid handle, a bad value. | every module                                                            |
+| `DINO_ENOMEM`       | Out of memory.                                                          | anything that creates a handle                                          |
+| `DINO_ENOENT`       | No such file, directory, program or variable; not added to this loop.   | `dino_process_spawn`, `dino_file_size`, `dino_event_mod_*` and `_del_*` |
+| `DINO_EACCES`       | Permission denied, or not yours: a mutex another thread holds.          | `dino_process_spawn`, `dino_socket_bind`, `dino_mutex_unlock`           |
+| `DINO_EEXIST`       | It already exists: already in this loop.                                | `dino_event_add_*`                                                      |
+| `DINO_EMFILE`       | Too many open files, sockets or handles.                                | `dino_socket_create`, `dino_socket_accept`, `dino_pipe_create`          |
+| `DINO_ECONNREFUSED` | Nothing is listening at the address.                                    | `dino_socket_connect`, `dino_socket_error`                              |
+| `DINO_ECONNRESET`   | The peer reset or aborted the connection.                               | `dino_socket_recv`, `dino_socket_send`                                  |
+| `DINO_EPIPE`        | The other end is closed: nothing can be written any more.               | `dino_socket_send`, `dino_pipe_write`                                   |
+| `DINO_EADDRINUSE`   | The address is already in use.                                          | `dino_socket_bind`                                                      |
+| `DINO_ETIMEDOUT`    | The operation itself timed out.                                         | `dino_socket_connect`, `dino_socket_error`                              |
+| `DINO_EUNREACH`     | The network or the host can't be reached.                               | `dino_socket_connect`                                                   |
+| `DINO_ENOTCONN`     | Not connected.                                                          | `dino_socket_send`, `dino_socket_shutdown`                              |
+| `DINO_ENOTSUP`      | This platform, or this kernel, can't do it.                             | `dino_event_add_process` before Linux 5.3                               |
+| `DINO_EOTHER`       | A failure with no code of its own.                                      | anything                                                                |
 
 ## Pitfalls
 

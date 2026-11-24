@@ -52,8 +52,18 @@ configure_file(cmake/version.h.in "${CMAKE_CURRENT_BINARY_DIR}/include/dino/vers
 target_include_directories(dino_core PUBLIC include "${CMAKE_CURRENT_BINARY_DIR}/include")
 
 if(WIN32)
-    # advapi32 for RtlGenRandom (unguessable pipe names).
+    # advapi32 for RtlGenRandom (unguessable pipe names, getentropy).
     target_link_libraries(dino_core PRIVATE ws2_32 advapi32)
+    # C library calls MinGW lacks or gets wrong, under their standard names
+    # (docs/sdk/libc.md). One file each, so a program links only what it calls
+    # and a project's own definition wins over the archive; a library of their
+    # own, so DINO_NO_LIBC_SHIMS can leave them out (interface.cmake).
+    add_library(dino_libc STATIC
+        src/libc/getentropy_win32.c
+        src/libc/remove_win32.c
+        src/libc/rename_win32.c
+        src/libc/setenv_win32.c)
+    target_link_libraries(dino_libc PRIVATE advapi32)
 endif()
 
 # Optional extras built on dino_core (logging, ...), kept out of the core library.
@@ -107,7 +117,7 @@ if(DINO_SDK_WERROR)
 else()
     list(APPEND dino_sdk_warnings -Wno-error)
 endif()
-foreach(target dino_core dino_util dino_test_output dino_leakcheck dino_utf8_console)
+foreach(target dino_core dino_libc dino_util dino_test_output dino_leakcheck dino_utf8_console)
     if(TARGET ${target})
         target_compile_definitions(${target} PRIVATE _GNU_SOURCE)
         if(WIN32)
@@ -138,12 +148,17 @@ if(DINO_SDK_PREBUILD)
     if(TARGET dino_utf8_console)
         set(dino_utf8_console ON)
     endif()
+    set(dino_libc OFF)
+    if(TARGET dino_libc)
+        set(dino_libc ON)
+    endif()
     file(WRITE "${dino_prebuilt_info}"
         "set(DINO__PREBUILT_VERSION \"${PROJECT_VERSION}\")\n"
         "set(DINO__PREBUILT_TARGET \"${ZIG_TARGET}\")\n"
         "set(DINO__PREBUILT_BUILD_TYPE \"${CMAKE_BUILD_TYPE}\")\n"
         "set(DINO__PREBUILT_LEAK_CHECK ${dino_leak_check})\n"
-        "set(DINO__PREBUILT_UTF8_CONSOLE ${dino_utf8_console})\n")
+        "set(DINO__PREBUILT_UTF8_CONSOLE ${dino_utf8_console})\n"
+        "set(DINO__PREBUILT_LIBC ${dino_libc})\n")
     set(out "${DINO_SDK_PREBUILD}")
     set(copy "${CMAKE_COMMAND}" -E copy)
     set(steps
@@ -160,6 +175,10 @@ if(DINO_SDK_PREBUILD)
     if(dino_utf8_console)
         list(APPEND steps COMMAND ${copy} $<TARGET_OBJECTS:dino_utf8_console> "${out}/utf8_console.o")
         list(APPEND dino_prebuilt_parts dino_utf8_console)
+    endif()
+    if(dino_libc)
+        list(APPEND steps COMMAND ${copy} $<TARGET_FILE:dino_libc> "${out}/libdino_libc.a")
+        list(APPEND dino_prebuilt_parts dino_libc)
     endif()
     list(APPEND steps COMMAND ${copy} "${dino_prebuilt_info}" "${out}/")
     add_custom_target(dino_prebuilt ALL ${steps} VERBATIM)

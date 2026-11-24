@@ -14,9 +14,25 @@
 # links the SDK gets the warnings, the SDK's own sources never do. The POSIX-only
 # headers stay off Windows include paths so __has_include(<poll.h>) still tells
 # the truth there, and the reverse for the Windows ones.
-target_include_directories(dino_core BEFORE INTERFACE
+# A target of their own, not dino_core's: an imported dino_core (the prebuilt
+# SDK) would pass them as -isystem, which zig searches after its own C library
+# headers, so the wrappers would never be reached.
+add_library(dino__portability INTERFACE)
+target_include_directories(dino__portability INTERFACE
     "${DINO__SDK_DIR}/portability/common"
     "${DINO__SDK_DIR}/portability/${DINO_PLATFORM}")
+set_property(TARGET dino_core APPEND PROPERTY INTERFACE_LINK_LIBRARIES dino__portability)
+
+# Windows definitions of C library calls MinGW lacks or gets wrong (rename,
+# remove, setenv, unsetenv, getentropy; sdk/src/libc), declared by the
+# wrappers above. A project with its own definitions sets DINO_NO_LIBC_SHIMS.
+option(DINO_NO_LIBC_SHIMS "Don't provide Windows versions of C library calls MinGW lacks or gets wrong" OFF)
+if(DINO_NO_LIBC_SHIMS)
+    target_compile_definitions(dino_core INTERFACE DINO_NO_LIBC_SHIMS)
+elseif(TARGET dino_libc)
+    set_property(TARGET dino_core APPEND PROPERTY INTERFACE_LINK_LIBRARIES dino_libc)
+endif()
+
 option(DINO_NO_PLATFORM_WARNINGS "Don't warn about platform calls that have a dino_* replacement" OFF)
 if(DINO_NO_PLATFORM_WARNINGS)
     target_compile_definitions(dino_core INTERFACE DINO_ALLOW_PLATFORM_CALLS)

@@ -259,41 +259,6 @@ int dino_process_run(
  */
 void dino_process_result_free(dino_process_result_t *result);
 
-
-/**
- * Read an environment variable of this process. UTF-8 on every platform.
- *
- * Like snprintf, the value is truncated to fit buf, always NUL-terminated, and
- * the full length is returned, so a return of size or more means it was cut.
- *
- * @param  name  Variable name.
- * @param  buf   Destination; may be NULL when size is 0, to ask for the length.
- * @param  size  Size of buf in bytes.
- * @return Length of the value (without the NUL), or -1 if it isn't set or name
- *         is invalid; then buf, if size isn't 0, holds an empty string.
- */
-int dino_env_get(const char *name, char *buf, size_t size);
-
-/**
- * Set an environment variable of this process. Children spawned afterwards
- * with a NULL env inherit it. Not safe while other threads read or change the
- * environment.
- *
- * @param  name   Variable name: not empty, no '='.
- * @param  value  New value; may be empty.
- * @return 0 on success, -1 on failure or invalid arguments.
- */
-int dino_env_set(const char *name, const char *value);
-
-/**
- * Remove an environment variable of this process. Removing one that isn't set
- * succeeds.
- *
- * @param  name  Variable name: not empty, no '='.
- * @return 0 on success, -1 on failure or invalid arguments.
- */
-int dino_env_unset(const char *name);
-
 #ifdef __cplusplus
 }
 #endif

@@ -2,6 +2,7 @@
 #include <windows.h>
 #endif
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,6 +75,22 @@ UTEST(libc, timespec_get_reads_the_wall_clock)
     EXPECT_GE(now.tv_sec, before);
     EXPECT_LE(now.tv_sec, after);
     EXPECT_LT(now.tv_nsec, 1000000000L);
+}
+
+// The SDK defines getentropy on Windows (sdk/src/libc), where MinGW lacks it.
+UTEST(libc, getentropy_fills_up_to_256_bytes)
+{
+    unsigned char a[256], b[256];
+    memset(a, 0, sizeof(a));
+    memset(b, 0, sizeof(b));
+    ASSERT_EQ(0, getentropy(a, sizeof(a)));
+    ASSERT_EQ(0, getentropy(b, sizeof(b)));
+    EXPECT_NE(0, memcmp(a, b, sizeof(a)));
+    EXPECT_EQ(0, getentropy(a, 0));
+    unsigned char big[257];
+    errno = 0;
+    EXPECT_EQ(-1, getentropy(big, sizeof(big)));
+    EXPECT_EQ(EIO, errno);
 }
 
 UTEST_MAIN()

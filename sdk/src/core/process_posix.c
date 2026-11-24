@@ -291,39 +291,3 @@ int dino_process_wait_timeout(dino_process_t process, int timeout_ms, dino_proce
             delay_ms *= 2;
     }
 }
-
-int dino_env_get(const char *name, char *buf, size_t size)
-{
-    if (!buf && size)
-        return dino__fail(DINO_EINVAL);
-    // On any failure buf holds an empty string, so printing it is safe.
-    if (size)
-        buf[0] = '\0';
-    if (!dino__process_valid_env_name(name))
-        return dino__fail(DINO_EINVAL);
-    const char *value = getenv(name);
-    if (!value)
-        return dino__fail(DINO_ENOENT);
-    size_t len = strlen(value);
-    if (size)
-    {
-        size_t copy = len < size ? len : size - 1;
-        memcpy(buf, value, copy);
-        buf[copy] = '\0';
-    }
-    return (int)len;
-}
-
-int dino_env_set(const char *name, const char *value)
-{
-    if (!dino__process_valid_env_name(name) || !value)
-        return dino__fail(DINO_EINVAL);
-    return setenv(name, value, 1) == 0 ? 0 : dino__fail_os();
-}
-
-int dino_env_unset(const char *name)
-{
-    if (!dino__process_valid_env_name(name))
-        return dino__fail(DINO_EINVAL);
-    return unsetenv(name) == 0 ? 0 : dino__fail_os();
-}

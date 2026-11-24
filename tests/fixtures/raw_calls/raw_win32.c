@@ -63,10 +63,10 @@ void raw_win32(void)
     (void)GetCurrentThreadId();                     // expected-warning {{use dino_thread_current_id()}}
     SwitchToThread();                               // expected-warning {{use dino_thread_yield()}}
     SleepEx(0, FALSE);                              // expected-warning {{use dino_sleep_ms()}}
-    GetEnvironmentVariableA("X", buf, 1);           // expected-warning {{use dino_env_get()}}
-    GetEnvironmentVariableW(L"X", NULL, 0);         // expected-warning {{use dino_env_get()}}
-    SetEnvironmentVariableA("X", "1");              // expected-warning {{use dino_env_set()}}
-    SetEnvironmentVariableW(L"X", NULL);            // expected-warning {{use dino_env_set()}}
+    GetEnvironmentVariableA("X", buf, 1);           // expected-warning {{use getenv() from <stdlib.h>}}
+    GetEnvironmentVariableW(L"X", NULL, 0);         // expected-warning {{use getenv() from <stdlib.h>}}
+    SetEnvironmentVariableA("X", "1");              // expected-warning {{use setenv() or unsetenv()}}
+    SetEnvironmentVariableW(L"X", NULL);            // expected-warning {{use setenv() or unsetenv()}}
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);                   // expected-warning {{use timespec_get(&ts, TIME_UTC)}}
     GetFileSizeEx(r, &now);                         // expected-warning {{use dino_file_size()}}
@@ -92,7 +92,7 @@ void raw_win32(void)
     _spawnv(_P_NOWAIT, "x", NULL);                  // expected-warning {{_spawnv() is Windows-only}}
     _execl("x", "x", NULL);                         // expected-warning {{_execl() is Windows-only}}
     _execv("x", NULL);                              // expected-warning {{_execv() is Windows-only}}
-    _putenv("X=1");                                 // expected-warning {{use dino_env_set()}}
+    _putenv("X=1");                                 // expected-warning {{use setenv() or unsetenv()}}
 
     WSAStartup(MAKEWORD(2, 2), &wsa);               // expected-warning {{WSAStartup() is Windows-only}}
     SOCKET s = socket(AF_INET, SOCK_STREAM, 0);     // expected-warning {{use dino_socket_create()}}

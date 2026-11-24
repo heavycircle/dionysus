@@ -36,13 +36,13 @@ WINBASEAPI __typeof__(SwitchToThread) SwitchToThread __attribute__((deprecated(
 WINBASEAPI __typeof__(SleepEx) SleepEx __attribute__((deprecated(
     "SleepEx() is Windows-only; use dino_sleep_ms() from <dino/core/time.h>")));
 WINBASEAPI __typeof__(GetEnvironmentVariableA) GetEnvironmentVariableA __attribute__((deprecated(
-    "GetEnvironmentVariableA() is Windows-only; use dino_env_get() from <dino/core/process.h>")));
+    "GetEnvironmentVariableA() is Windows-only; use getenv() from <stdlib.h>")));
 WINBASEAPI __typeof__(GetEnvironmentVariableW) GetEnvironmentVariableW __attribute__((deprecated(
-    "GetEnvironmentVariableW() is Windows-only; use dino_env_get() from <dino/core/process.h>")));
+    "GetEnvironmentVariableW() is Windows-only; use getenv() from <stdlib.h>")));
 WINBASEAPI __typeof__(SetEnvironmentVariableA) SetEnvironmentVariableA __attribute__((deprecated(
-    "SetEnvironmentVariableA() is Windows-only; use dino_env_set() or dino_env_unset() from <dino/core/process.h>")));
+    "SetEnvironmentVariableA() is Windows-only; use setenv() or unsetenv() from <stdlib.h>, which work on every target")));
 WINBASEAPI __typeof__(SetEnvironmentVariableW) SetEnvironmentVariableW __attribute__((deprecated(
-    "SetEnvironmentVariableW() is Windows-only; use dino_env_set() or dino_env_unset() from <dino/core/process.h>")));
+    "SetEnvironmentVariableW() is Windows-only; use setenv() or unsetenv() from <stdlib.h>, which work on every target")));
 WINBASEAPI __typeof__(GetSystemTimeAsFileTime) GetSystemTimeAsFileTime __attribute__((deprecated(
     "GetSystemTimeAsFileTime() is Windows-only; use timespec_get(&ts, TIME_UTC) from <time.h>, which works on every target")));
 WINBASEAPI __typeof__(GetFileSizeEx) GetFileSizeEx __attribute__((deprecated(
