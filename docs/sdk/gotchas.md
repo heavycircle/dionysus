@@ -35,7 +35,7 @@ int main(void)
 
 The same applies beyond `printf`. Values that need 64 bits, such as file offsets, sizes and
 timestamps in ns, belong in `int64_t`/`uint64_t`, not `long`. `ftell` and `fseek` return and take a
-`long`, so they fail past 2 GB on Windows. Get sizes with [`dino_file_size`](fs.md).
+`long`, so they fail past 2 GB on Windows. Use `fseeko` and `ftello`, whose `off_t` is 64-bit on every target from 0.9, or get sizes with [`dino_file_size`](fs.md).
 
 ## Sockets aren't file descriptors
 
