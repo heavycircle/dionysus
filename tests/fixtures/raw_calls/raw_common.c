@@ -26,6 +26,8 @@ void raw_common(void)
 #if defined(_WIN32) || defined(_GNU_SOURCE) || defined(_DEFAULT_SOURCE) || defined(_BSD_SOURCE)
     usleep(1); // expected-warning {{usleep() rounds down to whole milliseconds}}
 #endif
+    // glibc declares it only with POSIX feature macros (raw_strict leaves them out).
+#if !defined(__GLIBC__) || defined(__USE_XOPEN2K)
     pthread_condattr_t attr;
     pthread_condattr_setclock(&attr, 1); // expected-warning {{use dino_cond_timedwait()}}
 
@@ -40,6 +42,9 @@ void raw_common(void)
     // reports it: documented, with DINO_PLATFORM_CALL as the way out.
     (void)VENDOR_CLOCK_MACRO(&attr); // expected-warning {{use dino_cond_timedwait()}}
     (void)DINO_PLATFORM_CALL(VENDOR_CLOCK_MACRO(&attr));
+#elif !defined(_GNU_SOURCE) && !defined(_DEFAULT_SOURCE)
+    // expected-no-diagnostics
+#endif
 
     // Calls that behave the same on every target stay quiet.
     sleep(1);
