@@ -64,7 +64,6 @@ distinct_handles() {
         'dino_process_kill(pipe)|dino_process_kill(process)'
         'dino_event_add_socket(sock, loop, 0, NULL)|dino_event_add_socket(loop, sock, 0, NULL)'
         'dino_event_del_timer(loop, set)|dino_event_del_timer(loop, timer)'
-        'dino_fd_set_add(timer, sock)|dino_fd_set_add(set, sock)'
     )
     local ok=1 lang compiler
     for call in "${calls[@]}"; do
@@ -77,19 +76,18 @@ distinct_handles() {
 #include <stddef.h>
 
 #include <dino/core/event.h>
-#include <dino/core/io.h>
 #include <dino/core/network.h>
 #include <dino/core/pipe.h>
 #include <dino/core/process.h>
 #include <dino/core/thread.h>
 
 void mix(dino_socket_t sock, dino_pipe_t pipe, dino_process_t process, dino_event_loop_t loop,
-    dino_event_timer_t timer, dino_fd_set_t set);
+    dino_event_timer_t timer);
 void mix(dino_socket_t sock, dino_pipe_t pipe, dino_process_t process, dino_event_loop_t loop,
-    dino_event_timer_t timer, dino_fd_set_t set)
+    dino_event_timer_t timer)
 {
     (void)sock, (void)pipe, (void)process;
-    (void)loop, (void)timer, (void)set;
+    (void)loop, (void)timer;
     (void)$which;
 }
 C
@@ -157,11 +155,14 @@ for header in "$@"; do
     path=$inc/$header
     printf '#include <%s>\n' "$header" >"$work/tu.c"
     for target in "${targets[@]}"; do
-        if ! zig cc -target "$target" -std=c11 "${cflags[@]}" -x c "$work/tu.c" 2>"$work/err"; then
+        # Windows projects get the SDK's POSIX socket headers (interface.cmake).
+        posix=()
+        [[ $target == *windows* ]] && posix=(-I "$repo/sdk/portability/win32-posix")
+        if ! zig cc -target "$target" -std=c11 "${cflags[@]}" "${posix[@]}" -x c "$work/tu.c" 2>"$work/err"; then
             fail "$header: doesn't compile alone as C for $target"
             sed 's/^/      /' "$work/err" | head -n 10
         fi
-        if ! zig c++ -target "$target" -std=c++11 "${cflags[@]}" -x c++ "$work/tu.c" 2>"$work/err"; then
+        if ! zig c++ -target "$target" -std=c++11 "${cflags[@]}" "${posix[@]}" -x c++ "$work/tu.c" 2>"$work/err"; then
             fail "$header: doesn't compile alone as C++ for $target"
             sed 's/^/      /' "$work/err" | head -n 10
         fi

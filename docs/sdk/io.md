@@ -1,117 +1,73 @@
 # Poll and select
 
-`#include <dino/core/io.h>` · `dino_core`
+`#include <poll.h>`, `<sys/select.h>` · `dino_core` (no SDK header)
 
-Wait until one of a few sockets is ready to read or write. `dino_poll` is `poll()` on Linux and
-`WSAPoll()` on Windows, with one set of flags. `dino_select` is `select()` with an opaque set type,
-because Linux's `fd_set` is a bitmask of descriptors and Windows' is a list of `SOCKET`s.
+Wait until one of a few sockets is ready to read or write with plain **`poll()`** or **`select()`**, on every target. MinGW has no `poll()`, so the SDK defines it on Windows over `WSAPoll`, with what POSIX promises and `WSAPoll` doesn't:
 
-Both scan every socket on every call, so their cost grows with the number of sockets. Use them
-for a handful. For more, or for pipes, processes and timers, use the [event loop](event.md).
+- a negative descriptor (`-1`, `INVALID_SOCKET`) is an unused slot, skipped, where `WSAPoll` reports it as an error;
+- `POLLERR`, `POLLHUP` and `POLLNVAL` in `events` are ignored, where some `WSAPoll` versions reject them;
+- a peer that closed its side is `POLLIN` as well as `POLLHUP`, so a loop that only checks `POLLIN` still calls `recv` and sees the end of the stream;
+- nothing to watch waits out the timeout, where `WSAPoll` fails at once;
+- `errno` says why it failed.
 
-## Example: waiting with `dino_poll`
+`select()` is Winsock's own on Windows, which takes the same `fd_set` macros.
+
+Both scan every socket on every call, so their cost grows with the number of sockets. Use them for a handful. For more, or for pipes, processes and timers, use the [event loop](event.md).
+
+## Example: waiting with `poll`
 
 ```c
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <poll.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/socket.h>
 
-#include <dino/core/io.h>
 #include <dino/core/network.h>
-
-#define PORT 19201
 
 int main(void)
 {
-    dino_socket_t server = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family      = AF_INET;
+    addr.sin_port        = htons(19201);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    dino_socket_t server = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     dino_socket_set_reuseaddr(server, 1);
-    if (server == DINO_INVALID_SOCKET || dino_socket_bind(server, "127.0.0.1", PORT) != 0
-        || dino_socket_listen(server, 4) != 0)
+    if (server == DINO_INVALID_SOCKET || bind(server, (struct sockaddr *)&addr, sizeof(addr)) != 0
+        || listen(server, 4) != 0)
         return 1;
 
-    dino_socket_t client = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
-    if (dino_socket_connect(client, "127.0.0.1", PORT) != 0)
+    dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    if (dino_socket_connect(client, (struct sockaddr *)&addr, sizeof(addr)) != 0)
         return 1;
-    dino_socket_t conn = dino_socket_accept(server);
+    dino_socket_t conn = dino_socket_accept(server, NULL, NULL);
 
     // Nothing has been sent yet, so this times out.
-    dino_pollfd_t pfd = { conn, DINO_POLLIN, 0 };
-    int           n   = dino_poll(&pfd, 1, 50);
+    struct pollfd pfd = { conn, POLLIN, 0 };
+    int           n   = poll(&pfd, 1, 50);
     printf("before sending: %d ready\n", n);
 
-    dino_socket_send(client, "x", 1);
-    n = dino_poll(&pfd, 1, 1000);
-    printf("after sending: %d ready, readable: %s\n", n, (pfd.revents & DINO_POLLIN) ? "yes" : "no");
+    dino_socket_send(client, "x", 1, 0);
+    n = poll(&pfd, 1, 1000);
+    printf("after sending: %d ready, readable: %s\n", n, (pfd.revents & POLLIN) ? "yes" : "no");
 
     dino_socket_close(conn);
     dino_socket_close(client);
     dino_socket_close(server);
-    return n == 1 && (pfd.revents & DINO_POLLIN) ? 0 : 1;
+    return n == 1 && (pfd.revents & POLLIN) ? 0 : 1;
 }
 ```
 
-## `dino_poll`
+## Differences that remain
 
-```
-int dino_poll(dino_pollfd_t *fds, int nfds, int timeout_ms);
-```
-
-Each `dino_pollfd_t` has `sock`, the `events` you want, and `revents`, filled in with what's ready.
-
-| Flag           | In `events`                                             | In `revents`                                   |
-| -------------- | ------------------------------------------------------- | ---------------------------------------------- |
-| `DINO_POLLIN`  | wait for data, a connection to accept, or end of stream | readable                                       |
-| `DINO_POLLOUT` | wait until a send won't block, or a `connect` finished  | writable                                       |
-| `DINO_POLLERR` | not needed                                              | reported whenever it happens                   |
-| `DINO_POLLHUP` | not needed                                              | the peer hung up; reported whenever it happens |
-
-It returns the number of sockets with something in `revents`, `0` on timeout (every `revents` is
-then `0`), or `-1` on error.
-
-An entry whose `sock` is `DINO_INVALID_SOCKET` is an unused slot: it is skipped and its `revents`
-stays `0`, so a fixed-size array can hold gaps where clients left.
-
-With nothing to watch (`nfds` is `0`, or only unused slots) it waits out the timeout and returns
-`0`, like a sleep. Windows' `WSAPoll` would fail at once; the SDK waits there too, so a server whose
-last client left doesn't spin.
-
-A peer that closes the connection, or shuts down its side, shows up as `DINO_POLLIN | DINO_POLLHUP` on every platform when the socket is watched for `DINO_POLLIN`, and the next `recv` returns 0. A loop that only looks at `DINO_POLLIN` sees the end of the stream too.
-
-A signal arriving during the wait doesn't end it: on Linux the SDK waits again for whatever time is left, so `dino_poll` returns `-1` only for a real error, as on Windows.
-
-## `dino_select`
-
-```
-dino_fd_set_t set = dino_fd_set_create();
-dino_fd_set_add(set, sock);
-int n = dino_select(max_fd, set, DINO_INVALID_FD_SET, DINO_INVALID_FD_SET, 1000);
-if (n > 0 && dino_fd_set_has(set, sock)) { ... }
-dino_fd_set_destroy(set);
-```
-
-| Function                                                                      | Does                                                          |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `dino_fd_set_create()`                                                        | a new, empty set, or `DINO_INVALID_FD_SET`                    |
-| `dino_fd_set_destroy(set)`                                                    | free it                                                       |
-| `dino_fd_set_zero(set)`, `dino_fd_set_add(set, s)`, `dino_fd_set_del(set, s)` | `FD_ZERO`, `FD_SET`, `FD_CLR`                                 |
-| `dino_fd_set_has(set, s)`                                                     | `FD_ISSET`: non-zero if `s` is in the set                     |
-| `dino_select(max_fd, rfds, wfds, efds, timeout_ms)`                           | wait; returns the number ready, `0` on timeout, `-1` on error |
-
-- **`max_fd`** is the highest socket plus one, as for `select()`. Windows ignores it, but pass it for
-  Linux.
-- **Unused sets:** pass `DINO_INVALID_FD_SET` for any set you don't need.
-- **Nothing to watch:** with no socket in any set it waits out the timeout and returns `0`, on
-  Windows too.
-- **Refilling:** `dino_select` overwrites the sets with the ready sockets, so refill them before
-  every call.
-- **A non-blocking connect** shows up in the write set when it finishes, whether it worked or not, on every platform (Winsock reports a failure only as an exception; the SDK moves it to the write set). Then ask `dino_socket_error(sock)` how it ended.
-- **Signals** don't end the wait early on Linux, as for `dino_poll`.
-- **Capacity:** a set holds descriptors below 1024 on Linux and at most 64 sockets on Windows.
-  `dino_fd_set_add` returns `-1` for a socket that doesn't fit, `0` otherwise.
-
-Prefer `dino_poll`: it has no size limits and doesn't need the sets rebuilt.
-
-## Pipes and other handles
-
-Both functions take sockets only. Wait on a pipe with `dino_pipe_wait`, or on pipes, sockets,
-processes and timers together with the [event loop](event.md).
+- **Sockets only on Windows.** `WSAPoll` and Winsock's `select` take sockets, not pipes, files or the console. Wait on a pipe with [`dino_pipe_wait`](pipe.md), or on pipes, processes and sockets together with the [event loop](event.md).
+- **A failed non-blocking connect:** wait for the socket to become writable with `poll`, then read the result with [`dino_socket_error`](network.md). With `select`, Windows reports the failure in the exception set only, so watch both the write and exception sets.
+- **Signals:** on Linux a signal handler makes `poll` and `select` return `-1` with `EINTR`, even with `SA_RESTART`. Loop on it, recomputing the timeout; Windows has no signals.
+- **`select`'s limits:** Linux's `fd_set` holds descriptors below `FD_SETSIZE` (1024) and Windows' holds at most 64 sockets, whatever their values. `poll` has neither limit.
+- **Old Windows:** before Windows 10 version 2004, `WSAPoll` didn't report a failed connect at all; use the event loop, or a timeout and `dino_socket_error`, if that matters.
+- **Opting out:** `DINO_NO_LIBC_SHIMS` leaves the SDK's Windows `poll()` out, for a project with its own (see [dino vs libc](libc.md)).
 
 See also: [`examples/io_example`](../../examples/io_example/main.c).

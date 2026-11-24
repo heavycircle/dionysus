@@ -1,6 +1,7 @@
 #include "server.h"
 
 #include <string.h>
+#include <sys/socket.h>
 
 #include "protocol.h"
 
@@ -11,7 +12,7 @@ static int read_line(dino_socket_t sock, char *buf, size_t len)
     for (;;)
     {
         char c;
-        int  got = dino_socket_recv(sock, &c, 1);
+        int  got = (int)recv(sock, &c, 1, 0);
         if (got <= 0)
             return got == 0 && n == 0 ? 1 : -1;
         if (c == '\n')
@@ -34,5 +35,5 @@ int kv_serve_one(struct kv *db, dino_socket_t sock)
     kv_execute(db, request, response, KV_LINE_MAX);
     size_t len      = strlen(response);
     response[len++] = '\n';
-    return dino_socket_send(sock, response, len) == (int)len ? 0 : -1;
+    return dino_socket_send(sock, response, len, 0) == (int)len ? 0 : -1;
 }

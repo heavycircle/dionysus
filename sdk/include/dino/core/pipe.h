@@ -25,7 +25,7 @@ typedef struct dino_pipe *dino_pipe_t;
  * the kernel's pipe-buffer limit gets 4 KB), and neither is inherited by child
  * processes unless passed to one explicitly.
  *
- * Pipes are not sockets: dino_poll and dino_select don't accept them. Wait on
+ * Pipes are not sockets: poll and select don't accept them on Windows. Wait on
  * one read end with dino_pipe_wait, or on many alongside sockets with
  * dino_event_add_pipe (dino/core/event.h).
  *

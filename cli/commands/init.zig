@@ -63,7 +63,7 @@ const test_template =
     \\
     \\UTEST(app, creates_a_socket)
     \\{{
-    \\    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    \\    dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     \\    EXPECT_NE(DINO_INVALID_SOCKET, s);
     \\    dino_socket_close(s);
     \\}}

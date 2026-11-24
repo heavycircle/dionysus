@@ -1,2 +1,2 @@
 # Vendored files stay byte-identical to upstream.
-sdk/testing/utest.h
+sdk/testing/vendor/utest.h

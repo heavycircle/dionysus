@@ -365,7 +365,7 @@ where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same w
 
 Each `dino_*` area's reason is listed in libc.md; a call that loses its reason gets removed.
 
-- **Handles are opaque, and each type is its own C type**, so passing one where another is expected doesn't compile (`tests/headers.sh` checks it). A handle is a pointer to an undefined struct, `typedef struct dino_<thing> *dino_<thing>_t`, with `NULL` as its `DINO_INVALID_<THING>`. Where a platform has no struct behind it (a POSIX pipe's descriptor, a pid), the value is carried in the pointer type through `uintptr_t` and never dereferenced. The one exception is `dino_socket_t`, an integer holding the OS socket so that it can be passed to platform calls, with `DINO_INVALID_SOCKET` as all bits set.
+- **Handles are opaque, and each type is its own C type**, so passing one where another is expected doesn't compile (`tests/headers.sh` checks it). A handle is a pointer to an undefined struct, `typedef struct dino_<thing> *dino_<thing>_t`, with `NULL` as its `DINO_INVALID_<THING>`. Where a platform has no struct behind it (a POSIX pipe's descriptor, a pid), the value is carried in the pointer type through `uintptr_t` and never dereferenced. The one exception is `dino_socket_t`, the OS socket itself (`int` on POSIX, `SOCKET` on Windows) so that it goes to the POSIX socket calls, with `DINO_INVALID_SOCKET` as all bits set.
 - **Names:** `dino_<thing>_<verb>` for functions, where the thing is what the call acts on, usually but not always the module (`dino_socket_send`, `dino_event_add_timer` in the event module), and `dino_<thing>_t` for every type (`dino_process_spawn_opts_t`, `dino_thread_fn_t`). Adding something to a container reads `dino_<container>_add_<thing>` (`dino_event_add_socket`, `dino_event_add_timer`). `DINO_` for macros and constants. Nothing outside these prefixes; `tests/headers.sh` checks it.
 - **Return values:** `0` for success and `-1` for failure, never a platform error code.
   Constructors return the handle, with the `DINO_INVALID_*` value on failure; functions that start
@@ -434,7 +434,7 @@ of `core` and `DINO_CORE_` below.
   columns). Use the pinned version from [CI](#ci) (`uvx --from clang-format==19.1.7 clang-format
 -i <files>`); other versions can format differently.
 - **Includes** are sorted and grouped by clang-format, in this order: the file's own header first
-  (`io_posix.c` and `io_win32.c` start with `<dino/core/io.h>`, which keeps headers
+  (`pipe_posix.c` and `pipe_win32.c` start with `<dino/core/pipe.h>`, which keeps headers
   self-contained), then system and standard headers, then other `<dino/...>` headers in their own
   block. On Windows, `<winsock2.h>` and `<ws2tcpip.h>` always come before `<windows.h>`; the config
   pins that order.

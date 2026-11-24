@@ -2,52 +2,60 @@
 
 `#include <dino/core/network.h>` · `dino_core`
 
-TCP and UDP sockets over IPv4 and IPv6, with one API for Berkeley sockets on Linux and Winsock on
-Windows. It hides the differences that bite portable code:
+Sockets are the **POSIX calls on every target**. `<sys/socket.h>`, `<netinet/in.h>`, `<arpa/inet.h>`, `<netdb.h>` and `<poll.h>` work on Windows too: MinGW ships none of them, so the SDK provides them over Winsock. `bind`, `listen`, `recv`, `sendto`, `setsockopt`, `getsockname`, `shutdown`, `getaddrinfo`, `inet_pton` and `poll` take the same arguments and constants everywhere.
 
-- Windows sockets are `SOCKET` handles, not small integers, and are closed with `closesocket()`.
-  Here they're `dino_socket_t` and close with `dino_socket_close()`.
-- Winsock needs `WSAStartup()` first. `dino_socket_create()` calls it for you.
-- `send()` on a socket whose peer has gone raises `SIGPIPE` on Linux, which kills the process by
-  default. `dino_socket_send()` returns `-1` instead, on every platform.
-- Non-blocking mode, socket options and shutdown use different calls and constants per platform.
+The SDK adds `dino_*` calls only where the platforms differ in a way the standard name can't hide:
+
+- **A Windows socket is a `SOCKET`, not a file descriptor.** `close()` can't close one, so sockets are created and closed with `dino_socket_create` and `dino_socket_close`, and held in a `dino_socket_t`: an `int` on Linux, a `SOCKET` on Windows, so it goes to the POSIX calls without a cast.
+- **`send()` raises `SIGPIPE` on Linux** when the peer has gone, which kills the process by default. `dino_socket_send` fails with `DINO_EPIPE` instead, on every platform.
+- **Inheritance, would-block errors and datagrams differ.** `dino_socket_accept` makes sockets no child process inherits and keeps them blocking, `dino_socket_connect` reports a connect in progress as `DINO_EINPROGRESS` everywhere, and `dino_socket_recvfrom` cuts an oversized datagram to fit, as Linux does, where Windows fails the call.
+
+Winsock needs `WSAStartup()` first. The SDK starts it before `main()` in any program that includes a socket header, so `getaddrinfo` works before the first socket.
 
 ## Example: an echo over loopback
 
-A server and a client in one program. `connect()` completes against the listen backlog before
-`accept()`, so this needs no threads:
+A server and a client in one program. `connect()` completes against the listen backlog before `accept()`, so this needs no threads:
 
 ```c
+#include <netdb.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #include <dino/core/network.h>
 
-#define PORT 19101
-
 int main(void)
 {
-    dino_socket_t server = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    struct addrinfo hints, *addr;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family   = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+    if (getaddrinfo("127.0.0.1", "19101", &hints, &addr) != 0)
+        return 1;
+
+    dino_socket_t server = dino_socket_create(addr->ai_family, addr->ai_socktype, 0);
     if (server == DINO_INVALID_SOCKET)
         return 1;
     dino_socket_set_reuseaddr(server, 1);
-    if (dino_socket_bind(server, "127.0.0.1", PORT) != 0 || dino_socket_listen(server, 4) != 0)
+    if (bind(server, addr->ai_addr, addr->ai_addrlen) != 0 || listen(server, 4) != 0)
         return 1;
 
-    dino_socket_t client = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
-    if (client == DINO_INVALID_SOCKET || dino_socket_connect(client, "127.0.0.1", PORT) != 0)
+    dino_socket_t client = dino_socket_create(addr->ai_family, addr->ai_socktype, 0);
+    if (client == DINO_INVALID_SOCKET
+        || dino_socket_connect(client, addr->ai_addr, addr->ai_addrlen) != 0)
         return 1;
-    dino_socket_t conn = dino_socket_accept(server);
+    dino_socket_t conn = dino_socket_accept(server, NULL, NULL);
     if (conn == DINO_INVALID_SOCKET)
         return 1;
+    freeaddrinfo(addr);
 
-    const char *msg = "ping";
+    const char *msg     = "ping";
     char        buf[16] = { 0 };
-    dino_socket_send(client, msg, strlen(msg));
-    int n = dino_socket_recv(conn, buf, sizeof(buf) - 1); // one small message arrives whole on loopback
-    dino_socket_send(conn, buf, n);
+    dino_socket_send(client, msg, strlen(msg), 0);
+    int n = (int)recv(conn, buf, sizeof(buf) - 1, 0); // one small message arrives whole on loopback
+    dino_socket_send(conn, buf, (size_t)n, 0);
     memset(buf, 0, sizeof(buf));
-    n = dino_socket_recv(client, buf, sizeof(buf) - 1);
+    n = (int)recv(client, buf, sizeof(buf) - 1, 0);
     printf("echoed %d bytes: %s\n", n, buf);
 
     dino_socket_close(conn);
@@ -59,73 +67,37 @@ int main(void)
 
 ## Functions
 
-| Function                                             | Does                                                                                                                                                                                         | Returns                                                 |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `dino_socket_create(domain, type, protocol)`         | A new socket. `DINO_AF_INET` or `DINO_AF_INET6`; `DINO_SOCK_STREAM` with `DINO_IPPROTO_TCP`, or `DINO_SOCK_DGRAM` with `DINO_IPPROTO_UDP`.                                                   | the socket, or `DINO_INVALID_SOCKET`                    |
-| `dino_socket_close(sock)`                            | Close it and free the handle.                                                                                                                                                                | `0`, `-1`                                               |
-| `dino_socket_bind(sock, ip, port)`                   | Bind to a local address.                                                                                                                                                                     | `0`, `-1`                                               |
-| `dino_socket_listen(sock, backlog)`                  | Start accepting connections, with up to `backlog` waiting.                                                                                                                                   | `0`, `-1`                                               |
-| `dino_socket_accept(sock)`                           | Take the next connection.                                                                                                                                                                    | the new socket, or `DINO_INVALID_SOCKET`                |
-| `dino_socket_connect(sock, ip, port)`                | Connect to a remote address.                                                                                                                                                                 | `0`, `-1` on failure                                    |
-| `dino_socket_send(sock, buf, len)`                   | Send up to `len` bytes. Never raises `SIGPIPE`.                                                                                                                                              | bytes sent, `-1` on error                               |
-| `dino_socket_recv(sock, buf, len)`                   | Receive up to `len` bytes.                                                                                                                                                                   | bytes received, `0` when the peer closed, `-1` on error |
-| `dino_socket_sendto(sock, buf, len, ip, port)`       | Send one datagram to `ip` and `port` from an unconnected UDP socket.                                                                                                                         |
-| `dino_socket_recvfrom(sock, buf, len, &from)`        | Receive one datagram and who sent it (`from` may be `NULL`). A datagram larger than `buf` is cut to fit.                                                                                     |
-| `dino_socket_local_addr(sock, &addr)`                | The address and port the socket is bound to: the port `bind` picked for port `0`.                                                                                                            |
-| `dino_socket_peer_addr(sock, &addr)`                 | The other end of a connected socket, such as an accepted client.                                                                                                                             |
-| `dino_socket_shutdown(sock, how)`                    | Stop reading (`DINO_SHUT_RD`), writing (`DINO_SHUT_WR`) or both (`DINO_SHUT_RDWR`).                                                                                                          | `0`, `-1`                                               |
-| `dino_socket_set_v6only(sock, enable)`               | IPv6 sockets only: `0` makes one dual-stack, so bound to `"::"` it also accepts IPv4 peers. They start v6-only.                                                                              | `0`, `-1`                                               |
-| `dino_socket_set_reuseaddr(sock, enable)`            | So a server can rebind its port right after restarting (`SO_REUSEADDR` on Linux; Windows allows it already, and its `SO_REUSEADDR` would let another socket take the port, so it isn't set). | `0`, `-1`                                               |
-| `dino_socket_set_nonblocking(sock, enable)`          | Non-blocking mode: calls that would wait return `-1` at once instead.                                                                                                                        | `0`, `-1`                                               |
-| `dino_socket_setopt(sock, level, optname, val, len)` | Any other option. `level` and `optname` are the platform's own constants (`SOL_SOCKET`, `TCP_NODELAY`, ...), so the call needs the platform's headers.                                       | `0`, `-1`                                               |
-| `dino_net_init()` / `dino_net_cleanup()`             | Socket subsystem setup and teardown. Both optional: see [runtime](runtime.md). Call `dino_net_init` to find out up front whether sockets will work.                                          | `0`, `-1` / -                                           |
+| Function                                                     | Does                                                                                                                                                                                         | Returns                                                        |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `dino_socket_create(domain, type, protocol)`                 | `socket(2)`: `AF_INET` or `AF_INET6`, `SOCK_STREAM` or `SOCK_DGRAM`, protocol `0` or `IPPROTO_*`. Never inherited by child processes; an `AF_INET6` socket starts v6-only on every platform. | the socket, or `DINO_INVALID_SOCKET`                           |
+| `dino_socket_close(sock)`                                    | `close(2)` on Linux, `closesocket` on Windows.                                                                                                                                               | `0`, `-1`                                                      |
+| `dino_socket_accept(sock, addr, len)`                        | `accept(2)`, with the peer's address in `addr` (may be `NULL`). The new socket is blocking and not inherited, and a signal doesn't interrupt the wait.                                       | the new socket, or `DINO_INVALID_SOCKET`                       |
+| `dino_socket_connect(sock, addr, len)`                       | `connect(2)`. In progress (non-blocking, or interrupted) is `-1` with `DINO_EINPROGRESS` on every platform.                                                                                  | `0`, `-1`                                                      |
+| `dino_socket_send(sock, buf, len, flags)`                    | `send(2)`, never raising `SIGPIPE`.                                                                                                                                                          | bytes sent, `-1` on error                                      |
+| `dino_socket_recvfrom(sock, buf, len, flags, from, fromlen)` | `recvfrom(2)` as on Linux: an oversized datagram is cut to fit; `from` may be `NULL`.                                                                                                        | bytes received, `0` when a stream's peer closed, `-1` on error |
+| `dino_socket_set_reuseaddr(sock, enable)`                    | So a server can rebind its port right after restarting (`SO_REUSEADDR` on Linux; Windows allows it already, and its `SO_REUSEADDR` would let another socket take the port, so it isn't set). | `0`, `-1`                                                      |
+| `dino_socket_set_nonblocking(sock, enable)`                  | `fcntl(O_NONBLOCK)` on Linux, `ioctlsocket(FIONBIO)` on Windows, which has no `fcntl`.                                                                                                       | `0`, `-1`                                                      |
+| `dino_socket_error(sock)`                                    | The error waiting on the socket (`SO_ERROR`) as a `DINO_E*` code: how a non-blocking connect ended.                                                                                          | `0`, or a `DINO_E*` code                                       |
+| `dino_socket_last_error()`                                   | Why the last POSIX socket call on this thread failed, as a `DINO_E*` code: `errno` on Linux, `WSAGetLastError()` on Windows.                                                                 | a `DINO_E*` code                                               |
+| `dino_net_init()`                                            | Start the socket subsystem now, to fail early with a clear message. Optional.                                                                                                                | `0`, `-1`                                                      |
 
-## Addresses
+The `dino_socket_*` calls report why they failed through [`dino_error()`](error.md). The POSIX calls report through `errno` on Linux and `WSAGetLastError()` on Windows; `dino_socket_last_error()` reads whichever applies.
 
-- **Literals only:** `ip` is a numeric address literal that matches the socket's domain, such as
-  `"127.0.0.1"`, `"0.0.0.0"`, `"::1"` or `"::"`. Host names such as `"localhost"` are rejected,
-  not resolved.
-- **Link-local IPv6** addresses (`fe80::...`) need their interface after a `%`: `"fe80::1%eth0"` on Linux, or its number, `"fe80::1%2"`, on both platforms (Windows names interfaces only by number). Reported addresses carry the number back.
-- **Any interface:** bind to `"0.0.0.0"` (IPv4) or `"::"` (IPv6).
-- **IPv4 and IPv6 are separate.** An IPv6 socket is v6-only on every platform, so a server for
-  both families binds two sockets, `"0.0.0.0"` and `"::"`, on the same port. Or it calls
-  `dino_socket_set_v6only(sock, 0)` before binding one IPv6 socket to `"::"`, which then also
-  accepts IPv4 peers (shown as `::ffff:a.b.c.d`). Linux and Windows default differently; the SDK
-  sets it either way. Such a dual-stack socket also connects and sends to an IPv4 literal: `"127.0.0.1"` is taken as `"::ffff:127.0.0.1"`.
-- **Ports** are plain integers in host byte order, `0` to `65535`; anything else fails with `-1`.
-  Bind to port `0` for any free port, and read back which with `dino_socket_local_addr`.
-- **Reported addresses** come back as a `dino_socket_addr_t`: `ip`, the numeric form, and `port`. Both go straight back into `bind`, `connect` or `sendto`.
+## Writing portable socket code
 
-## UDP
-
-A UDP server binds, then answers each datagram from the address `recvfrom` reports:
-
-```c
-dino_socket_addr_t from;
-char               buf[512];
-int                n = dino_socket_recvfrom(sock, buf, sizeof buf, &from);
-if (n >= 0)
-    dino_socket_sendto(sock, buf, (size_t)n, from.ip, from.port);
-```
-
-- **One datagram per call.** `recvfrom` and `recv` return a single datagram; one larger than the buffer is cut to fit and the rest is lost, on both platforms.
-- **Connected UDP** also works: after `dino_socket_connect`, `send` and `recv` talk to that one peer only.
-- **A client that went away** doesn't break the server. Windows would report the ICMP "port unreachable" for an earlier datagram as an error from the next receive; the SDK turns that off, so it behaves as Linux does.
+- **Buffers and option values** are `char *` on Windows. Cast option values: `setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, (const char *)&on, sizeof(on))` builds on every target; a `void *` buffer converts on its own.
+- **Return types:** `recv`, `send` and `sendto` return `ssize_t` on Linux and `int` on Windows. Store the result in an `int`.
+- **Include order:** the socket headers include Winsock 2. On Windows, include them before `<windows.h>`, or define `WIN32_LEAN_AND_MEAN` first: `<windows.h>` alone brings in Winsock 1, which conflicts.
+- **IPv4 and IPv6 are separate.** An IPv6 socket is v6-only on every platform (Linux and Windows default differently). For one dual-stack listener on `"::"`, clear `IPV6_V6ONLY` with `setsockopt` before `bind`.
+- **Datagrams:** receive them with `dino_socket_recvfrom`. A plain `recv` of a datagram larger than the buffer fails on Windows. A client that went away doesn't break a UDP server: Windows would report the ICMP "port unreachable" from the next receive, and `dino_socket_create` turns that off.
+- **`poll` and `select`** work on sockets everywhere; on Windows they don't take pipes or files (see [poll and select](io.md)).
 
 ## Pitfalls
 
-- **Closing a socket doesn't stop a thread blocked on it.** A thread in `dino_socket_accept` or `dino_socket_recv` wakes when another thread closes the socket on Windows, not on Linux (where `dino_socket_shutdown` wakes it, and the descriptor may meanwhile be reused). To be able to stop such a thread, wait with `dino_poll`, a receive timeout or the [event loop](event.md) instead of blocking.
-- **Short transfers.** `send` may send fewer bytes than asked, and `recv` returns whatever has
-  arrived: a message can come in pieces, or several can come together. Loop until you have what
-  your protocol says you should.
-- **Non-blocking sockets** return `-1` from `recv`, `send` and `accept` when they would have waited, with [`dino_error()`](error.md) of `DINO_EAGAIN`; any other code is a real failure. Use [poll](io.md) or the [event loop](event.md) to learn when to call again.
+- **Closing a socket doesn't stop a thread blocked on it.** A thread in an accept or receive wakes when another thread closes the socket on Windows, not on Linux (where `shutdown` wakes it, and the descriptor may meanwhile be reused). To be able to stop such a thread, wait with `poll`, a receive timeout or the [event loop](event.md) instead of blocking.
+- **Short transfers.** `send` may send fewer bytes than asked, and `recv` returns whatever has arrived: a message can come in pieces, or several can come together. Loop until you have what your protocol says you should.
+- **Non-blocking sockets** fail when they would have waited: the `dino_socket_*` calls with `DINO_EAGAIN` in `dino_error()`, the POSIX ones with `DINO_EAGAIN` from `dino_socket_last_error()`. Use `poll` or the [event loop](event.md) to learn when to call again.
 - **A non-blocking `connect`** returns `-1` with `DINO_EINPROGRESS` once it has started. Wait for the socket to become writable, then call `dino_socket_error(sock)`: `0` means connected, anything else is why not. [Errors](error.md) has the whole sequence as a program.
-- **Accepted sockets are blocking**, even from a non-blocking listener. Call
-  `dino_socket_set_nonblocking` on each one you want non-blocking. Windows' `accept` would copy the
-  listener's mode; the SDK clears it so both platforms agree.
-- **Closing.** Close every socket exactly once. A socket registered with an event loop must be
-  removed from it (`dino_event_del_socket`) before it's closed.
-- **Wait for many sockets** with the [event loop](event.md), not one thread per connection.
+- **Closing.** Close every socket exactly once, with `dino_socket_close`. A socket registered with an event loop must be removed from it (`dino_event_del_socket`) before it's closed.
 
-See also: [`examples/network_example`](../../examples/network_example/main.c),
-[`examples/ipv6_example`](../../examples/ipv6_example/main.c), and the header for every parameter.
+See also: [`examples/network_example`](../../examples/network_example/main.c), [`examples/ipv6_example`](../../examples/ipv6_example/main.c), and the header for every parameter.

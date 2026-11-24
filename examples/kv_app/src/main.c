@@ -1,6 +1,9 @@
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #include <dino/core/network.h>
 
@@ -9,14 +12,25 @@
 
 #define DEMO_PORT 8095
 
+static struct sockaddr_in ipv4(const char *ip, int port)
+{
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_port   = htons((unsigned short)port);
+    inet_pton(AF_INET, ip, &addr.sin_addr);
+    return addr;
+}
+
 static int serve(int port)
 {
     struct kv    *db       = kv_create();
-    dino_socket_t listener = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t listener = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     if (!db || listener == DINO_INVALID_SOCKET)
         return 1;
     dino_socket_set_reuseaddr(listener, 1);
-    if (dino_socket_bind(listener, "0.0.0.0", port) != 0 || dino_socket_listen(listener, 8) != 0)
+    struct sockaddr_in any = ipv4("0.0.0.0", port);
+    if (bind(listener, (struct sockaddr *)&any, sizeof(any)) != 0 || listen(listener, 8) != 0)
     {
         fprintf(stderr, "cannot listen on port %d\n", port);
         return 1;
@@ -26,7 +40,7 @@ static int serve(int port)
 
     for (;;)
     {
-        dino_socket_t client = dino_socket_accept(listener);
+        dino_socket_t client = dino_socket_accept(listener, NULL, NULL);
         if (client == DINO_INVALID_SOCKET)
             continue;
         while (kv_serve_one(db, client) == 0)
@@ -48,14 +62,14 @@ static int demo(void)
     };
 
     struct kv    *db     = kv_create();
-    dino_socket_t server = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
-    dino_socket_t client = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t server = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     dino_socket_set_reuseaddr(server, 1);
-    if (!db || dino_socket_bind(server, "127.0.0.1", DEMO_PORT) != 0
-        || dino_socket_listen(server, 1) != 0
-        || dino_socket_connect(client, "127.0.0.1", DEMO_PORT) != 0)
+    struct sockaddr_in local = ipv4("127.0.0.1", DEMO_PORT);
+    if (!db || bind(server, (struct sockaddr *)&local, sizeof(local)) != 0 || listen(server, 1) != 0
+        || dino_socket_connect(client, (struct sockaddr *)&local, sizeof(local)) != 0)
         return 1;
-    dino_socket_t peer = dino_socket_accept(server);
+    dino_socket_t peer = dino_socket_accept(server, NULL, NULL);
 
     int ok = peer != DINO_INVALID_SOCKET;
     for (size_t i = 0; ok && i < sizeof(script) / sizeof(script[0]); i++)
@@ -63,8 +77,8 @@ static int demo(void)
         char request[300], response[300] = { 0 };
         int  len = snprintf(request, sizeof(request), "%s\n", script[i][0]);
         // The client's request sits in the socket buffer until the server reads it.
-        ok = dino_socket_send(client, request, len) == len && kv_serve_one(db, peer) == 0
-            && dino_socket_recv(client, response, sizeof(response) - 1) > 0;
+        ok = dino_socket_send(client, request, len, 0) == len && kv_serve_one(db, peer) == 0
+            && recv(client, response, sizeof(response) - 1, 0) > 0;
         response[strcspn(response, "\n")] = '\0';
         ok                                = ok && strcmp(response, script[i][1]) == 0;
         printf("> %-26s < %s%s\n", script[i][0], response, ok ? "" : "  (FAILED)");

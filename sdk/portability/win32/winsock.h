@@ -11,9 +11,9 @@
 #define DINO__WINSOCK_H
 
 DECLSPEC_IMPORT __typeof__(WSAStartup) WSAStartup __attribute__((deprecated(
-    "WSAStartup() is Windows-only, and dino_socket_create() already calls it; use dino_net_init() from <dino/core/network.h>")));
+    "WSAStartup() is Windows-only, and the SDK starts Winsock itself; to check it started, use dino_net_init() from <dino/core/network.h>")));
 DECLSPEC_IMPORT __typeof__(WSACleanup) WSACleanup __attribute__((deprecated(
-    "WSACleanup() is Windows-only; use dino_net_cleanup() from <dino/core/network.h>")));
+    "WSACleanup() is Windows-only, and it breaks every open socket; nothing needs calling, as Windows releases Winsock at exit")));
 DECLSPEC_IMPORT __typeof__(socket) socket __attribute__((deprecated(
     "socket() returns a SOCKET, not an int, on Windows; use dino_socket_create() from <dino/core/network.h>")));
 DECLSPEC_IMPORT __typeof__(accept) accept __attribute__((deprecated(
@@ -24,8 +24,6 @@ DECLSPEC_IMPORT __typeof__(send) send __attribute__((deprecated(
     "send() takes a char buffer and a SOCKET on Windows; use dino_socket_send() from <dino/core/network.h>")));
 DECLSPEC_IMPORT __typeof__(closesocket) closesocket __attribute__((deprecated(
     "closesocket() is Windows-only; use dino_socket_close() from <dino/core/network.h>")));
-DECLSPEC_IMPORT __typeof__(select) select __attribute__((deprecated(
-    "select() ignores its first argument and takes SOCKET sets on Windows; use dino_select() from <dino/core/io.h>")));
 DECLSPEC_IMPORT __typeof__(ioctlsocket) ioctlsocket __attribute__((deprecated(
     "ioctlsocket() is Windows-only; use dino_socket_set_nonblocking() from <dino/core/network.h>")));
 DECLSPEC_IMPORT __typeof__(recvfrom) recvfrom __attribute__((deprecated(

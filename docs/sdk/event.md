@@ -4,7 +4,7 @@
 
 One thread waits on any number of sockets, pipes, child processes and timers, and handles whichever
 are ready. It's built on epoll on Linux and on an I/O completion port on Windows, so a wait costs the
-same with ten sockets or ten thousand, unlike [`dino_poll`](io.md).
+same with ten sockets or ten thousand, unlike [`poll`](io.md).
 
 ## How it works
 
@@ -21,8 +21,11 @@ wait, so you never lose an event by not reading everything at once.
 ## Example: a server, a client and a timer in one loop
 
 ```c
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #include <dino/core/event.h>
 #include <dino/core/network.h>
@@ -37,16 +40,22 @@ int main(void)
     if (loop == DINO_INVALID_EVENT_LOOP)
         return 1;
 
-    dino_socket_t listener = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family      = AF_INET;
+    addr.sin_port        = htons(PORT);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+
+    dino_socket_t listener = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     dino_socket_set_reuseaddr(listener, 1);
-    if (dino_socket_bind(listener, "127.0.0.1", PORT) != 0 || dino_socket_listen(listener, 8) != 0)
+    if (bind(listener, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(listener, 8) != 0)
         return 1;
     dino_event_add_socket(loop, listener, DINO_EVENT_READ, (void *)(intptr_t)LISTENER);
 
-    dino_socket_t client = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
-    if (dino_socket_connect(client, "127.0.0.1", PORT) != 0)
+    dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    if (dino_socket_connect(client, (struct sockaddr *)&addr, sizeof(addr)) != 0)
         return 1;
-    dino_socket_send(client, "hello", 5);
+    dino_socket_send(client, "hello", 5, 0);
     dino_event_add_socket(loop, client, DINO_EVENT_READ, (void *)(intptr_t)CLIENT);
 
     // Fail rather than hang if something goes wrong.
@@ -66,19 +75,19 @@ int main(void)
             switch ((int)(intptr_t)events[i].userdata)
             {
             case LISTENER: // a connection to accept
-                conn = dino_socket_accept(listener);
+                conn = dino_socket_accept(listener, NULL, NULL);
                 dino_event_add_socket(loop, conn, DINO_EVENT_READ, (void *)(intptr_t)CONNECTION);
                 break;
             case CONNECTION: // the server's side has data: echo it back
             {
                 char buf[16];
-                int  len = dino_socket_recv(conn, buf, sizeof(buf));
+                int  len = (int)recv(conn, buf, sizeof(buf), 0);
                 if (len > 0)
-                    dino_socket_send(conn, buf, len);
+                    dino_socket_send(conn, buf, (size_t)len, 0);
                 break;
             }
             case CLIENT: // the echo came back
-                dino_socket_recv(client, reply, sizeof(reply) - 1);
+                recv(client, reply, sizeof(reply) - 1, 0);
                 ok   = strcmp(reply, "hello") == 0;
                 done = 1;
                 break;

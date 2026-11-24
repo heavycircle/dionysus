@@ -1,5 +1,7 @@
 // Before utest.h, which declares QueryPerformanceCounter itself on Windows.
 #ifdef _WIN32
+#include <winsock2.h>
+
 #include <windows.h>
 #endif
 
@@ -15,6 +17,7 @@
 #include <dino/core/time.h>
 
 #include "../src/core/thread_internal.h"
+#include "net_helpers.h"
 
 // Each test file has its own port range: ctest runs test executables in parallel.
 #define PORT 18300
@@ -27,18 +30,17 @@ struct pair
 // peer is the accepted end and is non-blocking; client writes into it.
 static int open_pair(struct pair *p, int port)
 {
-    p->server = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
-    p->client = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    p->server = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    p->client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     p->peer   = DINO_INVALID_SOCKET;
     if (p->server == DINO_INVALID_SOCKET || p->client == DINO_INVALID_SOCKET)
         return -1;
     dino_socket_set_reuseaddr(p->server, 1);
-    if (dino_socket_bind(p->server, "127.0.0.1", port) != 0
-        || dino_socket_listen(p->server, 1) != 0)
+    if (bind_to(p->server, "127.0.0.1", port) != 0 || listen(p->server, 1) != 0)
         return -1;
-    if (dino_socket_connect(p->client, "127.0.0.1", port) != 0)
+    if (connect_to(p->client, "127.0.0.1", port) != 0)
         return -1;
-    p->peer = dino_socket_accept(p->server);
+    p->peer = dino_socket_accept(p->server, NULL, NULL);
     if (p->peer == DINO_INVALID_SOCKET)
         return -1;
     return dino_socket_set_nonblocking(p->peer, 1);
@@ -89,7 +91,7 @@ UTEST_F(event, read_ready)
             utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, &utest_fixture->p));
     EXPECT_EQ(0, dino_event_wait(utest_fixture->loop, out, 8, 0));
 
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1, 0));
     ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
     EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
     EXPECT_FALSE(out[0].events & DINO_EVENT_WRITE);
@@ -111,7 +113,7 @@ UTEST_F(event, level_rereports)
     dino_event_t out[8];
     ASSERT_EQ(0,
         dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1, 0));
     for (int i = 0; i < 3; i++)
     {
         ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
@@ -119,7 +121,7 @@ UTEST_F(event, level_rereports)
     }
 
     char c;
-    ASSERT_EQ(1, dino_socket_recv(utest_fixture->p.peer, &c, 1));
+    ASSERT_EQ(1, recv_some(utest_fixture->p.peer, &c, 1));
     EXPECT_EQ(0, dino_event_wait(utest_fixture->loop, out, 8, 100));
 }
 
@@ -128,7 +130,7 @@ UTEST_F(event, oneshot_rearm)
     dino_event_t out[8];
     uint32_t     interest = DINO_EVENT_READ | DINO_EVENT_ONESHOT;
     ASSERT_EQ(0, dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, interest, NULL));
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1, 0));
     ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
     EXPECT_EQ(0, dino_event_wait(utest_fixture->loop, out, 8, 100));
 
@@ -167,7 +169,7 @@ UTEST_F(event, hangup_when_the_peer_closes)
     EXPECT_TRUE(out[0].events & DINO_EVENT_HANGUP);
     EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
     char c;
-    EXPECT_EQ(0, dino_socket_recv(utest_fixture->p.peer, &c, 1));
+    EXPECT_EQ(0, recv_some(utest_fixture->p.peer, &c, 1));
 }
 
 // With no READ or WRITE interest, a peer's FIN is not reported: it lasts, and
@@ -176,7 +178,7 @@ UTEST_F(event, half_closed_peer_is_quiet_without_interest)
 {
     dino_event_t out[8];
     ASSERT_EQ(0, dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, 0, NULL));
-    ASSERT_EQ(0, dino_socket_shutdown(utest_fixture->p.client, DINO_SHUT_WR));
+    ASSERT_EQ(0, shutdown(utest_fixture->p.client, SHUT_WR));
     EXPECT_EQ(0, dino_event_wait(utest_fixture->loop, out, 8, 200));
 
     // Asked for again, it is there.
@@ -195,7 +197,7 @@ UTEST_F(event, hangup_reports_only_the_interest)
         dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_WRITE, NULL));
     dino_socket_close(utest_fixture->p.client);
     utest_fixture->p.client = DINO_INVALID_SOCKET;
-    ASSERT_EQ(0, dino_socket_shutdown(utest_fixture->p.peer, DINO_SHUT_WR));
+    ASSERT_EQ(0, shutdown(utest_fixture->p.peer, SHUT_WR));
 
     int hangup = 0;
     for (int i = 0; i < 10 && !hangup; i++)
@@ -212,7 +214,7 @@ UTEST_F(event, del_stops_events)
     dino_event_t out[8];
     ASSERT_EQ(0,
         dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1, 0));
     ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
 
     ASSERT_EQ(0, dino_event_del_socket(utest_fixture->loop, utest_fixture->p.peer));
@@ -245,7 +247,7 @@ UTEST_F(event, socket_closed_after_an_event_is_forgotten)
     dino_event_t out[8];
     ASSERT_EQ(0,
         dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1, 0));
     ASSERT_EQ(1, dino_event_wait(utest_fixture->loop, out, 8, 1000));
 
     dino_socket_close(utest_fixture->p.peer);
@@ -275,8 +277,8 @@ UTEST_F(event, small_out_array_keeps_the_rest)
     ASSERT_EQ(0,
         dino_event_add_socket(
             utest_fixture->loop, q.peer, DINO_EVENT_READ | DINO_EVENT_ONESHOT, &b));
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
-    ASSERT_EQ(1, dino_socket_send(q.client, "y", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1, 0));
+    ASSERT_EQ(1, dino_socket_send(q.client, "y", 1, 0));
     dino_sleep_ms(50);
 
     // b is oneshot, so b can't be reported twice; a is level-triggered and
@@ -328,7 +330,7 @@ UTEST(event, many_sockets)
     static dino_socket_t socks[N];
     for (int i = 0; i < N; i++)
     {
-        socks[i] = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+        socks[i] = dino_socket_create(AF_INET, SOCK_DGRAM, 0);
         ASSERT_NE(DINO_INVALID_SOCKET, socks[i]);
         ASSERT_EQ(0, dino_event_add_socket(loop, socks[i], DINO_EVENT_WRITE, &socks[i]));
     }
@@ -583,7 +585,7 @@ UTEST_F(event, timer_fires_while_a_socket_stays_ready)
 {
     ASSERT_EQ(0,
         dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1, 0));
     uint64_t           start = dino_time_monotonic_ns();
     dino_event_timer_t timer = dino_event_add_timer(utest_fixture->loop, 10, 0, NULL);
     ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
@@ -604,7 +606,7 @@ UTEST_F(event, due_timer_leaves_room_for_a_ready_socket)
 {
     ASSERT_EQ(0,
         dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, NULL));
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1, 0));
     dino_event_timer_t timer = dino_event_add_timer(utest_fixture->loop, 0, 1, NULL);
     ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
 
@@ -688,7 +690,7 @@ UTEST(event, del_and_close_while_another_thread_waits)
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, w.loop);
     for (int i = 0; i < 50; i++)
     {
-        dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+        dino_socket_t s = dino_socket_create(AF_INET, SOCK_DGRAM, 0);
         ASSERT_NE(DINO_INVALID_SOCKET, s);
         ASSERT_EQ(0, dino_event_add_socket(w.loop, s, DINO_EVENT_READ, &w));
 
@@ -711,7 +713,7 @@ UTEST(event, mod_while_another_thread_waits)
     w.loop          = dino_event_loop_create();
     w.timeout_ms    = 5000;
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, w.loop);
-    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_DGRAM, DINO_IPPROTO_UDP);
+    dino_socket_t s = dino_socket_create(AF_INET, SOCK_DGRAM, 0);
     ASSERT_NE(DINO_INVALID_SOCKET, s);
     ASSERT_EQ(0, dino_event_add_socket(w.loop, s, DINO_EVENT_READ, NULL));
 
@@ -747,7 +749,7 @@ UTEST_F(event, oneshot_goes_to_one_of_several_waiters)
         w[i].timeout_ms = 1500;
         ASSERT_EQ(0, start_waiter(&w[i], &t[i]));
     }
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "x", 1, 0));
 
     int reads = 0;
     for (int i = 0; i < WAITERS; i++)
@@ -985,7 +987,7 @@ UTEST_F(event, pipe_and_socket_in_one_loop)
         dino_event_add_socket(
             utest_fixture->loop, utest_fixture->p.peer, DINO_EVENT_READ, &on_sock));
     ASSERT_EQ(1, dino_pipe_write(w, "x", 1));
-    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "y", 1));
+    ASSERT_EQ(1, dino_socket_send(utest_fixture->p.client, "y", 1, 0));
     dino_sleep_ms(50);
 
     int          seen_pipe = 0, seen_sock = 0;

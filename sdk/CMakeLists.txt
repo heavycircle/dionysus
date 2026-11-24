@@ -27,7 +27,6 @@ set(DINO_PLATFORM_MODULES
     error
     event
     fs
-    io
     mutex
     network
     pipe
@@ -59,12 +58,15 @@ if(WIN32)
     # (docs/sdk/libc.md). One file each, so a program links only what it calls
     # and a project's own definition wins over the archive; a library of their
     # own, so DINO_NO_LIBC_SHIMS can leave them out (interface.cmake).
+    # Winsock started before main() in programs that include a socket header.
+    target_sources(dino_core PRIVATE src/core/winsock_auto_win32.c)
     add_library(dino_libc STATIC
         src/libc/getentropy_win32.c
+        src/libc/poll_win32.c
         src/libc/remove_win32.c
         src/libc/rename_win32.c
         src/libc/setenv_win32.c)
-    target_link_libraries(dino_libc PRIVATE advapi32)
+    target_link_libraries(dino_libc PRIVATE advapi32 ws2_32)
 endif()
 
 # Optional extras built on dino_core (logging, ...), kept out of the core library.
@@ -73,7 +75,7 @@ add_library(dino_util STATIC
 )
 target_link_libraries(dino_util PUBLIC dino_core)
 
-# Used by dino_test() (cmake/Dino.cmake). testing/utest.h is sheredom/utest.h at
+# Used by dino_test() (cmake/Dino.cmake). testing/vendor/utest.h is sheredom/utest.h at
 # fc4715da3b3e3bfa936cf69850f2cfe969ed85b7, unmodified (public domain).
 add_library(dino_testing INTERFACE)
 # Object libraries rather than INTERFACE sources, so they build here with the
@@ -120,8 +122,10 @@ else()
 endif()
 foreach(target dino_core dino_libc dino_util dino_test_output dino_leakcheck dino_utf8_console)
     if(TARGET ${target})
-        target_compile_definitions(${target} PRIVATE _GNU_SOURCE)
+        target_compile_definitions(${target} PRIVATE _GNU_SOURCE DINO__SDK_SOURCE)
         if(WIN32)
+            # The POSIX socket headers dino/core/network.h includes; MinGW has none.
+            target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/portability/win32-posix")
             # _GNU_SOURCE also switches MinGW's printf family to its own
             # static copy (about 18 KB in every program whose SDK code
             # prints). The UCRT's own printf handles C99 formats.
