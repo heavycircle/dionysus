@@ -60,10 +60,8 @@ distinct_handles() {
     local wrong right
     local -a calls=(
         'dino_socket_close(pipe)|dino_socket_close(sock)'
-        'dino_pipe_close(mutex)|dino_pipe_close(pipe)'
-        'dino_mutex_lock(cond)|dino_mutex_lock(mutex)'
-        'dino_thread_join(process, NULL)|dino_thread_join(thread, NULL)'
-        'dino_process_kill(thread)|dino_process_kill(process)'
+        'dino_pipe_close(process)|dino_pipe_close(pipe)'
+        'dino_process_kill(pipe)|dino_process_kill(process)'
         'dino_event_add_socket(sock, loop, 0, NULL)|dino_event_add_socket(loop, sock, 0, NULL)'
         'dino_event_del_timer(loop, set)|dino_event_del_timer(loop, timer)'
         'dino_fd_set_add(timer, sock)|dino_fd_set_add(set, sock)'
@@ -80,20 +78,17 @@ distinct_handles() {
 
 #include <dino/core/event.h>
 #include <dino/core/io.h>
-#include <dino/core/mutex.h>
 #include <dino/core/network.h>
 #include <dino/core/pipe.h>
 #include <dino/core/process.h>
 #include <dino/core/thread.h>
 
-void mix(dino_socket_t sock, dino_pipe_t pipe, dino_mutex_t mutex, dino_cond_t cond,
-    dino_thread_t thread, dino_process_t process, dino_event_loop_t loop,
+void mix(dino_socket_t sock, dino_pipe_t pipe, dino_process_t process, dino_event_loop_t loop,
     dino_event_timer_t timer, dino_fd_set_t set);
-void mix(dino_socket_t sock, dino_pipe_t pipe, dino_mutex_t mutex, dino_cond_t cond,
-    dino_thread_t thread, dino_process_t process, dino_event_loop_t loop,
+void mix(dino_socket_t sock, dino_pipe_t pipe, dino_process_t process, dino_event_loop_t loop,
     dino_event_timer_t timer, dino_fd_set_t set)
 {
-    (void)sock, (void)pipe, (void)mutex, (void)cond, (void)thread, (void)process;
+    (void)sock, (void)pipe, (void)process;
     (void)loop, (void)timer, (void)set;
     (void)$which;
 }

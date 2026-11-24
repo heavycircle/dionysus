@@ -6,7 +6,8 @@
 #include <stdint.h>
 
 #include <dino/core/event.h>
-#include <dino/core/mutex.h>
+
+#include "mutex_internal.h"
 
 #define DINO__EVENT_INTEREST (DINO_EVENT_READ | DINO_EVENT_WRITE | DINO_EVENT_ONESHOT)
 
@@ -35,7 +36,7 @@ static inline int dino__event_ctl_args_valid(
 // loop handle.
 struct dino__event_timers
 {
-    dino_mutex_t               lock;
+    dino__mutex_t              lock;
     struct dino__event_timer **heap;
     size_t                     len, cap;
     struct dino__event_timer  *all;          // every timer, fired one-shots included

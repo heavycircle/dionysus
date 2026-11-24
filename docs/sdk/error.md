@@ -71,7 +71,7 @@ int main(void)
 | `DINO_EINVAL`       | An argument is invalid: a null pointer, an invalid handle, a bad value. | every module                                                            |
 | `DINO_ENOMEM`       | Out of memory.                                                          | anything that creates a handle                                          |
 | `DINO_ENOENT`       | No such file, directory, program or variable; not added to this loop.   | `dino_process_spawn`, `dino_file_size`, `dino_event_mod_*` and `_del_*` |
-| `DINO_EACCES`       | Permission denied, or not yours: a mutex another thread holds.          | `dino_process_spawn`, `dino_socket_bind`, `dino_mutex_unlock`           |
+| `DINO_EACCES`       | Permission denied.                                                      | `dino_process_spawn`, `dino_socket_bind`                                |
 | `DINO_EEXIST`       | It already exists: already in this loop.                                | `dino_event_add_*`                                                      |
 | `DINO_EMFILE`       | Too many open files, sockets or handles.                                | `dino_socket_create`, `dino_socket_accept`, `dino_pipe_create`          |
 | `DINO_ECONNREFUSED` | Nothing is listening at the address.                                    | `dino_socket_connect`, `dino_socket_error`                              |
@@ -88,7 +88,7 @@ int main(void)
 
 - **Read it right after the failure.** Only a failed call sets the code. A call that succeeds leaves the previous one in place, so `dino_error()` after a success tells you about some earlier failure, and another SDK call in between may replace it.
 - **One per thread.** A failure in one thread never changes what another thread reads.
-- **`DINO_TIMEOUT` is not a failure.** A wait that runs out of time returns `DINO_TIMEOUT` and leaves the code alone. So does `dino_mutex_trylock` on a mutex another thread holds.
+- **`DINO_TIMEOUT` is not a failure.** A wait that runs out of time returns `DINO_TIMEOUT` and leaves the code alone.
 - **Compare codes, not messages.** The text of `dino_error_message` is for people and may change.
 - **Several system errors share a code.** `DINO_EUNREACH` covers an unreachable network and an unreachable host, `DINO_EAGAIN` covers "would block" and an interrupted call. The codes say what a program can do about a failure, not everything the system knew.
 - **The system's own error is not kept.** `errno` and `GetLastError()` after an SDK call are whatever the SDK's last system call left there.

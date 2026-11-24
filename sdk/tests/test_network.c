@@ -15,8 +15,9 @@
 
 #include <dino/core/error.h>
 #include <dino/core/network.h>
-#include <dino/core/thread.h>
 #include <dino/core/time.h>
+
+#include "../src/core/thread_internal.h"
 
 // Each test file has its own port range: ctest runs test executables in parallel.
 #define PORT 18100
@@ -469,12 +470,12 @@ UTEST(network, accepted_sockets_are_blocking)
     ASSERT_NE(DINO_INVALID_SOCKET, p.peer);
 
     // Non-blocking, the recv would fail at once instead of waiting for the byte.
-    dino_thread_t sender;
-    ASSERT_EQ(0, dino_thread_create(&sender, send_later, &p.client));
+    dino__thread_t sender;
+    ASSERT_EQ(0, dino__thread_create(&sender, send_later, &p.client));
     char buf[1];
     EXPECT_EQ(1, dino_socket_recv(p.peer, buf, 1));
     int result = -1;
-    dino_thread_join(sender, &result);
+    dino__thread_join(sender, &result);
     EXPECT_EQ(0, result);
     close_pair(&p);
 }

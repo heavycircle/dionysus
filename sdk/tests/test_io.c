@@ -8,8 +8,9 @@
 #include <dino/core/error.h>
 #include <dino/core/io.h>
 #include <dino/core/network.h>
-#include <dino/core/thread.h>
 #include <dino/core/time.h>
+
+#include "../src/core/thread_internal.h"
 
 #define PORT       18200
 #define TIMEOUT_MS 5000
@@ -323,22 +324,22 @@ UTEST(poll, a_signal_does_not_end_the_wait)
 
     struct pair p;
     ASSERT_EQ(0, open_pair(&p, PORT + 9));
-    dino_thread_t t;
+    dino__thread_t t;
 
-    ASSERT_EQ(0, dino_thread_create(&t, signal_waiter, NULL));
+    ASSERT_EQ(0, dino__thread_create(&t, signal_waiter, NULL));
     dino_pollfd_t pfd   = { p.peer, DINO_POLLIN, 0 };
     uint64_t      start = dino_time_monotonic_ns();
     EXPECT_EQ(0, dino_poll(&pfd, 1, 300));
     EXPECT_GE(elapsed_ms(start), 300u);
-    dino_thread_join(t, NULL);
+    dino__thread_join(t, NULL);
 
     dino_fd_set_t r = dino_fd_set_create();
     ASSERT_EQ(0, dino_fd_set_add(r, p.peer));
-    ASSERT_EQ(0, dino_thread_create(&t, signal_waiter, NULL));
+    ASSERT_EQ(0, dino__thread_create(&t, signal_waiter, NULL));
     start = dino_time_monotonic_ns();
     EXPECT_EQ(0, dino_select(p.peer + 1, r, DINO_INVALID_FD_SET, DINO_INVALID_FD_SET, 300));
     EXPECT_GE(elapsed_ms(start), 300u);
-    dino_thread_join(t, NULL);
+    dino__thread_join(t, NULL);
     // A timeout empties the set, as select does.
     EXPECT_FALSE(dino_fd_set_has(r, p.peer));
 

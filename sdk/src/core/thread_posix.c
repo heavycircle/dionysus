@@ -16,11 +16,11 @@ static void *trampoline(void *arg)
     return NULL;
 }
 
-int dino_thread_create(dino_thread_t *thread, dino_thread_fn_t fn, void *arg)
+int dino__thread_create(dino__thread_t *thread, dino__thread_fn_t fn, void *arg)
 {
     if (!thread)
         return dino__fail(DINO_EINVAL);
-    *thread = DINO_INVALID_THREAD;
+    *thread = DINO__INVALID_THREAD;
     if (!fn)
         return dino__fail(DINO_EINVAL);
     struct dino_thread *t = dino__thread_alloc(fn, arg);
@@ -44,11 +44,11 @@ int dino_thread_create(dino_thread_t *thread, dino_thread_fn_t fn, void *arg)
         free(t);
         return dino__fail_code(rc);
     }
-    *thread = (dino_thread_t)t;
+    *thread = (dino__thread_t)t;
     return 0;
 }
 
-int dino_thread_join(dino_thread_t thread, int *result)
+int dino__thread_join(dino__thread_t thread, int *result)
 {
     struct dino_thread *t = (struct dino_thread *)thread;
     if (!t || pthread_equal((pthread_t)t->os, pthread_self()))
@@ -63,7 +63,7 @@ int dino_thread_join(dino_thread_t thread, int *result)
     return 0;
 }
 
-int dino_thread_detach(dino_thread_t thread)
+int dino__thread_detach(dino__thread_t thread)
 {
     struct dino_thread *t = (struct dino_thread *)thread;
     if (!t)
@@ -81,7 +81,7 @@ uint64_t dino_thread_current_id(void)
     return (uint64_t)gettid();
 }
 
-void dino_thread_yield(void)
+void dino__thread_yield(void)
 {
     sched_yield();
 }

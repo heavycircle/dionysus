@@ -3,8 +3,9 @@
 #include <string.h>
 #include <utest.h>
 
-#include <dino/core/thread.h>
 #include <dino/util/logging.h>
+
+#include "../src/core/thread_internal.h"
 
 #define LOG_FILE         "test_logging.log"
 #define NUM_THREADS      4
@@ -195,16 +196,16 @@ static int thread_errors;
 
 static void emit_from_threads(void)
 {
-    dino_thread_t threads[NUM_THREADS];
-    int           ids[NUM_THREADS];
+    dino__thread_t threads[NUM_THREADS];
+    int            ids[NUM_THREADS];
     for (int i = 0; i < NUM_THREADS; i++)
     {
         ids[i] = i;
-        if (dino_thread_create(&threads[i], log_lines, &ids[i]) != 0)
+        if (dino__thread_create(&threads[i], log_lines, &ids[i]) != 0)
             thread_errors++;
     }
     for (int i = 0; i < NUM_THREADS; i++)
-        dino_thread_join(threads[i], NULL);
+        dino__thread_join(threads[i], NULL);
 }
 
 static volatile int keep_logging;
@@ -222,10 +223,10 @@ static int log_until_stopped(void *arg)
 UTEST(logging, output_can_be_switched_and_closed_while_threads_log)
 {
     dino_log_set_level(DINO_LOG_LEVEL_INFO);
-    dino_thread_t threads[NUM_THREADS];
+    dino__thread_t threads[NUM_THREADS];
     keep_logging = 1;
     for (int i = 0; i < NUM_THREADS; i++)
-        ASSERT_EQ(0, dino_thread_create(&threads[i], log_until_stopped, NULL));
+        ASSERT_EQ(0, dino__thread_create(&threads[i], log_until_stopped, NULL));
     FILE *current = NULL;
     for (int i = 0; i < 200; i++)
     {
@@ -240,7 +241,7 @@ UTEST(logging, output_can_be_switched_and_closed_while_threads_log)
     fclose(current);
     keep_logging = 0;
     for (int i = 0; i < NUM_THREADS; i++)
-        dino_thread_join(threads[i], NULL);
+        dino__thread_join(threads[i], NULL);
     remove(LOG_FILE);
 }
 

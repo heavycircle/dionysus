@@ -30,6 +30,24 @@ The SDK now defines these on Windows under their standard names, behaving as on 
 
 On Windows, `getenv` can't see a variable set to an empty value, which `dino_env_get` could.
 
+### Threads are plain pthreads
+
+pthreads behave the same on every target (winpthreads on Windows, linked statically, about 8–10 KB), so `dino_thread_*`, `dino_mutex_*`, `dino_cond_*` and `dino_once` are removed, along with `<dino/core/mutex.h>`. What pthreads can't do the same way everywhere stays in `<dino/core/thread.h>`: `dino_thread_current_id`, and a monotonic timed wait on a `pthread_cond_t`.
+
+| Removed                                          | Use instead                                                                                                                      |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `dino_thread_t`, `dino_thread_create(&t, fn, a)` | `pthread_t`, `pthread_create(&t, NULL, fn, a)`; `fn` returns `void *` instead of `int`                                           |
+| `dino_thread_join(t, &result)`                   | `pthread_join(t, &result)`, with `void *result`                                                                                  |
+| `dino_thread_detach(t)`, `dino_thread_yield()`   | `pthread_detach(t)`, `sched_yield()`                                                                                             |
+| `dino_mutex_t`, `dino_mutex_create()`            | `pthread_mutex_t`, `PTHREAD_MUTEX_INITIALIZER` or `pthread_mutex_init`; `PTHREAD_MUTEX_RECURSIVE` for the old recursive behavior |
+| `dino_mutex_lock/unlock/trylock/destroy`         | `pthread_mutex_lock/unlock/trylock/destroy`; `trylock` returns `EBUSY` where `dino_mutex_trylock` returned `DINO_TIMEOUT`        |
+| `dino_cond_t`, `dino_cond_create()`              | `pthread_cond_t` with `dino_cond_init(&c)` if you need timed waits, `pthread_cond_init` otherwise                                |
+| `dino_cond_wait/signal/broadcast/destroy`        | `pthread_cond_wait/signal/broadcast/destroy`                                                                                     |
+| `dino_cond_timedwait(c, m, ms)`                  | `dino_cond_timedwait(&c, &m, ms)`, on a `pthread_cond_t` from `dino_cond_init` and a `pthread_mutex_t`                           |
+| `dino_once_t`, `DINO_ONCE_INIT`, `dino_once`     | `pthread_once_t`, `PTHREAD_ONCE_INIT`, `pthread_once`                                                                            |
+
+Threads from `pthread_create` get the platform's default stack, 128 KiB with musl and 1 MiB on Windows, where `dino_thread_create` gave 8 MB everywhere. Set it with `pthread_attr_setstacksize` if your threads recurse deeply.
+
 ### Windows: 64-bit file offsets and `gmtime_r`
 
 Windows targets now build with `_FILE_OFFSET_BITS=64` and `_POSIX_THREAD_SAFE_FUNCTIONS`, as musl always has. `off_t` and `struct stat`'s `st_size` are 64-bit, so `stat`, `fseeko`, `ftello` and `ftruncate` work past 2 GB, and `gmtime_r`/`localtime_r` are declared. A prebuilt Windows library compiled without the flag that passes `off_t` or `struct stat` across its API no longer matches; rebuild it with dino.

@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -8,7 +9,6 @@
 #include <dino/core/error.h>
 #include <dino/core/event.h>
 #include <dino/core/network.h>
-#include <dino/core/thread.h>
 #include <dino/core/time.h>
 
 #define PORT        8091
@@ -78,7 +78,7 @@ static void serve_conn(struct server *srv, dino_socket_t s, uint32_t events)
     }
 }
 
-static int run_server(void *arg)
+static void *run_server(void *arg)
 {
     struct server *srv = arg;
     dino_event_t   events[64];
@@ -86,11 +86,11 @@ static int run_server(void *arg)
     {
         int n = dino_event_wait(srv->loop, events, 64, -1);
         if (n < 0)
-            return -1;
+            return NULL;
         for (int i = 0; i < n; i++)
         {
             if (events[i].events & DINO_EVENT_WAKE)
-                return 0;
+                return NULL;
             if (events[i].userdata == NULL)
                 serve_accept(srv);
             else
@@ -203,8 +203,8 @@ int main(void)
     }
     printf("[Server] Listening on port %d\n", PORT);
 
-    dino_thread_t server_thread;
-    if (dino_thread_create(&server_thread, run_server, &srv) != 0)
+    pthread_t server_thread;
+    if (pthread_create(&server_thread, NULL, run_server, &srv) != 0)
         return 1;
 
     dino_event_loop_t loop    = dino_event_loop_create();
@@ -213,7 +213,7 @@ int main(void)
     uint64_t          ms      = (dino_time_monotonic_ns() - start) / 1000000;
 
     dino_event_wake(srv.loop);
-    dino_thread_join(server_thread, NULL);
+    pthread_join(server_thread, NULL);
     printf("[Server] peak of %d connections at once\n", srv.peak);
     printf("[Client] echoed %d/%d in %llu ms%s\n", matched, CONNECTIONS, (unsigned long long)ms,
         matched == CONNECTIONS ? "" : " (FAILED)");

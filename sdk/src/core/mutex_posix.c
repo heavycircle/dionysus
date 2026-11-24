@@ -1,5 +1,3 @@
-#include <dino/core/mutex.h>
-
 #include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
@@ -7,6 +5,7 @@
 #include <time.h>
 
 #include "error_internal.h"
+#include "mutex_internal.h"
 
 // pthread functions return their error.
 static int checked(int rc)
@@ -43,13 +42,13 @@ static void acquired(struct dino_mutex *m)
     m->depth++;
 }
 
-dino_mutex_t dino_mutex_create(void)
+dino__mutex_t dino__mutex_create(void)
 {
     struct dino_mutex *m = malloc(sizeof(*m));
     if (!m)
     {
         dino__error_set(DINO_ENOMEM);
-        return DINO_INVALID_MUTEX;
+        return DINO__INVALID_MUTEX;
     }
 
     pthread_mutexattr_t attr;
@@ -62,25 +61,25 @@ dino_mutex_t dino_mutex_create(void)
     {
         free(m);
         dino__error_set(dino__error_from_code(rc));
-        return DINO_INVALID_MUTEX;
+        return DINO__INVALID_MUTEX;
     }
     m->owner = 0;
     m->depth = 0;
-    return (dino_mutex_t)m;
+    return (dino__mutex_t)m;
 }
 
-void dino_mutex_destroy(dino_mutex_t mutex)
+void dino__mutex_destroy(dino__mutex_t mutex)
 {
-    if (mutex == DINO_INVALID_MUTEX)
+    if (mutex == DINO__INVALID_MUTEX)
         return;
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     pthread_mutex_destroy(&m->m);
     free(m);
 }
 
-int dino_mutex_lock(dino_mutex_t mutex)
+int dino__mutex_lock(dino__mutex_t mutex)
 {
-    if (mutex == DINO_INVALID_MUTEX)
+    if (mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     struct dino_mutex *m  = (struct dino_mutex *)mutex;
     int                rc = pthread_mutex_lock(&m->m);
@@ -90,9 +89,9 @@ int dino_mutex_lock(dino_mutex_t mutex)
     return 0;
 }
 
-int dino_mutex_unlock(dino_mutex_t mutex)
+int dino__mutex_unlock(dino__mutex_t mutex)
 {
-    if (mutex == DINO_INVALID_MUTEX)
+    if (mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     if (!held_by_caller(m))
@@ -102,9 +101,9 @@ int dino_mutex_unlock(dino_mutex_t mutex)
     return checked(pthread_mutex_unlock(&m->m));
 }
 
-int dino_mutex_trylock(dino_mutex_t mutex)
+int dino__mutex_trylock(dino__mutex_t mutex)
 {
-    if (mutex == DINO_INVALID_MUTEX)
+    if (mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     // Held by another thread: not a failure, the same answer as a wait that
@@ -142,13 +141,13 @@ static int sleep_on(pthread_cond_t *c, struct dino_mutex *m, const struct timesp
     return rc;
 }
 
-dino_cond_t dino_cond_create(void)
+dino__cond_t dino__cond_create(void)
 {
     pthread_cond_t *c = malloc(sizeof(pthread_cond_t));
     if (!c)
     {
         dino__error_set(DINO_ENOMEM);
-        return DINO_INVALID_COND;
+        return DINO__INVALID_COND;
     }
 
     pthread_condattr_t attr;
@@ -161,23 +160,23 @@ dino_cond_t dino_cond_create(void)
     {
         free(c);
         dino__error_set(dino__error_from_code(rc));
-        return DINO_INVALID_COND;
+        return DINO__INVALID_COND;
     }
-    return (dino_cond_t)c;
+    return (dino__cond_t)c;
 }
 
-void dino_cond_destroy(dino_cond_t cond)
+void dino__cond_destroy(dino__cond_t cond)
 {
-    if (cond == DINO_INVALID_COND)
+    if (cond == DINO__INVALID_COND)
         return;
     pthread_cond_t *c = (pthread_cond_t *)cond;
     pthread_cond_destroy(c);
     free(c);
 }
 
-int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex)
+int dino__cond_wait(dino__cond_t cond, dino__mutex_t mutex)
 {
-    if (cond == DINO_INVALID_COND || mutex == DINO_INVALID_MUTEX)
+    if (cond == DINO__INVALID_COND || mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     if (check_waitable(m) != 0)
@@ -185,12 +184,12 @@ int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex)
     return checked(sleep_on((pthread_cond_t *)cond, m, NULL));
 }
 
-int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
+int dino__cond_timedwait(dino__cond_t cond, dino__mutex_t mutex, int timeout_ms)
 {
-    if (cond == DINO_INVALID_COND || mutex == DINO_INVALID_MUTEX)
+    if (cond == DINO__INVALID_COND || mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     if (timeout_ms < 0)
-        return dino_cond_wait(cond, mutex);
+        return dino__cond_wait(cond, mutex);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     if (check_waitable(m) != 0)
         return -1;
@@ -211,25 +210,25 @@ int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
     return checked(rc);
 }
 
-int dino_cond_signal(dino_cond_t cond)
+int dino__cond_signal(dino__cond_t cond)
 {
-    if (cond == DINO_INVALID_COND)
+    if (cond == DINO__INVALID_COND)
         return dino__fail(DINO_EINVAL);
     return checked(pthread_cond_signal((pthread_cond_t *)cond));
 }
 
-int dino_cond_broadcast(dino_cond_t cond)
+int dino__cond_broadcast(dino__cond_t cond)
 {
-    if (cond == DINO_INVALID_COND)
+    if (cond == DINO__INVALID_COND)
         return dino__fail(DINO_EINVAL);
     return checked(pthread_cond_broadcast((pthread_cond_t *)cond));
 }
 
 _Static_assert(
-    sizeof(pthread_once_t) <= sizeof(dino_once_t), "pthread_once_t must fit in dino_once_t");
-_Static_assert(PTHREAD_ONCE_INIT == 0, "DINO_ONCE_INIT is 0");
+    sizeof(pthread_once_t) <= sizeof(dino__once_t), "pthread_once_t must fit in dino__once_t");
+_Static_assert(PTHREAD_ONCE_INIT == 0, "DINO__ONCE_INIT is 0");
 
-int dino_once(dino_once_t *once, void (*fn)(void))
+int dino__once(dino__once_t *once, void (*fn)(void))
 {
     if (!once || !fn)
         return dino__fail(DINO_EINVAL);

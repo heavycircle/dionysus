@@ -12,8 +12,9 @@
 #include <utest.h>
 
 #include <dino/core/pipe.h>
-#include <dino/core/thread.h>
 #include <dino/core/time.h>
+
+#include "../src/core/thread_internal.h"
 
 UTEST(pipe, round_trip)
 {
@@ -82,8 +83,8 @@ UTEST(pipe, wait_wakes_when_another_thread_writes)
 {
     dino_pipe_t r, w;
     ASSERT_EQ(0, dino_pipe_create(&r, &w));
-    dino_thread_t t;
-    ASSERT_EQ(0, dino_thread_create(&t, write_later, &w));
+    dino__thread_t t;
+    ASSERT_EQ(0, dino__thread_create(&t, write_later, &w));
 
     EXPECT_EQ(0, dino_pipe_wait(r, 10000));
     char buf[8] = { 0 };
@@ -91,7 +92,7 @@ UTEST(pipe, wait_wakes_when_another_thread_writes)
     EXPECT_STREQ("late", buf);
 
     int result = -1;
-    EXPECT_EQ(0, dino_thread_join(t, &result));
+    EXPECT_EQ(0, dino__thread_join(t, &result));
     EXPECT_EQ(0, result);
     dino_pipe_close(r);
     dino_pipe_close(w);
@@ -132,8 +133,8 @@ UTEST(pipe, large_transfer_between_threads)
 {
     dino_pipe_t r, w;
     ASSERT_EQ(0, dino_pipe_create(&r, &w));
-    dino_thread_t t;
-    ASSERT_EQ(0, dino_thread_create(&t, write_big, &w));
+    dino__thread_t t;
+    ASSERT_EQ(0, dino__thread_create(&t, write_big, &w));
 
     int           received = 0, mismatches = 0, n;
     unsigned char buf[8192];
@@ -148,7 +149,7 @@ UTEST(pipe, large_transfer_between_threads)
     EXPECT_EQ(0, mismatches);
 
     int result = -1;
-    EXPECT_EQ(0, dino_thread_join(t, &result));
+    EXPECT_EQ(0, dino__thread_join(t, &result));
     EXPECT_EQ(0, result);
     dino_pipe_close(r);
 }

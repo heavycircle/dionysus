@@ -12,8 +12,9 @@
 #include <dino/core/network.h>
 #include <dino/core/pipe.h>
 #include <dino/core/process.h>
-#include <dino/core/thread.h>
 #include <dino/core/time.h>
+
+#include "../src/core/thread_internal.h"
 
 // Each test file has its own port range: ctest runs test executables in parallel.
 #define PORT 18300
@@ -365,8 +366,8 @@ UTEST(event, wake_from_another_thread)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
-    dino_thread_t t;
-    ASSERT_EQ(0, dino_thread_create(&t, wake_later, &loop));
+    dino__thread_t t;
+    ASSERT_EQ(0, dino__thread_create(&t, wake_later, &loop));
 
     dino_event_t out[4];
     uint64_t     start = dino_time_monotonic_ns();
@@ -376,7 +377,7 @@ UTEST(event, wake_from_another_thread)
     EXPECT_EQ(NULL, out[0].userdata);
 
     int result = -1;
-    EXPECT_EQ(0, dino_thread_join(t, &result));
+    EXPECT_EQ(0, dino__thread_join(t, &result));
     EXPECT_EQ(0, result);
     dino_event_loop_destroy(loop);
 }
@@ -537,14 +538,14 @@ UTEST(event, timer_added_while_waiting_shortens_the_wait)
     struct blocked_wait w = { 0 };
     w.loop                = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, w.loop);
-    dino_thread_t t;
-    ASSERT_EQ(0, dino_thread_create(&t, wait_long, &w));
+    dino__thread_t t;
+    ASSERT_EQ(0, dino__thread_create(&t, wait_long, &w));
     dino_sleep_ms(50);
 
     uint64_t           start = dino_time_monotonic_ns();
     dino_event_timer_t timer = dino_event_add_timer(w.loop, 10, 0, NULL);
     ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
-    EXPECT_EQ(0, dino_thread_join(t, NULL));
+    EXPECT_EQ(0, dino__thread_join(t, NULL));
     EXPECT_LT(elapsed_ms(start), 5000u);
     EXPECT_EQ(1, w.n);
     EXPECT_EQ((uint32_t)DINO_EVENT_TIMER, w.out[0].events);
@@ -664,13 +665,13 @@ static int wait_once(void *arg)
     return 0;
 }
 
-static int start_waiter(struct waiter *w, dino_thread_t *t)
+static int start_waiter(struct waiter *w, dino__thread_t *t)
 {
     atomic_store(&w->started, 0);
-    if (dino_thread_create(t, wait_once, w) != 0)
+    if (dino__thread_create(t, wait_once, w) != 0)
         return -1;
     while (!atomic_load(&w->started))
-        dino_thread_yield();
+        dino__thread_yield();
     // Started is set just before the wait; give it time to block.
     dino_sleep_ms(10);
     return 0;
@@ -691,12 +692,12 @@ UTEST(event, del_and_close_while_another_thread_waits)
         ASSERT_NE(DINO_INVALID_SOCKET, s);
         ASSERT_EQ(0, dino_event_add_socket(w.loop, s, DINO_EVENT_READ, &w));
 
-        dino_thread_t t;
+        dino__thread_t t;
         ASSERT_EQ(0, start_waiter(&w, &t));
         ASSERT_EQ(0, dino_event_del_socket(w.loop, s));
         ASSERT_EQ(0, dino_socket_close(s));
         ASSERT_EQ(0, dino_event_wake(w.loop));
-        ASSERT_EQ(0, dino_thread_join(t, NULL));
+        ASSERT_EQ(0, dino__thread_join(t, NULL));
 
         ASSERT_EQ(1, w.n);
         ASSERT_EQ((uint32_t)DINO_EVENT_WAKE, w.out[0].events);
@@ -714,11 +715,11 @@ UTEST(event, mod_while_another_thread_waits)
     ASSERT_NE(DINO_INVALID_SOCKET, s);
     ASSERT_EQ(0, dino_event_add_socket(w.loop, s, DINO_EVENT_READ, NULL));
 
-    dino_thread_t t;
+    dino__thread_t t;
     ASSERT_EQ(0, start_waiter(&w, &t));
     uint64_t start = dino_time_monotonic_ns();
     ASSERT_EQ(0, dino_event_mod_socket(w.loop, s, DINO_EVENT_WRITE, &w));
-    ASSERT_EQ(0, dino_thread_join(t, NULL));
+    ASSERT_EQ(0, dino__thread_join(t, NULL));
     EXPECT_LT(elapsed_ms(start), 4000u);
     ASSERT_EQ(1, w.n);
     EXPECT_TRUE(w.out[0].events & DINO_EVENT_WRITE);
@@ -739,7 +740,7 @@ UTEST_F(event, oneshot_goes_to_one_of_several_waiters)
         dino_event_add_socket(utest_fixture->loop, utest_fixture->p.peer,
             DINO_EVENT_READ | DINO_EVENT_ONESHOT, NULL));
     static struct waiter w[WAITERS];
-    dino_thread_t        t[WAITERS];
+    dino__thread_t       t[WAITERS];
     for (int i = 0; i < WAITERS; i++)
     {
         w[i].loop       = utest_fixture->loop;
@@ -751,7 +752,7 @@ UTEST_F(event, oneshot_goes_to_one_of_several_waiters)
     int reads = 0;
     for (int i = 0; i < WAITERS; i++)
     {
-        ASSERT_EQ(0, dino_thread_join(t[i], NULL));
+        ASSERT_EQ(0, dino__thread_join(t[i], NULL));
         ASSERT_GE(w[i].n, 0);
         for (int j = 0; j < w[i].n; j++)
             reads += (w[i].out[j].events & DINO_EVENT_READ) != 0;

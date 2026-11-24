@@ -102,23 +102,23 @@ void raw_posix(char **argv, char **envp)
     mtx_t     mtx;
     cnd_t     cnd;
     once_flag flag = ONCE_FLAG_INIT;
-    thrd_create(&thr, thread_main, NULL);  // expected-warning {{use dino_thread_create()}}
-    thrd_join(thr, NULL);                  // expected-warning {{use dino_thread_join()}}
-    thrd_detach(thr);                      // expected-warning {{use dino_thread_detach()}}
-    thrd_yield();                          // expected-warning {{use dino_thread_yield()}}
-    mtx_init(&mtx, mtx_plain);             // expected-warning {{use dino_mutex_create()}}
-    mtx_lock(&mtx);                        // expected-warning {{use dino_mutex_lock()}}
-    mtx_trylock(&mtx);                     // expected-warning {{use dino_mutex_trylock()}}
-    mtx_unlock(&mtx);                      // expected-warning {{use dino_mutex_unlock()}}
-    cnd_init(&cnd);                        // expected-warning {{use dino_cond_create()}}
-    cnd_wait(&cnd, &mtx);                  // expected-warning {{use dino_cond_wait()}}
+    thrd_create(&thr, thread_main, NULL);  // expected-warning {{use pthread_create()}}
+    thrd_join(thr, NULL);                  // expected-warning {{use pthread_join()}}
+    thrd_detach(thr);                      // expected-warning {{use pthread_detach()}}
+    thrd_yield();                          // expected-warning {{use sched_yield()}}
+    mtx_init(&mtx, mtx_plain);             // expected-warning {{use pthread_mutex_init()}}
+    mtx_lock(&mtx);                        // expected-warning {{use pthread_mutex_lock()}}
+    mtx_trylock(&mtx);                     // expected-warning {{use pthread_mutex_trylock()}}
+    mtx_unlock(&mtx);                      // expected-warning {{use pthread_mutex_unlock()}}
+    cnd_init(&cnd);                        // expected-warning {{use pthread_cond_init()}}
+    cnd_wait(&cnd, &mtx);                  // expected-warning {{use pthread_cond_wait()}}
     struct timespec until = { 0, 0 };
     cnd_timedwait(&cnd, &mtx, &until);     // expected-warning {{use dino_cond_timedwait()}}
-    cnd_signal(&cnd);                      // expected-warning {{use dino_cond_signal()}}
-    cnd_broadcast(&cnd);                   // expected-warning {{use dino_cond_broadcast()}}
-    cnd_destroy(&cnd);                     // expected-warning {{use dino_cond_destroy()}}
-    mtx_destroy(&mtx);                     // expected-warning {{use dino_mutex_destroy()}}
-    call_once(&flag, init_once);           // expected-warning {{use dino_once()}}
+    cnd_signal(&cnd);                      // expected-warning {{use pthread_cond_signal()}}
+    cnd_broadcast(&cnd);                   // expected-warning {{use pthread_cond_broadcast()}}
+    cnd_destroy(&cnd);                     // expected-warning {{use pthread_cond_destroy()}}
+    mtx_destroy(&mtx);                     // expected-warning {{use pthread_mutex_destroy()}}
+    call_once(&flag, init_once);           // expected-warning {{use pthread_once()}}
 
 #ifdef CLOCK_REALTIME
     struct timespec ts = { 0, 0 };

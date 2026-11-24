@@ -3,7 +3,8 @@
 
 #include <dino/core/fs.h>
 #include <dino/core/network.h>
-#include <dino/core/thread.h>
+
+#include "../src/core/thread_internal.h"
 
 // Its own executable, so nothing has initialised the network before these run
 // and the first tests really are the first use.
@@ -19,15 +20,15 @@ static int create_socket(void *arg)
 
 UTEST(runtime_auto, first_use_from_many_threads_needs_no_init)
 {
-    dino_thread_t threads[NUM_THREADS];
-    dino_socket_t socks[NUM_THREADS];
+    dino__thread_t threads[NUM_THREADS];
+    dino_socket_t  socks[NUM_THREADS];
     for (int i = 0; i < NUM_THREADS; i++)
     {
         socks[i] = DINO_INVALID_SOCKET;
-        ASSERT_EQ(0, dino_thread_create(&threads[i], create_socket, &socks[i]));
+        ASSERT_EQ(0, dino__thread_create(&threads[i], create_socket, &socks[i]));
     }
     for (int i = 0; i < NUM_THREADS; i++)
-        dino_thread_join(threads[i], NULL);
+        dino__thread_join(threads[i], NULL);
 
     for (int i = 0; i < NUM_THREADS; i++)
     {

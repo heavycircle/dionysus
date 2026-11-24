@@ -33,8 +33,7 @@ target. Start with the [overview](sdk/README.md), which explains the conventions
 | [Network](sdk/network.md)     | TCP and UDP sockets over IPv4 and IPv6                                               |
 | [Poll and select](sdk/io.md)  | Waiting on a few sockets                                                             |
 | [Event loop](sdk/event.md)    | Waiting on many sockets, pipes, processes and timers                                 |
-| [Threads](sdk/thread.md)      | Starting, joining and detaching threads                                              |
-| [Mutexes](sdk/mutex.md)       | Recursive mutexes, condition variables, run-once                                     |
+| [Threads](sdk/thread.md)      | pthreads on every target, plus monotonic timed waits and thread IDs                  |
 | [Pipes](sdk/pipe.md)          | Byte pipes between threads and processes                                             |
 | [Processes](sdk/process.md)   | Running programs, their stdio and exit codes; the environment                        |
 | [Files](sdk/fs.md)            | File sizes over 2 GB; stdio for programs the kernel starts                           |
