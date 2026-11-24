@@ -19,7 +19,7 @@ int main(void)
     }
     puts("runtime started");
 
-    dino_socket_t sock = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t sock = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     if (sock == DINO_INVALID_SOCKET)
     {
         fprintf(stderr, "socket failed\n");

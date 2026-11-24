@@ -18,7 +18,7 @@ __typeof__(send) send __attribute__((deprecated(
     "send() raises SIGPIPE on Linux and takes a SOCKET on Windows; use dino_socket_send() from <dino/core/network.h>")));
 
 __typeof__(recvfrom) recvfrom __attribute__((deprecated(
-    "recvfrom() needs WSAStartup on Windows; use dino_socket_recvfrom() from <dino/core/network.h>")));
+    "recvfrom() fails on a datagram larger than the buffer on Windows; use dino_socket_recvfrom() from <dino/core/network.h>")));
 #ifdef _GNU_SOURCE
 __typeof__(accept4) accept4 __attribute__((deprecated(
     "accept4() is Linux-only; use dino_socket_accept() from <dino/core/network.h>")));

@@ -81,11 +81,11 @@ void raw_posix(char **argv, char **envp)
     accept4(s, &addr, &len, 0);            // expected-warning {{accept4() is Linux-only}}
 #endif
 
-    poll(&pfd, 1, 0);                      // expected-warning {{use dino_poll()}}
+    poll(&pfd, 1, 0);
     FD_ZERO(&set);
-    select(1, &set, NULL, NULL, NULL);     // expected-warning {{use dino_select()}}
+    select(1, &set, NULL, NULL, NULL);
 #if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) || defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
-    pselect(1, &set, NULL, NULL, NULL, NULL); // expected-warning {{pselect() is POSIX-only}}
+    pselect(1, &set, NULL, NULL, NULL, NULL); // expected-warning {{pselect() doesn't exist on Windows}}
 #endif
 #ifdef _GNU_SOURCE
     ppoll(&pfd, 1, NULL, NULL);            // expected-warning {{ppoll() is Linux-only}}

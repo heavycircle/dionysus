@@ -16,7 +16,7 @@ extern "C"
  * Event loop: register sockets, pipes and processes with the events you care
  * about, then wait for any of them to become ready. Built on epoll on Linux and on an I/O
  * completion port on Windows, so a wait costs the same with ten sockets or ten thousand, unlike
- * dino_poll and dino_select.
+ * poll and select.
  *
  * Readiness is level-triggered: a socket that is still readable is reported
  * again by the next wait. DINO_EVENT_ONESHOT reports it once and then disarms

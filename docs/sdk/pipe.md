@@ -79,7 +79,7 @@ int main(void)
   call.
 - **No `SIGPIPE`:** writing after every read end has closed returns `-1`, and the process survives,
   without the SDK touching its signal handling.
-- **Waiting:** pipes aren't sockets, so [`dino_poll`](io.md) and `dino_select` don't take them. Wait
+- **Waiting:** pipes aren't sockets, so [`poll`](io.md) and `select` don't take them on Windows. Wait
   on one pipe with `dino_pipe_wait`, or on many alongside sockets with
   [`dino_event_add_pipe`](event.md#pipes-and-processes).
 - **A full pipe blocks:** a writer waits once 64 KB are unread. A thread that writes to a pipe and

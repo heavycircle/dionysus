@@ -15,7 +15,7 @@ Every project `dino` builds can use it: `dino_executable()` links it, or link it
 | [Runtime](runtime.md)    | none                  | `dino_core` | process-wide setup, which is automatic                        |
 | [Errors](error.md)       | `dino/core/error.h`   | `dino_core` | why a call failed, with the same codes on every platform      |
 | [Network](network.md)    | `dino/core/network.h` | `dino_core` | TCP and UDP sockets over IPv4 and IPv6                        |
-| [Poll and select](io.md) | `dino/core/io.h`      | `dino_core` | waiting on a few sockets at once                              |
+| [Poll and select](io.md) | `poll.h`              | `dino_core` | plain `poll()` and `select()` on every target                 |
 | [Event loop](event.md)   | `dino/core/event.h`   | `dino_core` | waiting on many sockets, pipes, processes and timers at once  |
 | [Threads](thread.md)     | `dino/core/thread.h`  | `dino_core` | pthreads everywhere; monotonic timed waits, thread IDs        |
 | [Pipes](pipe.md)         | `dino/core/pipe.h`    | `dino_core` | byte pipes between threads and processes                      |
@@ -36,9 +36,9 @@ and `DINO_VERSION_PATCH`, and the string `DINO_VERSION` (for example `"0.6.0"`, 
 
 These hold across every module, so each page only mentions exceptions.
 
-**Handles.** Sockets, pipes, processes and event loops are opaque handles (`dino_socket_t`, `dino_pipe_t`, ...). Each kind is its own C type, so passing a pipe where a socket is expected, or swapping two arguments, fails to compile. Each type has an invalid value, `DINO_INVALID_SOCKET`, `DINO_INVALID_THREAD` and so on, which functions return on failure and which you can use to mean "none". Compare against the named constant rather than 0: `DINO_INVALID_SOCKET` is all bits set, not zero.
+**Handles.** Sockets, pipes, processes and event loops are opaque handles (`dino_socket_t`, `dino_pipe_t`, ...). Each kind is its own C type, so passing a pipe where a socket is expected, or swapping two arguments, fails to compile. Each type has an invalid value, `DINO_INVALID_SOCKET`, `DINO_INVALID_PIPE` and so on, which functions return on failure and which you can use to mean "none". Compare against the named constant rather than 0: `DINO_INVALID_SOCKET` is all bits set, not zero.
 
-`dino_socket_t` is the one integer among them: it holds the operating system's socket (the descriptor on Linux, the `SOCKET` on Windows), so it can be passed to platform calls the SDK doesn't wrap. The other handles are pointers; keep them in variables of their own type, and pass them through a `void *` (thread arguments, event-loop userdata) with a cast back to that type.
+`dino_socket_t` is the one integer among them: it is the operating system's socket (an `int` descriptor on Linux, a `SOCKET` on Windows), so it goes straight to the POSIX socket calls. Pass it through a `void *` (event-loop userdata) as `(void *)(intptr_t)sock`. The other handles are pointers; keep them in variables of their own type, and pass them through a `void *` with a cast back to that type.
 
 **Names.** Everything the SDK defines starts with `dino_` (functions and types) or `DINO_` (macros and constants), followed by the thing acted on: `dino_socket_send`, `dino_event_add_timer`, `dino_cond_timedwait`. Types end in `_t`. Names with a double underscore (`dino__*`, `DINO__*`) are internal.
 
@@ -51,8 +51,8 @@ start something or produce more than one result take out-parameters and return `
 
 **Waits** come in two kinds, and `0` means opposite things in them:
 
-- Waits for one thing return `0` when it happened and `DINO_TIMEOUT` (`1`) when the time ran out: `dino_pipe_wait`, `dino_cond_timedwait`, `dino_process_wait_timeout`, and `dino_mutex_trylock`, which is a lock that doesn't wait.
-- Waits for any of several things return how many are ready, so `0` is the timeout: `dino_poll`, `dino_select`, `dino_event_wait`.
+- Waits for one thing return `0` when it happened and `DINO_TIMEOUT` (`1`) when the time ran out: `dino_pipe_wait`, `dino_cond_timedwait`, and `dino_process_wait_timeout`.
+- Waits for any of several things return how many are ready, so `0` is the timeout: `dino_event_wait`, as `poll` and `select` do.
 
 **Timeouts** are in milliseconds: `-1` waits forever, `0` checks and returns at once. The one exception is `timeout_ms` in the options of `dino_process_run`, where `0` (the value a zeroed struct has) means no timeout.
 

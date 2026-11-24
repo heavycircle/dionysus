@@ -13,7 +13,7 @@ extern "C"
  * DINO_INVALID_* value of a handle. The reason is here, one per thread, the
  * same codes on every platform:
  *
- *     int n = dino_socket_recv(sock, buf, sizeof(buf));
+ *     int n = dino_socket_recvfrom(sock, buf, sizeof(buf), 0, NULL, NULL);
  *     if (n < 0 && dino_error() == DINO_EAGAIN)
  *         ... nothing to read yet ...
  *

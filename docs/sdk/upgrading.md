@@ -30,6 +30,32 @@ The SDK now defines these on Windows under their standard names, behaving as on 
 
 On Windows, `getenv` can't see a variable set to an empty value, which `dino_env_get` could.
 
+### Sockets are the POSIX calls
+
+The SDK now provides `<sys/socket.h>`, `<netinet/in.h>`, `<netinet/tcp.h>`, `<arpa/inet.h>`, `<netdb.h>` and `<poll.h>` on Windows, over Winsock, and a real `poll()`, so socket code is POSIX on every target. Winsock starts before `main()` in any program that includes a socket header. `dino_*` stays for create, close, accept, connect, send and recvfrom, which differ in ways the standard names can't hide, and now takes the POSIX arguments.
+
+| Before                                                                                    | Now                                                                                         |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP)`                    | `dino_socket_create(AF_INET, SOCK_STREAM, 0)`: the platform constants, protocol `0` allowed |
+| `dino_socket_bind(s, ip, port)`, `dino_socket_listen(s, n)`                               | `bind(s, addr, len)`, `listen(s, n)`, with an address from `getaddrinfo` or `inet_pton`     |
+| `dino_socket_connect(s, ip, port)`                                                        | `dino_socket_connect(s, addr, len)`                                                         |
+| `dino_socket_accept(s)`                                                                   | `dino_socket_accept(s, addr, &len)`, or `(s, NULL, NULL)`                                   |
+| `dino_socket_send(s, buf, len)`                                                           | `dino_socket_send(s, buf, len, flags)`                                                      |
+| `dino_socket_recv(s, buf, len)`                                                           | `recv(s, buf, len, 0)`; for datagrams, `dino_socket_recvfrom`                               |
+| `dino_socket_sendto(s, buf, len, ip, port)`                                               | `sendto(s, buf, len, 0, addr, alen)`                                                        |
+| `dino_socket_recvfrom(s, buf, len, &from)`                                                | `dino_socket_recvfrom(s, buf, len, flags, (struct sockaddr *)&from, &fromlen)`              |
+| `dino_socket_local_addr`, `dino_socket_peer_addr`, `dino_socket_addr_t`, `DINO_IP_STRLEN` | `getsockname`, `getpeername`, `inet_ntop`/`getnameinfo`, `INET6_ADDRSTRLEN`                 |
+| `dino_socket_setopt(s, level, name, &v, sizeof v)`, `dino_socket_set_v6only(s, on)`       | `setsockopt(s, level, name, (const char *)&v, sizeof v)`; `IPV6_V6ONLY` for v6-only         |
+| `dino_socket_shutdown(s, DINO_SHUT_WR)`                                                   | `shutdown(s, SHUT_WR)`                                                                      |
+| `dino_net_cleanup()`                                                                      | nothing: Windows releases Winsock at exit                                                   |
+| `dino_poll`, `dino_pollfd_t`, `DINO_POLL*`, `<dino/core/io.h>`                            | `poll`, `struct pollfd`, `POLL*`, `<poll.h>`                                                |
+| `dino_select`, `dino_fd_set_*`                                                            | `select`, `fd_set`, `FD_*`                                                                  |
+| a raw call's error from `dino_error()`                                                    | `dino_socket_last_error()`                                                                  |
+
+`dino_socket_t` is now the platform's own type, `int` on Linux and `SOCKET` on Windows, so it passes to the POSIX calls without a cast; pass it through a `void *` as `(void *)(intptr_t)sock`. IP strings with a `%zone` and the IPv4-on-dual-stack mapping went with the string API: `getaddrinfo` handles zones, and a dual-stack socket takes `::ffff:a.b.c.d` addresses.
+
+On Windows, include socket headers before `<windows.h>`, or define `WIN32_LEAN_AND_MEAN`. The `utest.h` that `dino_test()` uses now includes Winsock 2 and `<windows.h>` first unless the test already included `<windows.h>`.
+
 ### Threads are plain pthreads
 
 pthreads behave the same on every target (winpthreads on Windows, linked statically, about 8–10 KB), so `dino_thread_*`, `dino_mutex_*`, `dino_cond_*` and `dino_once` are removed, along with `<dino/core/mutex.h>`. What pthreads can't do the same way everywhere stays in `<dino/core/thread.h>`: `dino_thread_current_id`, and a monotonic timed wait on a `pthread_cond_t`.
@@ -64,7 +90,7 @@ The SDK's own sources no longer switch MinGW to its static printf: a Windows pro
 
 ### UDP: `sendto`, `recvfrom` and socket addresses
 
-New: `dino_socket_sendto`, `dino_socket_recvfrom`, `dino_socket_local_addr` and `dino_socket_peer_addr`, with `dino_socket_addr_t` (see [Network](network.md#udp)). Two Windows behaviors now match Linux: a datagram larger than the buffer is returned cut to fit instead of failing, and an unconnected UDP socket no longer fails a receive with `DINO_ECONNRESET` after sending to a port nobody listens on.
+New: `dino_socket_sendto`, `dino_socket_recvfrom`, `dino_socket_local_addr` and `dino_socket_peer_addr`, with `dino_socket_addr_t` (see [Network](network.md)). Two Windows behaviors now match Linux: a datagram larger than the buffer is returned cut to fit instead of failing, and an unconnected UDP socket no longer fails a receive with `DINO_ECONNRESET` after sending to a port nobody listens on.
 
 ### More portability warnings
 

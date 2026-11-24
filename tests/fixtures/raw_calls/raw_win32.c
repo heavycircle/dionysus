@@ -112,10 +112,10 @@ void raw_win32(void)
     WSASocketA(AF_INET, SOCK_STREAM, 0, NULL, 0, 0); // expected-warning {{WSASocketA() is Windows-only}}
     WSASocketW(AF_INET, SOCK_STREAM, 0, NULL, 0, 0); // expected-warning {{WSASocketW() is Windows-only}}
     FD_ZERO(&set);
-    select(0, &set, NULL, NULL, NULL);              // expected-warning {{use dino_select()}}
+    select(0, &set, NULL, NULL, NULL);
 #if _WIN32_WINNT >= 0x0600
     WSAPOLLFD pfd = { s, POLLIN, 0 };
-    WSAPoll(&pfd, 1, 0);                            // expected-warning {{use dino_poll()}}
+    WSAPoll(&pfd, 1, 0);                            // expected-warning {{use poll() from <poll.h>}}
 #endif
     closesocket(s);                                 // expected-warning {{use dino_socket_close()}}
     WSACleanup();                                   // expected-warning {{WSACleanup() is Windows-only}}

@@ -1,6 +1,10 @@
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <pthread.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
 
 #ifndef _WIN32
 #include <sys/resource.h>
@@ -41,10 +45,10 @@ static void serve_accept(struct server *srv)
 {
     // Non-blocking: accept until the backlog is empty.
     dino_socket_t s;
-    while ((s = dino_socket_accept(srv->listener)) != DINO_INVALID_SOCKET)
+    while ((s = dino_socket_accept(srv->listener, NULL, NULL)) != DINO_INVALID_SOCKET)
     {
         dino_socket_set_nonblocking(s, 1);
-        if (dino_event_add_socket(srv->loop, s, DINO_EVENT_READ, (void *)s) != 0)
+        if (dino_event_add_socket(srv->loop, s, DINO_EVENT_READ, (void *)(intptr_t)s) != 0)
         {
             dino_socket_close(s);
             continue;
@@ -61,12 +65,12 @@ static void serve_accept(struct server *srv)
 static void serve_conn(struct server *srv, dino_socket_t s, uint32_t events)
 {
     char buf[256];
-    int  n = dino_socket_recv(s, buf, sizeof(buf));
+    int  n = (int)recv(s, buf, sizeof(buf), 0);
     if (n > 0)
     {
         // Loopback socket buffers are far larger than one message, so the
         // echo goes out whole.
-        dino_socket_send(s, buf, n);
+        dino_socket_send(s, buf, (size_t)n, 0);
         return;
     }
     // n < 0 without HANGUP/ERROR is just "nothing to read after all".
@@ -94,18 +98,29 @@ static void *run_server(void *arg)
             if (events[i].userdata == NULL)
                 serve_accept(srv);
             else
-                serve_conn(srv, (dino_socket_t)events[i].userdata, events[i].events);
+                serve_conn(srv, (dino_socket_t)(intptr_t)events[i].userdata, events[i].events);
         }
     }
 }
 
+static struct sockaddr_in loopback(int port)
+{
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family      = AF_INET;
+    addr.sin_port        = htons((unsigned short)port);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    return addr;
+}
+
 static dino_socket_t listen_on(int port)
 {
-    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     if (s == DINO_INVALID_SOCKET)
         return s;
     dino_socket_set_reuseaddr(s, 1);
-    if (dino_socket_bind(s, "127.0.0.1", port) != 0 || dino_socket_listen(s, 128) != 0
+    struct sockaddr_in addr = loopback(port);
+    if (bind(s, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(s, 128) != 0
         || dino_socket_set_nonblocking(s, 1) != 0)
     {
         dino_socket_close(s);
@@ -117,6 +132,7 @@ static dino_socket_t listen_on(int port)
 // Returns how many replies matched what was sent.
 static int run_clients(dino_event_loop_t loop)
 {
+    struct sockaddr_in server_addr = loopback(PORT);
     for (int i = 0; i < CONNECTIONS; i++)
         conns[i].sock = DINO_INVALID_SOCKET;
 
@@ -124,8 +140,10 @@ static int run_clients(dino_event_loop_t loop)
     for (int i = 0; i < CONNECTIONS; i++)
     {
         struct conn *c = &conns[i];
-        c->sock        = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
-        if (c->sock == DINO_INVALID_SOCKET || dino_socket_connect(c->sock, "127.0.0.1", PORT) != 0)
+        c->sock        = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+        if (c->sock == DINO_INVALID_SOCKET
+            || dino_socket_connect(c->sock, (struct sockaddr *)&server_addr, sizeof(server_addr))
+                != 0)
         {
             printf("[Client] connection %d failed (FAILED)\n", i);
             break;
@@ -133,7 +151,7 @@ static int run_clients(dino_event_loop_t loop)
         snprintf(c->sent, sizeof(c->sent), "conn %04d ping!", i);
         dino_socket_set_nonblocking(c->sock, 1);
         if (dino_event_add_socket(loop, c->sock, DINO_EVENT_READ, c) != 0
-            || dino_socket_send(c->sock, c->sent, MSG_LEN) != MSG_LEN)
+            || dino_socket_send(c->sock, c->sent, MSG_LEN, 0) != MSG_LEN)
         {
             printf("[Client] connection %d couldn't send (FAILED)\n", i);
             break;
@@ -160,7 +178,7 @@ static int run_clients(dino_event_loop_t loop)
                 break;
             }
             struct conn *c = events[i].userdata;
-            int          r = dino_socket_recv(c->sock, c->got + c->len, MSG_LEN - c->len);
+            int          r = (int)recv(c->sock, c->got + c->len, MSG_LEN - c->len, 0);
             if (r > 0)
                 c->len += r;
             if (c->len < MSG_LEN && r != 0)

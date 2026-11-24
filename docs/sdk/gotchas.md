@@ -40,9 +40,7 @@ timestamps in ns, belong in `int64_t`/`uint64_t`, not `long`. `ftell` and `fseek
 ## Sockets aren't file descriptors
 
 On Linux a socket is a small integer like any file, so `read`, `write` and `close` work on it. On
-Windows a socket is a `SOCKET` handle, and those calls don't. Use `dino_socket_recv`, `_send` and
-`_close`, and keep sockets in `dino_socket_t` variables, not `int`. The invalid value is
-`DINO_INVALID_SOCKET` (all bits set), not `-1` or 0.
+Windows a socket is a `SOCKET` handle, and those calls don't. Use `recv` and `send` (or `dino_socket_send`, which never raises `SIGPIPE`), close with `dino_socket_close`, and keep sockets in `dino_socket_t` variables, not `int` (on 64-bit Windows a `SOCKET` is 64 bits). Compare against `DINO_INVALID_SOCKET`, not `-1` or 0.
 
 ## Text and binary files
 

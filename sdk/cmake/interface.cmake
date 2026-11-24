@@ -21,6 +21,11 @@ add_library(dino__portability INTERFACE)
 target_include_directories(dino__portability INTERFACE
     "${DINO__SDK_DIR}/portability/common"
     "${DINO__SDK_DIR}/portability/${DINO_PLATFORM}")
+# The POSIX socket headers MinGW lacks (sys/socket.h, netdb.h, poll.h, ...),
+# over Winsock, for projects as for the SDK's own sources.
+if(WIN32)
+    target_include_directories(dino__portability INTERFACE "${DINO__SDK_DIR}/portability/win32-posix")
+endif()
 set_property(TARGET dino_core APPEND PROPERTY INTERFACE_LINK_LIBRARIES dino__portability)
 
 # Windows definitions of C library calls MinGW lacks or gets wrong (rename,

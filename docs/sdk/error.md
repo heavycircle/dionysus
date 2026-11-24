@@ -5,7 +5,7 @@
 Every SDK function reports failure through its return value: `-1`, or the `DINO_INVALID_*` value of a handle. `dino_error()` says why, with the same codes on Linux and Windows, where the operating systems use `errno`, `GetLastError()` and `WSAGetLastError()` with three different sets of numbers.
 
 ```c
-int n = dino_socket_recv(sock, buf, sizeof(buf));
+int n = dino_socket_recvfrom(sock, buf, sizeof(buf), 0, NULL, NULL);
 if (n < 0 && dino_error() == DINO_EAGAIN)
     return; // nothing to read yet: not an error on a non-blocking socket
 if (n < 0)
@@ -17,15 +17,18 @@ if (n < 0)
 A non-blocking `dino_socket_connect` returns `-1` at once. `DINO_EINPROGRESS` means it has started; when the socket becomes writable, `dino_socket_error` says how it ended. Anything else is the failure itself.
 
 ```c
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <poll.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <dino/core/error.h>
-#include <dino/core/io.h>
 #include <dino/core/network.h>
 
 int main(void)
 {
-    dino_socket_t s = dino_socket_create(DINO_AF_INET, DINO_SOCK_STREAM, DINO_IPPROTO_TCP);
+    dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     if (s == DINO_INVALID_SOCKET)
     {
         fprintf(stderr, "socket: %s\n", dino_error_message(dino_error()));
@@ -34,14 +37,19 @@ int main(void)
     dino_socket_set_nonblocking(s, 1);
 
     // Nothing listens on port 1, so this connect is refused.
-    int code = 0;
-    if (dino_socket_connect(s, "127.0.0.1", 1) != 0)
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family      = AF_INET;
+    addr.sin_port        = htons(1);
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    int code             = 0;
+    if (dino_socket_connect(s, (struct sockaddr *)&addr, sizeof(addr)) != 0)
     {
         code = dino_error();
         if (code == DINO_EINPROGRESS)
         {
-            dino_pollfd_t pfd = { s, DINO_POLLOUT, 0 };
-            if (dino_poll(&pfd, 1, 10000) == 0)
+            struct pollfd pfd = { s, POLLOUT, 0 };
+            if (poll(&pfd, 1, 10000) == 0)
                 code = DINO_ETIMEDOUT;
             else
                 code = dino_socket_error(s);
@@ -71,16 +79,16 @@ int main(void)
 | `DINO_EINVAL`       | An argument is invalid: a null pointer, an invalid handle, a bad value. | every module                                                            |
 | `DINO_ENOMEM`       | Out of memory.                                                          | anything that creates a handle                                          |
 | `DINO_ENOENT`       | No such file, directory, program or variable; not added to this loop.   | `dino_process_spawn`, `dino_file_size`, `dino_event_mod_*` and `_del_*` |
-| `DINO_EACCES`       | Permission denied.                                                      | `dino_process_spawn`, `dino_socket_bind`                                |
+| `DINO_EACCES`       | Permission denied.                                                      | `dino_process_spawn`, `dino_socket_last_error`                          |
 | `DINO_EEXIST`       | It already exists: already in this loop.                                | `dino_event_add_*`                                                      |
 | `DINO_EMFILE`       | Too many open files, sockets or handles.                                | `dino_socket_create`, `dino_socket_accept`, `dino_pipe_create`          |
 | `DINO_ECONNREFUSED` | Nothing is listening at the address.                                    | `dino_socket_connect`, `dino_socket_error`                              |
-| `DINO_ECONNRESET`   | The peer reset or aborted the connection.                               | `dino_socket_recv`, `dino_socket_send`                                  |
+| `DINO_ECONNRESET`   | The peer reset or aborted the connection.                               | `dino_socket_recvfrom`, `dino_socket_send`                              |
 | `DINO_EPIPE`        | The other end is closed: nothing can be written any more.               | `dino_socket_send`, `dino_pipe_write`                                   |
-| `DINO_EADDRINUSE`   | The address is already in use.                                          | `dino_socket_bind`                                                      |
+| `DINO_EADDRINUSE`   | The address is already in use.                                          | `dino_socket_last_error` (after `bind`)                                 |
 | `DINO_ETIMEDOUT`    | The operation itself timed out.                                         | `dino_socket_connect`, `dino_socket_error`                              |
 | `DINO_EUNREACH`     | The network or the host can't be reached.                               | `dino_socket_connect`                                                   |
-| `DINO_ENOTCONN`     | Not connected.                                                          | `dino_socket_send`, `dino_socket_shutdown`                              |
+| `DINO_ENOTCONN`     | Not connected.                                                          | `dino_socket_send`, `dino_socket_last_error`                            |
 | `DINO_ENOTSUP`      | This platform, or this kernel, can't do it.                             | `dino_event_add_process` before Linux 5.3                               |
 | `DINO_EOTHER`       | A failure with no code of its own.                                      | anything                                                                |
 

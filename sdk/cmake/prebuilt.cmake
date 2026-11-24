@@ -87,7 +87,7 @@ else()
         add_library(dino_libc STATIC IMPORTED GLOBAL)
         set_target_properties(dino_libc PROPERTIES
             IMPORTED_LOCATION "${_dino_lib}/libdino_libc.a"
-            INTERFACE_LINK_LIBRARIES advapi32)
+            INTERFACE_LINK_LIBRARIES "advapi32;ws2_32")
     endif()
     add_library(dino_util STATIC IMPORTED GLOBAL)
     set_target_properties(dino_util PROPERTIES
