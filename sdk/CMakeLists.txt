@@ -23,6 +23,7 @@ add_library(dino_core STATIC
 # here on every platform, so a module missing its Windows half fails a Linux
 # configure too instead of only the Windows build.
 set(DINO_PLATFORM_MODULES
+    cond
     error
     event
     fs

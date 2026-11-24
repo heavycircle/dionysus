@@ -49,19 +49,19 @@ void raw_win32(void)
     siw.cb = sizeof(siw);
 
     Sleep(1);                                       // expected-warning {{use dino_sleep_ms()}}
-    CreateThread(NULL, 0, thread_main, NULL, 0, NULL); // expected-warning {{use dino_thread_create()}}
+    CreateThread(NULL, 0, thread_main, NULL, 0, NULL); // expected-warning {{use pthread_create()}}
     _beginthreadex(NULL, 0, thread_main_ex, NULL, 0, NULL); // expected-warning {{_beginthreadex() is Windows-only}}
     _beginthread(thread_main_crt, 0, NULL);         // expected-warning {{_beginthread() is Windows-only}}
     CreatePipe(&r, &w, NULL, 0);                    // expected-warning {{use dino_pipe_create()}}
     CreateProcessA(NULL, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &sia, &pi); // expected-warning {{use dino_process_spawn()}}
     CreateProcessW(NULL, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &siw, &pi); // expected-warning {{use dino_process_spawn()}}
-    InitializeCriticalSection(&cs);                 // expected-warning {{use dino_mutex_create()}}
-    InitializeCriticalSectionAndSpinCount(&cs, 0);  // expected-warning {{use dino_mutex_create()}}
+    InitializeCriticalSection(&cs);                 // expected-warning {{use pthread_mutex_init()}}
+    InitializeCriticalSectionAndSpinCount(&cs, 0);  // expected-warning {{use pthread_mutex_init()}}
     QueryPerformanceCounter(&now);                  // expected-warning {{use clock_gettime(CLOCK_MONOTONIC)}}
     TerminateProcess(pi.hProcess, 1);               // expected-warning {{use dino_process_kill()}}
     (void)GetCurrentProcessId();                    // expected-warning {{use getpid() from <unistd.h>}}
     (void)GetCurrentThreadId();                     // expected-warning {{use dino_thread_current_id()}}
-    SwitchToThread();                               // expected-warning {{use dino_thread_yield()}}
+    SwitchToThread();                               // expected-warning {{use sched_yield()}}
     SleepEx(0, FALSE);                              // expected-warning {{use dino_sleep_ms()}}
     GetEnvironmentVariableA("X", buf, 1);           // expected-warning {{use getenv() from <stdlib.h>}}
     GetEnvironmentVariableW(L"X", NULL, 0);         // expected-warning {{use getenv() from <stdlib.h>}}
@@ -81,10 +81,10 @@ void raw_win32(void)
     ULONG            got;
     GetQueuedCompletionStatusEx(port, &entry, 1, &got, 0, FALSE); // expected-warning {{use dino_event_wait()}}
     INIT_ONCE io = INIT_ONCE_STATIC_INIT;
-    InitOnceExecuteOnce(&io, init_once_cb, NULL, NULL); // expected-warning {{use dino_once()}}
+    InitOnceExecuteOnce(&io, init_once_cb, NULL, NULL); // expected-warning {{use pthread_once()}}
     CONDITION_VARIABLE cv;
-    InitializeConditionVariable(&cv);               // expected-warning {{use dino_cond_create()}}
-    SleepConditionVariableCS(&cv, &cs, 0);          // expected-warning {{use dino_cond_wait()}}
+    InitializeConditionVariable(&cv);               // expected-warning {{use pthread_cond_init()}}
+    SleepConditionVariableCS(&cv, &cs, 0);          // expected-warning {{use pthread_cond_wait()}}
 #endif
     (void)_getpid();                                // expected-warning {{use getpid() from <unistd.h>}}
     _cwait(NULL, 0, 0);                             // expected-warning {{use dino_process_wait()}}

@@ -9,19 +9,18 @@ Code that links the SDK gets a warning when it calls one of the platform APIs be
 
 ## API Changes
 
-Where Linux and Windows differ, and what the SDK provides for each. Directories and memory maps
-have no module yet; they are planned for 1.1 ([#22](https://github.com/heavycircle/dionysus/issues/22)).
+Where Linux and Windows differ, and what the SDK provides for each. Memory maps have no module yet
+([#22](https://github.com/heavycircle/dionysus/issues/22)); see [dino vs libc](../docs/sdk/libc.md) for what the C library already does on every target.
 
-| **Domain**   | **Linux**             | **Windows**               | **Required?** | **Description**                        | **SDK**                               |
-| ------------ | --------------------- | ------------------------- | ------------- | -------------------------------------- | ------------------------------------- |
-| Networking   | `sys/socket.h`        | `winsock2.h`              | Required      | `WSAStartup`/`WSACleanup`              | [`network.h`](../docs/sdk/network.md) |
-| Processes    | `fork` / `exec`       | `CreateProcess`           | Required      | Windows has no `fork`                  | [`process.h`](../docs/sdk/process.md) |
-| Multiplexing | `epoll`               | `IOCP`                    | Required      | Windows has no `epoll`                 | [`event.h`](../docs/sdk/event.md)     |
-| Threading    | `pthread_create`      | `CreateThread`            | Recommended   | `winpthreads` is available but bloated | [`thread.h`](../docs/sdk/thread.md)   |
-| Mutexing     | `pthread_mutex_t`     | `CRITICAL_SECTION`        | Recommended   | `winpthreads` is available but bloated | [`mutex.h`](../docs/sdk/mutex.md)     |
-| Large Files  | `stat` / `ftell`      | `GetFileSizeEx`           | Recommended   | Windows caps standard files at 2GB     | [`fs.h`](../docs/sdk/fs.md)           |
-| Directories  | `opendir` / `readdir` | `FindFirstFile`           | Recommended   | Slower and bulky                       | not yet (#22)                         |
-| Timing       | `time` / `clock`      | `QueryPerformanceCounter` | Recommended   | Clock has no nanosecond precision      | [`time.h`](../docs/sdk/time.md)       |
-| Memory Map   | `mmap`                | `CreateFileMapping`       | Recommended   | Slower and bulky                       | not yet (#22)                         |
-| Sleeping     | `sleep` / `usleep`    | `Sleep`                   | Recommended   | `sleep` works in seconds               | [`time.h`](../docs/sdk/time.md)       |
-| Multiplexing | `select`              | `select`                  | Optional      | Inefficient, `event.h` scales better   | [`io.h`](../docs/sdk/io.md)           |
+| **Domain**   | **Linux**             | **Windows**               | **Required?** | **Description**                                                              | **SDK**                               |
+| ------------ | --------------------- | ------------------------- | ------------- | ---------------------------------------------------------------------------- | ------------------------------------- |
+| Networking   | `sys/socket.h`        | `winsock2.h`              | Required      | `WSAStartup`/`WSACleanup`                                                    | [`network.h`](../docs/sdk/network.md) |
+| Processes    | `fork` / `exec`       | `CreateProcess`           | Required      | Windows has no `fork`                                                        | [`process.h`](../docs/sdk/process.md) |
+| Multiplexing | `epoll`               | `IOCP`                    | Required      | Windows has no `epoll`                                                       | [`event.h`](../docs/sdk/event.md)     |
+| Threading    | `pthread_create`      | `CreateThread`            | Use pthreads  | winpthreads, linked statically (8–10 KB); the SDK adds monotonic timed waits | [`thread.h`](../docs/sdk/thread.md)   |
+| Large Files  | `stat` / `ftell`      | `GetFileSizeEx`           | Recommended   | Windows caps standard files at 2GB                                           | [`fs.h`](../docs/sdk/fs.md)           |
+| Directories  | `opendir` / `readdir` | `FindFirstFile`           | Use libc      | MinGW ships `dirent.h` (no `d_type`)                                         | [libc](../docs/sdk/libc.md)           |
+| Timing       | `time` / `clock`      | `QueryPerformanceCounter` | Recommended   | Clock has no nanosecond precision                                            | [`time.h`](../docs/sdk/time.md)       |
+| Memory Map   | `mmap`                | `CreateFileMapping`       | Recommended   | Slower and bulky                                                             | not yet (#22)                         |
+| Sleeping     | `sleep` / `usleep`    | `Sleep`                   | Recommended   | `sleep` works in seconds                                                     | [`time.h`](../docs/sdk/time.md)       |
+| Multiplexing | `select`              | `select`                  | Optional      | Inefficient, `event.h` scales better                                         | [`io.h`](../docs/sdk/io.md)           |

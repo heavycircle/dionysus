@@ -1,6 +1,7 @@
 #ifndef DINO_CORE_THREAD_H
 #define DINO_CORE_THREAD_H
 
+#include <pthread.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -8,49 +9,14 @@ extern "C"
 {
 #endif
 
-typedef struct dino_thread *dino_thread_t;
+// Threads, mutexes and condition variables are plain pthreads on every target
+// (winpthreads on Windows, linked statically). This header adds what pthreads
+// can't do the same way everywhere.
 
-#define DINO_INVALID_THREAD ((dino_thread_t)0)
-
-/**
- * A thread's entry point: an ordinary function on every platform.
- *
- * @param  arg  The argument given to dino_thread_create.
- * @return A result for dino_thread_join.
- */
-typedef int (*dino_thread_fn_t)(void *arg);
-
-/**
- * Start a thread running fn(arg).
- *
- * Its stack is 8 MB on every platform. The program's main thread keeps its
- * platform's own size (8 MB on Linux, 16 MB on Windows). Every thread must be
- * either joined or detached exactly once.
- *
- * @param  thread  Receives the handle, or DINO_INVALID_THREAD on failure.
- * @param  fn      Function to run.
- * @param  arg     Argument passed to fn.
- * @return 0 on success, -1 on failure.
- */
-int dino_thread_create(dino_thread_t *thread, dino_thread_fn_t fn, void *arg);
-
-/**
- * Wait for a thread to finish and release it. The handle is invalid afterwards.
- *
- * @param  thread  Handle from dino_thread_create, not yet joined or detached.
- * @param  result  Receives fn's return value; may be NULL.
- * @return 0 on success, -1 for DINO_INVALID_THREAD or the calling thread itself.
- */
-int dino_thread_join(dino_thread_t thread, int *result);
-
-/**
- * Let a thread finish on its own; its resources are released when it does. The
- * handle is invalid afterwards.
- *
- * @param  thread  Handle from dino_thread_create, not yet joined or detached.
- * @return 0 on success, -1 for DINO_INVALID_THREAD.
- */
-int dino_thread_detach(dino_thread_t thread);
+/** Returned by dino_cond_timedwait when the time ran out. */
+#ifndef DINO_TIMEOUT
+#define DINO_TIMEOUT 1
+#endif
 
 /**
  * Identify the calling thread.
@@ -61,9 +27,30 @@ int dino_thread_detach(dino_thread_t thread);
 uint64_t dino_thread_current_id(void);
 
 /**
- * Give up the rest of the calling thread's time slice.
+ * Initialize a condition variable for dino_cond_timedwait, in place of
+ * pthread_cond_init. Its timed waits follow the monotonic clock, so setting the
+ * system time doesn't shorten or extend them. pthread_condattr_setclock can't
+ * do that on Windows. Destroy it with pthread_cond_destroy; signal, broadcast
+ * and plain waits are the pthread calls.
+ *
+ * @param  cond  Condition variable to initialize.
+ * @return 0 on success, -1 on failure.
  */
-void dino_thread_yield(void);
+int dino_cond_init(pthread_cond_t *cond);
+
+/**
+ * Wait on a condition variable from dino_cond_init for at most timeout_ms.
+ *
+ * Like pthread_cond_wait, the caller must hold mutex, which is released while
+ * waiting and held again on return, and a wakeup can be spurious: check the
+ * condition in a loop. Each call waits up to timeout_ms anew.
+ *
+ * @param  cond        Condition variable from dino_cond_init.
+ * @param  mutex       Mutex the caller holds.
+ * @param  timeout_ms  -1 to wait forever, 0 to check once.
+ * @return 0 when woken, DINO_TIMEOUT when the time ran out, -1 on error.
+ */
+int dino_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex, int timeout_ms);
 
 #ifdef __cplusplus
 }

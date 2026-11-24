@@ -1,5 +1,3 @@
-#include <dino/core/mutex.h>
-
 #include <stdlib.h>
 
 #include <windows.h>
@@ -7,6 +5,7 @@
 #include <dino/core/time.h>
 
 #include "error_internal.h"
+#include "mutex_internal.h"
 
 // LeaveCriticalSection by a thread that doesn't hold the section is undefined
 // and can corrupt it, so the owner and recursion depth are kept alongside to
@@ -30,32 +29,32 @@ static void acquired(struct dino_mutex *m)
     m->depth++;
 }
 
-dino_mutex_t dino_mutex_create(void)
+dino__mutex_t dino__mutex_create(void)
 {
     struct dino_mutex *m = malloc(sizeof(*m));
     if (!m)
     {
         dino__error_set(DINO_ENOMEM);
-        return DINO_INVALID_MUTEX;
+        return DINO__INVALID_MUTEX;
     }
     InitializeCriticalSection(&m->cs);
     m->owner = 0;
     m->depth = 0;
-    return (dino_mutex_t)m;
+    return (dino__mutex_t)m;
 }
 
-void dino_mutex_destroy(dino_mutex_t mutex)
+void dino__mutex_destroy(dino__mutex_t mutex)
 {
-    if (mutex == DINO_INVALID_MUTEX)
+    if (mutex == DINO__INVALID_MUTEX)
         return;
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     DeleteCriticalSection(&m->cs);
     free(m);
 }
 
-int dino_mutex_lock(dino_mutex_t mutex)
+int dino__mutex_lock(dino__mutex_t mutex)
 {
-    if (mutex == DINO_INVALID_MUTEX)
+    if (mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     EnterCriticalSection(&m->cs);
@@ -63,9 +62,9 @@ int dino_mutex_lock(dino_mutex_t mutex)
     return 0;
 }
 
-int dino_mutex_unlock(dino_mutex_t mutex)
+int dino__mutex_unlock(dino__mutex_t mutex)
 {
-    if (mutex == DINO_INVALID_MUTEX)
+    if (mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     if (!held_by_caller(m))
@@ -76,9 +75,9 @@ int dino_mutex_unlock(dino_mutex_t mutex)
     return 0;
 }
 
-int dino_mutex_trylock(dino_mutex_t mutex)
+int dino__mutex_trylock(dino__mutex_t mutex)
 {
-    if (mutex == DINO_INVALID_MUTEX)
+    if (mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     // Held by another thread: not a failure, the same answer as a wait that
@@ -89,20 +88,20 @@ int dino_mutex_trylock(dino_mutex_t mutex)
     return 0;
 }
 
-dino_cond_t dino_cond_create(void)
+dino__cond_t dino__cond_create(void)
 {
     CONDITION_VARIABLE *cv = malloc(sizeof(CONDITION_VARIABLE));
     if (!cv)
     {
         dino__error_set(DINO_ENOMEM);
-        return DINO_INVALID_COND;
+        return DINO__INVALID_COND;
     }
     InitializeConditionVariable(cv);
-    return (dino_cond_t)cv;
+    return (dino__cond_t)cv;
 }
 
 // Windows condition variables need no teardown.
-void dino_cond_destroy(dino_cond_t cond)
+void dino__cond_destroy(dino__cond_t cond)
 {
     free((CONDITION_VARIABLE *)cond);
 }
@@ -121,7 +120,7 @@ static int check_waitable(struct dino_mutex *m)
 
 // SleepConditionVariableCS leaves and re-enters the section, so the owner is
 // handed over around it.
-static BOOL sleep_on(dino_cond_t cond, struct dino_mutex *m, DWORD wait)
+static BOOL sleep_on(dino__cond_t cond, struct dino_mutex *m, DWORD wait)
 {
     __atomic_store_n(&m->owner, 0, __ATOMIC_RELAXED);
     m->depth    = 0;
@@ -133,9 +132,9 @@ static BOOL sleep_on(dino_cond_t cond, struct dino_mutex *m, DWORD wait)
     return woke;
 }
 
-int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex)
+int dino__cond_wait(dino__cond_t cond, dino__mutex_t mutex)
 {
-    if (cond == DINO_INVALID_COND || mutex == DINO_INVALID_MUTEX)
+    if (cond == DINO__INVALID_COND || mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     if (check_waitable(m) != 0)
@@ -145,12 +144,12 @@ int dino_cond_wait(dino_cond_t cond, dino_mutex_t mutex)
 
 // The timeout counts scheduler ticks and can end up to a tick early, so keep
 // waiting until the monotonic deadline has really passed.
-int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
+int dino__cond_timedwait(dino__cond_t cond, dino__mutex_t mutex, int timeout_ms)
 {
-    if (cond == DINO_INVALID_COND || mutex == DINO_INVALID_MUTEX)
+    if (cond == DINO__INVALID_COND || mutex == DINO__INVALID_MUTEX)
         return dino__fail(DINO_EINVAL);
     if (timeout_ms < 0)
-        return dino_cond_wait(cond, mutex);
+        return dino__cond_wait(cond, mutex);
     struct dino_mutex *m = (struct dino_mutex *)mutex;
     if (check_waitable(m) != 0)
         return -1;
@@ -171,23 +170,23 @@ int dino_cond_timedwait(dino_cond_t cond, dino_mutex_t mutex, int timeout_ms)
     }
 }
 
-int dino_cond_signal(dino_cond_t cond)
+int dino__cond_signal(dino__cond_t cond)
 {
-    if (cond == DINO_INVALID_COND)
+    if (cond == DINO__INVALID_COND)
         return dino__fail(DINO_EINVAL);
     WakeConditionVariable((CONDITION_VARIABLE *)cond);
     return 0;
 }
 
-int dino_cond_broadcast(dino_cond_t cond)
+int dino__cond_broadcast(dino__cond_t cond)
 {
-    if (cond == DINO_INVALID_COND)
+    if (cond == DINO__INVALID_COND)
         return dino__fail(DINO_EINVAL);
     WakeAllConditionVariable((CONDITION_VARIABLE *)cond);
     return 0;
 }
 
-_Static_assert(sizeof(INIT_ONCE) <= sizeof(dino_once_t), "INIT_ONCE must fit in dino_once_t");
+_Static_assert(sizeof(INIT_ONCE) <= sizeof(dino__once_t), "INIT_ONCE must fit in dino__once_t");
 
 static BOOL CALLBACK run_once(PINIT_ONCE once, PVOID fn, PVOID *context)
 {
@@ -197,7 +196,7 @@ static BOOL CALLBACK run_once(PINIT_ONCE once, PVOID fn, PVOID *context)
     return TRUE;
 }
 
-int dino_once(dino_once_t *once, void (*fn)(void))
+int dino__once(dino__once_t *once, void (*fn)(void))
 {
     if (!once || !fn)
         return dino__fail(DINO_EINVAL);

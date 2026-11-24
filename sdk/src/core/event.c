@@ -22,8 +22,8 @@ struct dino__event_timer
 int dino__event_timers_init(struct dino__event_timers *t)
 {
     *t      = (struct dino__event_timers) { 0 };
-    t->lock = dino_mutex_create();
-    return t->lock == DINO_INVALID_MUTEX ? -1 : 0;
+    t->lock = dino__mutex_create();
+    return t->lock == DINO__INVALID_MUTEX ? -1 : 0;
 }
 
 void dino__event_timers_destroy(struct dino__event_timers *t)
@@ -34,7 +34,7 @@ void dino__event_timers_destroy(struct dino__event_timers *t)
         free(tm);
     }
     free((void *)t->heap);
-    dino_mutex_destroy(t->lock);
+    dino__mutex_destroy(t->lock);
 }
 
 static void place(struct dino__event_timers *t, size_t i, struct dino__event_timer *tm)
@@ -122,7 +122,7 @@ dino_event_timer_t dino_event_add_timer(
     tm->userdata    = userdata;
     tm->owner       = t;
 
-    dino_mutex_lock(t->lock);
+    dino__mutex_lock(t->lock);
     int ok = push(t, tm) == 0;
     if (ok)
     {
@@ -134,7 +134,7 @@ dino_event_timer_t dino_event_add_timer(
     // Under the lock: a waiter raises the count before reading the heap, so it
     // either saw this timer or is counted here.
     int interrupt = ok && tm->index == 0 && atomic_load(&t->waiting) > 0;
-    dino_mutex_unlock(t->lock);
+    dino__mutex_unlock(t->lock);
 
     if (!ok)
     {
@@ -156,7 +156,7 @@ int dino_event_del_timer(dino_event_loop_t loop, dino_event_timer_t timer)
     struct dino__event_timer  *tm = (struct dino__event_timer *)timer;
     if (tm->owner != t)
         return dino__fail(DINO_EINVAL);
-    dino_mutex_lock(t->lock);
+    dino__mutex_lock(t->lock);
     if (tm->index != NOT_IN_HEAP)
         remove_at(t, tm->index);
     if (tm->prev)
@@ -165,7 +165,7 @@ int dino_event_del_timer(dino_event_loop_t loop, dino_event_timer_t timer)
         t->all = tm->next;
     if (tm->next)
         tm->next->prev = tm->prev;
-    dino_mutex_unlock(t->lock);
+    dino__mutex_unlock(t->lock);
     free(tm);
     return 0;
 }
@@ -189,7 +189,7 @@ int dino__event_timers_step(struct dino__event_timers *t, dino_event_t *out, int
     int timeout_ms, uint64_t deadline_ns, int *left_ms, int *wait_ms)
 {
     int n = 0;
-    dino_mutex_lock(t->lock);
+    dino__mutex_lock(t->lock);
     uint64_t now = dino_time_monotonic_ns();
     while (n < max && t->len && t->heap[0]->deadline_ns <= now)
     {
@@ -217,7 +217,7 @@ int dino__event_timers_step(struct dino__event_timers *t, dino_event_t *out, int
         if (n == 0)
             atomic_fetch_add(&t->waiting, 1);
     }
-    dino_mutex_unlock(t->lock);
+    dino__mutex_unlock(t->lock);
     return n;
 }
 

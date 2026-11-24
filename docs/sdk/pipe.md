@@ -13,13 +13,13 @@ and support in the [event loop](event.md).
 ## Example: a worker thread writes, the main thread reads
 
 ```c
+#include <pthread.h>
 #include <stdio.h>
 #include <string.h>
 
 #include <dino/core/pipe.h>
-#include <dino/core/thread.h>
 
-static int writer(void *arg)
+static void *writer(void *arg)
 {
     dino_pipe_t out = (dino_pipe_t)arg;
     for (int i = 1; i <= 3; i++)
@@ -29,7 +29,7 @@ static int writer(void *arg)
         dino_pipe_write(out, line, len);
     }
     dino_pipe_close(out); // the reader sees end of file
-    return 0;
+    return NULL;
 }
 
 int main(void)
@@ -38,8 +38,8 @@ int main(void)
     if (dino_pipe_create(&read_end, &write_end) != 0)
         return 1;
 
-    dino_thread_t t;
-    if (dino_thread_create(&t, writer, (void *)write_end) != 0)
+    pthread_t t;
+    if (pthread_create(&t, NULL, writer, (void *)write_end) != 0)
         return 1;
 
     char text[128] = { 0 };
@@ -53,7 +53,7 @@ int main(void)
             break; // 0: every write end is closed
         total += n;
     }
-    dino_thread_join(t, NULL);
+    pthread_join(t, NULL);
     dino_pipe_close(read_end);
 
     printf("%s", text);

@@ -81,7 +81,7 @@ Tell a crash from an exit with `status.signal`, not with `status.code`: a signal
 
 ## Stack size
 
-Threads started with `dino_thread_create` get 8 MB of stack everywhere. The main thread doesn't: it has 8 MB on Linux and 16 MB on Windows, so a large local array in `main` that works on Windows can overflow on Linux. Allocate big buffers with `malloc`.
+Stacks differ by platform. The main thread has 8 MB on Linux and 16 MB on Windows, and a thread from `pthread_create` gets 128 KiB with musl but 1 MiB on Windows, so recursion or a large local array that works on Windows can overflow on Linux. Set a thread's size with `pthread_attr_setstacksize`, and allocate big buffers with `malloc`.
 
 ## Line endings in output
 

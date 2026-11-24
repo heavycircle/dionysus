@@ -9,7 +9,7 @@
 #include <string.h>
 #include <time.h>
 
-#include <dino/core/thread.h>
+#include "../core/thread_internal.h"
 
 #define LINE_BYTES 1024
 #define MS_PER_DAY 86400000ULL
@@ -31,7 +31,7 @@ static void take_lock(void)
 {
     unsigned ticket = atomic_fetch_add_explicit(&next_ticket, 1, memory_order_relaxed);
     while (atomic_load_explicit(&now_serving, memory_order_acquire) != ticket)
-        dino_thread_yield();
+        dino__thread_yield();
 }
 
 static void drop_lock(void)

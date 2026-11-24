@@ -3,8 +3,8 @@
 Dionysus lets you write C once and get tiny, fully static binaries for Linux (musl) and Windows
 (MinGW) on arm, arm64, i386, ppc and x86_64. It has two parts:
 
-- **The SDK** (`sdk/`): the `dino_*` portability layer (sockets, threads, mutexes, files, I/O
-  multiplexing) and the CMake toolchain that turns `zig cc` into a cross compiler.
+- **The SDK** (`sdk/`): the `dino_*` portability layer (sockets, pipes, processes, I/O
+  multiplexing, and Windows fixes for C library calls) and the CMake toolchain that turns `zig cc` into a cross compiler.
 - **`dino`** (`cli/`): a single executable, written in Zig, that carries the SDK inside it and
   drives CMake. `dino build arm64 win64` is all a user has to type.
 
@@ -114,8 +114,8 @@ after changing `cli/` or `sdk/`.
 build.zig, build.zig.zon   Zig build for dino; build.zig.zon holds the version
 cli/                       dino source (main.zig, commands/, cmake.zig, libraries.zig, ...)
 sdk/
-  include/dino/core/       public headers: error, event, fs, io, mutex (+ condition variables, once), network,
-                           pipe, process, runtime, thread, time
+  include/dino/core/       public headers: error, event, fs, io, network, pipe, process,
+                           thread, time
   include/dino/util/       extras built on core: logging
   src/core/                implementations: <module>.c (shared, if any), <module>_posix.c and
                            <module>_win32.c (one is built per platform)
@@ -213,14 +213,13 @@ The SDK's own tests live in `sdk/tests/`, one `test_<module>.c` per module, writ
 ```c
 #include <utest.h>
 
-#include <dino/core/mutex.h>
+#include <dino/core/pipe.h>
 
-UTEST(mutex, is_recursive)
+UTEST(pipe, reads_what_was_written)
 {
-    dino_mutex_t m = dino_mutex_create();
-    ASSERT_NE(DINO_INVALID_MUTEX, m);
-    EXPECT_EQ(0, dino_mutex_lock(m));
-    EXPECT_EQ(0, dino_mutex_lock(m));
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    EXPECT_EQ(2, dino_pipe_write(w, "hi", 2));
     ...
 }
 
@@ -367,7 +366,7 @@ where the SDK is. It then adds every directory in `DINO_LIBRARY_PATH` the same w
 Each `dino_*` area's reason is listed in libc.md; a call that loses its reason gets removed.
 
 - **Handles are opaque, and each type is its own C type**, so passing one where another is expected doesn't compile (`tests/headers.sh` checks it). A handle is a pointer to an undefined struct, `typedef struct dino_<thing> *dino_<thing>_t`, with `NULL` as its `DINO_INVALID_<THING>`. Where a platform has no struct behind it (a POSIX pipe's descriptor, a pid), the value is carried in the pointer type through `uintptr_t` and never dereferenced. The one exception is `dino_socket_t`, an integer holding the OS socket so that it can be passed to platform calls, with `DINO_INVALID_SOCKET` as all bits set.
-- **Names:** `dino_<thing>_<verb>` for functions, where the thing is what the call acts on, usually but not always the module (`dino_socket_send`, `dino_cond_wait` in the mutex module, `dino_event_add_timer` in the event module), and `dino_<thing>_t` for every type (`dino_process_spawn_opts_t`, `dino_thread_fn_t`). Adding something to a container reads `dino_<container>_add_<thing>` (`dino_event_add_socket`, `dino_event_add_timer`). `DINO_` for macros and constants. Nothing outside these prefixes; `tests/headers.sh` checks it.
+- **Names:** `dino_<thing>_<verb>` for functions, where the thing is what the call acts on, usually but not always the module (`dino_socket_send`, `dino_event_add_timer` in the event module), and `dino_<thing>_t` for every type (`dino_process_spawn_opts_t`, `dino_thread_fn_t`). Adding something to a container reads `dino_<container>_add_<thing>` (`dino_event_add_socket`, `dino_event_add_timer`). `DINO_` for macros and constants. Nothing outside these prefixes; `tests/headers.sh` checks it.
 - **Return values:** `0` for success and `-1` for failure, never a platform error code.
   Constructors return the handle, with the `DINO_INVALID_*` value on failure; functions that start
   something or produce several results take out-parameters and return `0` / `-1`. Waits return

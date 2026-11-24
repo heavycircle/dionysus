@@ -5,8 +5,9 @@
 #include <stdint.h>
 #include <utest.h>
 
-#include <dino/core/thread.h>
 #include <dino/core/time.h>
+
+#include "../src/core/thread_internal.h"
 
 static const uint64_t g_durations[] = {
     UINT64_MAX,
@@ -27,9 +28,9 @@ UTEST(sleep, huge_durations_dont_wrap_to_short_sleeps)
 {
     for (size_t i = 0; i < sizeof(g_durations) / sizeof(g_durations[0]); i++)
     {
-        dino_thread_t t;
-        ASSERT_EQ(dino_thread_create(&t, sleep_for, (void *)&g_durations[i]), 0);
-        ASSERT_EQ(dino_thread_detach(t), 0);
+        dino__thread_t t;
+        ASSERT_EQ(dino__thread_create(&t, sleep_for, (void *)&g_durations[i]), 0);
+        ASSERT_EQ(dino__thread_detach(t), 0);
     }
     dino_sleep_ms(200);
     ASSERT_EQ(atomic_load(&g_woke), 0);

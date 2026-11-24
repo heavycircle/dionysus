@@ -29,7 +29,7 @@ void raw_common(void)
     // glibc declares it only with POSIX feature macros (raw_strict leaves them out).
 #if !defined(__GLIBC__) || defined(__USE_XOPEN2K)
     pthread_condattr_t attr;
-    pthread_condattr_setclock(&attr, 1); // expected-warning {{use dino_cond_timedwait()}}
+    pthread_condattr_setclock(&attr, 1); // expected-warning {{dino_cond_timedwait() from <dino/core/thread.h>}}
 
     // The per-call escape hatch: no warning, and none expected.
     DINO_PLATFORM_CALL(pthread_condattr_setclock(&attr, 1));
@@ -40,7 +40,7 @@ void raw_common(void)
     (void)vendor_set_clock(&attr);
     // A system header's macro expands in the project's code, where clang
     // reports it: documented, with DINO_PLATFORM_CALL as the way out.
-    (void)VENDOR_CLOCK_MACRO(&attr); // expected-warning {{use dino_cond_timedwait()}}
+    (void)VENDOR_CLOCK_MACRO(&attr); // expected-warning {{dino_cond_timedwait() from <dino/core/thread.h>}}
     (void)DINO_PLATFORM_CALL(VENDOR_CLOCK_MACRO(&attr));
 #elif !defined(_GNU_SOURCE) && !defined(_DEFAULT_SOURCE)
     // expected-no-diagnostics

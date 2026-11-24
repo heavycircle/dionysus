@@ -31,7 +31,7 @@ struct dino_event_loop
     // being mistaken for a socket's userdata. proc_lock covers the list and
     // every read of proc_epfd, so a deleted item is never reported.
     int               proc_epfd;
-    dino_mutex_t      proc_lock;
+    dino__mutex_t     proc_lock;
     struct proc_item *procs;
 };
 
@@ -58,7 +58,7 @@ dino_event_loop_t dino_event_loop_create(void)
     }
     atomic_init(&loop->user_wake, 0);
     loop->procs             = NULL;
-    loop->proc_lock         = dino_mutex_create();
+    loop->proc_lock         = dino__mutex_create();
     loop->epfd              = epoll_create1(EPOLL_CLOEXEC);
     loop->wakefd            = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
     loop->proc_epfd         = epoll_create1(EPOLL_CLOEXEC);
@@ -71,14 +71,14 @@ dino_event_loop_t dino_event_loop_create(void)
     pipes.events   = EPOLLIN;
     pipes.data.ptr = &loop->pipe_epfd;
     if (loop->epfd < 0 || loop->wakefd < 0 || loop->proc_epfd < 0 || loop->pipe_epfd < 0
-        || loop->proc_lock == DINO_INVALID_MUTEX
+        || loop->proc_lock == DINO__INVALID_MUTEX
         || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->wakefd, &wake) != 0
         || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->proc_epfd, &procs) != 0
         || epoll_ctl(loop->epfd, EPOLL_CTL_ADD, loop->pipe_epfd, &pipes) != 0)
     {
         // Before the cleanup: errno is still the failed call's. A mutex that
         // couldn't be made has recorded its own reason.
-        if (loop->proc_lock != DINO_INVALID_MUTEX)
+        if (loop->proc_lock != DINO__INVALID_MUTEX)
             dino__error_set_os();
         if (loop->epfd >= 0)
             close(loop->epfd);
@@ -88,7 +88,7 @@ dino_event_loop_t dino_event_loop_create(void)
             close(loop->proc_epfd);
         if (loop->pipe_epfd >= 0)
             close(loop->pipe_epfd);
-        dino_mutex_destroy(loop->proc_lock);
+        dino__mutex_destroy(loop->proc_lock);
         dino__event_timers_destroy(&loop->timers);
         free(loop);
         return DINO_INVALID_EVENT_LOOP;
@@ -111,7 +111,7 @@ void dino_event_loop_destroy(dino_event_loop_t handle)
     close(loop->wakefd);
     close(loop->proc_epfd);
     close(loop->pipe_epfd);
-    dino_mutex_destroy(loop->proc_lock);
+    dino__mutex_destroy(loop->proc_lock);
     dino__event_timers_destroy(&loop->timers);
     free(loop);
 }
@@ -238,14 +238,14 @@ static int collect_pipes(struct dino_event_loop *loop, dino_event_t *out, int ma
 static int collect_exits(struct dino_event_loop *loop, dino_event_t *out, int max)
 {
     struct epoll_event evs[BATCH];
-    dino_mutex_lock(loop->proc_lock);
+    dino__mutex_lock(loop->proc_lock);
     int got = epoll_wait(loop->proc_epfd, evs, max < BATCH ? max : BATCH, 0);
     for (int i = 0; i < got; i++)
     {
         out[i].events   = DINO_EVENT_EXIT;
         out[i].userdata = ((struct proc_item *)evs[i].data.ptr)->userdata;
     }
-    dino_mutex_unlock(loop->proc_lock);
+    dino__mutex_unlock(loop->proc_lock);
     return got < 0 ? 0 : got;
 }
 
@@ -263,7 +263,7 @@ int dino_event_add_process(dino_event_loop_t handle, dino_process_t process, voi
 
     // Already added, no pidfds on this kernel (DINO_ENOTSUP), or epoll's reason.
     int rc = -1, reason = DINO_EEXIST;
-    dino_mutex_lock(loop->proc_lock);
+    dino__mutex_lock(loop->proc_lock);
     struct proc_item *it = loop->procs;
     while (it && it->process != process)
         it = it->next;
@@ -287,7 +287,7 @@ int dino_event_add_process(dino_event_loop_t handle, dino_process_t process, voi
         item->next  = loop->procs;
         loop->procs = item;
     }
-    dino_mutex_unlock(loop->proc_lock);
+    dino__mutex_unlock(loop->proc_lock);
     if (rc != 0)
     {
         if (item->pidfd >= 0)
@@ -303,7 +303,7 @@ int dino_event_del_process(dino_event_loop_t handle, dino_process_t process)
     if (handle == DINO_INVALID_EVENT_LOOP || process == DINO_INVALID_PROCESS)
         return dino__fail(DINO_EINVAL);
     struct dino_event_loop *loop = (struct dino_event_loop *)handle;
-    dino_mutex_lock(loop->proc_lock);
+    dino__mutex_lock(loop->proc_lock);
     struct proc_item **p = &loop->procs;
     while (*p && (*p)->process != process)
         p = &(*p)->next;
@@ -315,7 +315,7 @@ int dino_event_del_process(dino_event_loop_t handle, dino_process_t process)
         close(item->pidfd);
         free(item);
     }
-    dino_mutex_unlock(loop->proc_lock);
+    dino__mutex_unlock(loop->proc_lock);
     return item ? 0 : dino__fail(DINO_ENOENT);
 }
 

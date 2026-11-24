@@ -1,68 +1,71 @@
+#include <pthread.h>
 #include <stdio.h>
 
-#include <dino/core/mutex.h>
 #include <dino/core/thread.h>
+
+/* Mutexes and condition variables are plain pthreads on every target. The SDK
+   adds one thing: a timed wait that follows the monotonic clock
+   (dino_cond_init and dino_cond_timedwait), which pthreads can't give on
+   Windows. */
 
 #define NUM_THREADS 8
 #define INCREMENTS  1000000
 
-static dino_mutex_t g_mutex;
-static long long    g_counter = 0;
+static pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  g_done;
+static long long       g_counter  = 0;
+static int             g_finished = 0;
 
-// One slot per thread: a shared error count would itself need the mutex.
-static int g_errors[NUM_THREADS];
-
-static int worker(void *arg)
+static void *worker(void *arg)
 {
-    int *errors = arg;
+    (void)arg;
     for (int i = 0; i < INCREMENTS; i++)
     {
-        if (dino_mutex_lock(g_mutex) != 0)
-        {
-            (*errors)++;
-            continue;
-        }
+        pthread_mutex_lock(&g_mutex);
         g_counter++;
-        if (dino_mutex_unlock(g_mutex) != 0)
-            (*errors)++;
+        pthread_mutex_unlock(&g_mutex);
     }
-    return 0;
+    pthread_mutex_lock(&g_mutex);
+    g_finished++;
+    pthread_cond_signal(&g_done);
+    pthread_mutex_unlock(&g_mutex);
+    return NULL;
 }
 
 int main(void)
 {
-    g_mutex = dino_mutex_create();
-    if (g_mutex == DINO_INVALID_MUTEX)
+    if (dino_cond_init(&g_done) != 0)
     {
-        fprintf(stderr, "FATAL: Failed to create mutex\n");
+        fprintf(stderr, "FATAL: Failed to create condition variable\n");
         return -1;
     }
 
-    dino_thread_t threads[NUM_THREADS];
+    pthread_t threads[NUM_THREADS];
     for (int i = 0; i < NUM_THREADS; i++)
     {
-        if (dino_thread_create(&threads[i], worker, &g_errors[i]) != 0)
+        if (pthread_create(&threads[i], NULL, worker, NULL) != 0)
         {
             fprintf(stderr, "FATAL: Failed to create thread %d\n", i);
             return -1;
         }
     }
 
-    for (int i = 0; i < NUM_THREADS; i++)
-        dino_thread_join(threads[i], NULL);
+    // Wait for every worker, giving up after a minute without progress.
+    int timed_out = 0;
+    pthread_mutex_lock(&g_mutex);
+    while (g_finished < NUM_THREADS && !timed_out)
+        timed_out = dino_cond_timedwait(&g_done, &g_mutex, 60000) == DINO_TIMEOUT;
+    pthread_mutex_unlock(&g_mutex);
 
-    int errors = 0;
     for (int i = 0; i < NUM_THREADS; i++)
-        errors += g_errors[i];
+        pthread_join(threads[i], NULL);
 
     long long expected = (long long)NUM_THREADS * INCREMENTS;
     printf("Expected: %lld\n", expected);
     printf("Got:      %lld\n", g_counter);
-    if (errors)
-        printf("Lock/unlock errors: %d\n", errors);
-    int ok = g_counter == expected && errors == 0;
-    printf("%s\n", errors ? "FAILED" : (g_counter != expected ? "RACE DETECTED" : "OK"));
+    int ok = g_counter == expected && !timed_out;
+    printf("%s\n", timed_out ? "TIMED OUT" : (g_counter != expected ? "RACE DETECTED" : "OK"));
 
-    dino_mutex_destroy(g_mutex);
+    pthread_cond_destroy(&g_done);
     return ok ? 0 : 1;
 }

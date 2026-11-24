@@ -3,12 +3,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <dino/core/thread.h>
 #include <dino/core/time.h>
 
 #include "error_internal.h"
 #include "pipe_internal.h"
 #include "process_internal.h"
+#include "thread_internal.h"
 
 /* ---- Run to completion ---- */
 
@@ -173,10 +173,11 @@ int dino_process_run(
     struct collector err = { pipes.err, deadline, max, NULL, 0, 0, 0, 0, 0 };
     struct feeder    in
         = { pipes.in, deadline, opts ? opts->input : NULL, opts ? opts->input_len : 0, 0 };
-    dino_thread_t threads[3] = { DINO_INVALID_THREAD, DINO_INVALID_THREAD, DINO_INVALID_THREAD };
-    int           started    = dino_thread_create(&threads[0], collect, &out) == 0
-        && dino_thread_create(&threads[1], collect, &err) == 0
-        && (in.pipe == DINO_INVALID_PIPE || dino_thread_create(&threads[2], feed, &in) == 0);
+    dino__thread_t threads[3]
+        = { DINO__INVALID_THREAD, DINO__INVALID_THREAD, DINO__INVALID_THREAD };
+    int started = dino__thread_create(&threads[0], collect, &out) == 0
+        && dino__thread_create(&threads[1], collect, &err) == 0
+        && (in.pipe == DINO_INVALID_PIPE || dino__thread_create(&threads[2], feed, &in) == 0);
 
     // Why the run failed, kept from the call that failed: the calls that
     // follow it here succeed or fail for reasons of their own, and the reader
@@ -205,11 +206,11 @@ int dino_process_run(
     // write fails, unless something the child started still holds the pipes:
     // then they stop at the deadline.
     for (int i = 0; i < 3; i++)
-        if (threads[i] != DINO_INVALID_THREAD)
-            dino_thread_join(threads[i], NULL);
+        if (threads[i] != DINO__INVALID_THREAD)
+            dino__thread_join(threads[i], NULL);
     if (status == 0 && (out.timed_out || err.timed_out || in.timed_out))
         status = DINO_TIMEOUT;
-    if (in.pipe != DINO_INVALID_PIPE && threads[2] == DINO_INVALID_THREAD)
+    if (in.pipe != DINO_INVALID_PIPE && threads[2] == DINO__INVALID_THREAD)
         dino_pipe_close(in.pipe);
     if (out.pipe != DINO_INVALID_PIPE)
         dino_pipe_close(out.pipe);

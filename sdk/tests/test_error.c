@@ -12,11 +12,12 @@
 #include <dino/core/event.h>
 #include <dino/core/fs.h>
 #include <dino/core/io.h>
-#include <dino/core/mutex.h>
 #include <dino/core/network.h>
 #include <dino/core/pipe.h>
 #include <dino/core/process.h>
-#include <dino/core/thread.h>
+
+#include "../src/core/mutex_internal.h"
+#include "../src/core/thread_internal.h"
 
 #define PORT 18900
 
@@ -91,10 +92,10 @@ UTEST(error, each_thread_has_its_own)
     ASSERT_EQ(-1, dino_socket_bind(b, "127.0.0.1", PORT + 1));
     ASSERT_EQ(DINO_EADDRINUSE, dino_error());
 
-    dino_thread_t t;
-    int           seen_at_start = -1, at_end = -1;
-    ASSERT_EQ(0, dino_thread_create(&t, fail_elsewhere, &seen_at_start));
-    ASSERT_EQ(0, dino_thread_join(t, &at_end));
+    dino__thread_t t;
+    int            seen_at_start = -1, at_end = -1;
+    ASSERT_EQ(0, dino__thread_create(&t, fail_elsewhere, &seen_at_start));
+    ASSERT_EQ(0, dino__thread_join(t, &at_end));
     EXPECT_EQ(0, seen_at_start);
     EXPECT_EQ(DINO_EINVAL, at_end);
     EXPECT_EQ(DINO_EADDRINUSE, dino_error());
@@ -195,7 +196,7 @@ UTEST(error, writing_to_a_closed_peer)
     {
         rc = dino_socket_send(client, "x", 1);
         if (rc >= 0)
-            dino_thread_yield();
+            dino__thread_yield();
     }
     ASSERT_EQ(-1, rc);
     int code = dino_error();
@@ -266,22 +267,22 @@ static int join_invalid(void *arg)
 
 UTEST(error, threads_and_mutexes)
 {
-    EXPECT_EQ(-1, dino_thread_join(DINO_INVALID_THREAD, NULL));
+    EXPECT_EQ(-1, dino__thread_join(DINO__INVALID_THREAD, NULL));
     EXPECT_EQ(DINO_EINVAL, dino_error());
-    dino_thread_t t;
-    EXPECT_EQ(-1, dino_thread_create(&t, NULL, NULL));
+    dino__thread_t t;
+    EXPECT_EQ(-1, dino__thread_create(&t, NULL, NULL));
     EXPECT_EQ(DINO_EINVAL, dino_error());
-    ASSERT_EQ(0, dino_thread_create(&t, join_invalid, NULL));
-    EXPECT_EQ(0, dino_thread_join(t, NULL));
+    ASSERT_EQ(0, dino__thread_create(&t, join_invalid, NULL));
+    EXPECT_EQ(0, dino__thread_join(t, NULL));
 
-    EXPECT_EQ(-1, dino_mutex_lock(DINO_INVALID_MUTEX));
+    EXPECT_EQ(-1, dino__mutex_lock(DINO__INVALID_MUTEX));
     EXPECT_EQ(DINO_EINVAL, dino_error());
     // Unlocking a mutex this thread doesn't hold.
-    dino_mutex_t m = dino_mutex_create();
-    ASSERT_NE(DINO_INVALID_MUTEX, m);
-    EXPECT_EQ(-1, dino_mutex_unlock(m));
+    dino__mutex_t m = dino__mutex_create();
+    ASSERT_NE(DINO__INVALID_MUTEX, m);
+    EXPECT_EQ(-1, dino__mutex_unlock(m));
     EXPECT_EQ(DINO_EACCES, dino_error());
-    dino_mutex_destroy(m);
+    dino__mutex_destroy(m);
 }
 
 UTEST(error, event_loop)
