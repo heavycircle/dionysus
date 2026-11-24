@@ -455,7 +455,7 @@ Solution:
 What this commit changes, and anything a reviewer should know.
 ```
 
-- **type:** `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `test`.
+- **type:** `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `revert`, `style` (formatting only, no code change), `test`.
   `chore` is for maintenance that fits nowhere else; it's listed under "Other changes" in the
   release notes.
   `release: vX.Y.Z` is reserved for `scripts/release.sh`.
