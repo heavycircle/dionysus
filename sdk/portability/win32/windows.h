@@ -23,12 +23,12 @@ WINBASEAPI __typeof__(InitializeCriticalSection) InitializeCriticalSection __att
 WINBASEAPI __typeof__(InitializeCriticalSectionAndSpinCount) InitializeCriticalSectionAndSpinCount __attribute__((deprecated(
     "InitializeCriticalSectionAndSpinCount() is Windows-only; use dino_mutex_create() from <dino/core/mutex.h>")));
 WINBASEAPI __typeof__(QueryPerformanceCounter) QueryPerformanceCounter __attribute__((deprecated(
-    "QueryPerformanceCounter() is Windows-only; use dino_time_monotonic_ns() from <dino/core/time.h>")));
+    "QueryPerformanceCounter() is Windows-only; use clock_gettime(CLOCK_MONOTONIC) from <time.h>, or dino_time_monotonic_ns() from <dino/core/time.h>, which is about 25 KB smaller on Windows")));
 
 WINBASEAPI __typeof__(TerminateProcess) TerminateProcess __attribute__((deprecated(
     "TerminateProcess() is Windows-only; use dino_process_kill() from <dino/core/process.h>")));
 WINBASEAPI __typeof__(GetCurrentProcessId) GetCurrentProcessId __attribute__((deprecated(
-    "GetCurrentProcessId() is Windows-only; use dino_process_current_id() from <dino/core/process.h>")));
+    "GetCurrentProcessId() is Windows-only; use getpid() from <unistd.h>, which works on every target")));
 WINBASEAPI __typeof__(GetCurrentThreadId) GetCurrentThreadId __attribute__((deprecated(
     "GetCurrentThreadId() is Windows-only; use dino_thread_current_id() from <dino/core/thread.h>")));
 WINBASEAPI __typeof__(SwitchToThread) SwitchToThread __attribute__((deprecated(
@@ -54,7 +54,7 @@ WINBASEAPI __typeof__(GetQueuedCompletionStatus) GetQueuedCompletionStatus __att
 // Vista and later: declared only when _WIN32_WINNT says so.
 #if _WIN32_WINNT >= 0x0600
 WINBASEAPI __typeof__(GetTickCount64) GetTickCount64 __attribute__((deprecated(
-    "GetTickCount64() is Windows-only; use dino_time_monotonic_ns() from <dino/core/time.h>")));
+    "GetTickCount64() is Windows-only; use clock_gettime(CLOCK_MONOTONIC) from <time.h>, or dino_time_monotonic_ns() from <dino/core/time.h>, which is about 25 KB smaller on Windows")));
 WINBASEAPI __typeof__(GetQueuedCompletionStatusEx) GetQueuedCompletionStatusEx __attribute__((deprecated(
     "GetQueuedCompletionStatusEx() is Windows-only; use dino_event_wait() from <dino/core/event.h>")));
 WINBASEAPI __typeof__(InitOnceExecuteOnce) InitOnceExecuteOnce __attribute__((deprecated(

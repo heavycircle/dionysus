@@ -3,7 +3,7 @@
 `#include <dino/core/time.h>` · `dino_core`
 
 Sleeping and clocks, the same way on every target. `sleep()` counts whole seconds and Windows'
-`Sleep()` milliseconds. `clock_gettime()` is POSIX-only and `QueryPerformanceCounter()` Windows-only.
+`Sleep()` milliseconds. `usleep()` and `nanosleep()` exist on Windows too, but round down to whole milliseconds there. `clock_gettime()` works everywhere, but on Windows it pulls in winpthreads, about 25 KB more than `dino_time_monotonic_ns()`.
 Windows' default timer also rounds short sleeps up to its 15.6 ms tick.
 
 ## Example: timing a sleep

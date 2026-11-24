@@ -3,6 +3,22 @@
 What changed in the SDK between versions, and how to update code that uses it. The compiler finds
 almost everything here: a removed or renamed name fails to build, and the error points at the line.
 
+## To 0.9
+
+0.9 brings the SDK back to plain C: a `dino_*` call stays only where the platforms can't be made to agree behind the standard name, where there is no standard name, or where it is measurably smaller or faster.
+
+### Windows: 64-bit file offsets and `gmtime_r`
+
+Windows targets now build with `_FILE_OFFSET_BITS=64` and `_POSIX_THREAD_SAFE_FUNCTIONS`, as musl always has. `off_t` and `struct stat`'s `st_size` are 64-bit, so `stat`, `fseeko`, `ftello` and `ftruncate` work past 2 GB, and `gmtime_r`/`localtime_r` are declared. A prebuilt Windows library compiled without the flag that passes `off_t` or `struct stat` across its API no longer matches; rebuild it with dino.
+
+### Fewer portability warnings
+
+Calls that behave the same on every target are no longer flagged: `pthread_*`, `sched_yield`, `getpid`, `sleep`, `gettimeofday`, `clock_gettime`, `bind`, `listen`, `recv`, `sendto`, `setsockopt` and `shutdown`. `pthread_condattr_setclock` is flagged instead, since Windows refuses `CLOCK_MONOTONIC`. Several messages now give the real reason, such as `usleep` and `nanosleep` rounding down to whole milliseconds on Windows.
+
+### Smaller Windows programs that log
+
+The SDK's own sources no longer switch MinGW to its static printf: a Windows program that logs is about 18 KB smaller.
+
 ## To 0.8
 
 ### UDP: `sendto`, `recvfrom` and socket addresses

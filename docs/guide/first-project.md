@@ -81,7 +81,7 @@ int main(void)
 ```
 
 The [SDK overview](../sdk/README.md) lists every module. If you call a platform function that has
-a `dino_*` replacement, such as `sleep()` or `pthread_create()`, the build warns and names the
+a `dino_*` replacement, such as `fork()` or `usleep()`, the build warns and names the
 replacement (see [portability warnings](portability-warnings.md)).
 
 ## Building for every target

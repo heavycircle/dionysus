@@ -57,9 +57,9 @@ void raw_win32(void)
     CreateProcessW(NULL, NULL, NULL, NULL, FALSE, 0, NULL, NULL, &siw, &pi); // expected-warning {{use dino_process_spawn()}}
     InitializeCriticalSection(&cs);                 // expected-warning {{use dino_mutex_create()}}
     InitializeCriticalSectionAndSpinCount(&cs, 0);  // expected-warning {{use dino_mutex_create()}}
-    QueryPerformanceCounter(&now);                  // expected-warning {{use dino_time_monotonic_ns()}}
+    QueryPerformanceCounter(&now);                  // expected-warning {{use clock_gettime(CLOCK_MONOTONIC)}}
     TerminateProcess(pi.hProcess, 1);               // expected-warning {{use dino_process_kill()}}
-    (void)GetCurrentProcessId();                    // expected-warning {{use dino_process_current_id()}}
+    (void)GetCurrentProcessId();                    // expected-warning {{use getpid() from <unistd.h>}}
     (void)GetCurrentThreadId();                     // expected-warning {{use dino_thread_current_id()}}
     SwitchToThread();                               // expected-warning {{use dino_thread_yield()}}
     SleepEx(0, FALSE);                              // expected-warning {{use dino_sleep_ms()}}
@@ -76,7 +76,7 @@ void raw_win32(void)
     LPOVERLAPPED ov;
     GetQueuedCompletionStatus(port, &bytes, &key, &ov, 0); // expected-warning {{use dino_event_wait()}}
 #if _WIN32_WINNT >= 0x0600
-    (void)GetTickCount64();                         // expected-warning {{use dino_time_monotonic_ns()}}
+    (void)GetTickCount64();                         // expected-warning {{use clock_gettime(CLOCK_MONOTONIC)}}
     OVERLAPPED_ENTRY entry;
     ULONG            got;
     GetQueuedCompletionStatusEx(port, &entry, 1, &got, 0, FALSE); // expected-warning {{use dino_event_wait()}}
@@ -86,7 +86,7 @@ void raw_win32(void)
     InitializeConditionVariable(&cv);               // expected-warning {{use dino_cond_create()}}
     SleepConditionVariableCS(&cv, &cs, 0);          // expected-warning {{use dino_cond_wait()}}
 #endif
-    (void)_getpid();                                // expected-warning {{use dino_process_current_id()}}
+    (void)_getpid();                                // expected-warning {{use getpid() from <unistd.h>}}
     _cwait(NULL, 0, 0);                             // expected-warning {{use dino_process_wait()}}
     _spawnl(_P_NOWAIT, "x", "x", NULL);             // expected-warning {{_spawnl() is Windows-only}}
     _spawnv(_P_NOWAIT, "x", NULL);                  // expected-warning {{_spawnv() is Windows-only}}
@@ -96,19 +96,19 @@ void raw_win32(void)
 
     WSAStartup(MAKEWORD(2, 2), &wsa);               // expected-warning {{WSAStartup() is Windows-only}}
     SOCKET s = socket(AF_INET, SOCK_STREAM, 0);     // expected-warning {{use dino_socket_create()}}
-    bind(s, &addr, len);                            // expected-warning {{use dino_socket_bind()}}
-    listen(s, 1);                                   // expected-warning {{use dino_socket_listen()}}
+    bind(s, &addr, len);
+    listen(s, 1);
     accept(s, &addr, &len);                         // expected-warning {{use dino_socket_accept()}}
     connect(s, &addr, len);                         // expected-warning {{use dino_socket_connect()}}
     send(s, "x", 1, 0);                             // expected-warning {{use dino_socket_send()}}
-    recv(s, buf, 1, 0);                             // expected-warning {{use dino_socket_recv()}}
-    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt)); // expected-warning {{use dino_socket_setopt()}}
-    shutdown(s, SD_BOTH);                           // expected-warning {{use dino_socket_shutdown()}}
+    recv(s, buf, 1, 0);
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&opt, sizeof(opt));
+    shutdown(s, SD_BOTH);
     u_long mode = 1;
     ioctlsocket(s, FIONBIO, &mode);                 // expected-warning {{use dino_socket_set_nonblocking()}}
-    sendto(s, "x", 1, 0, &addr, len);               // expected-warning {{use dino_socket_sendto()}}
+    sendto(s, "x", 1, 0, &addr, len);
     recvfrom(s, buf, 1, 0, &addr, &len);            // expected-warning {{use dino_socket_recvfrom()}}
-    (void)WSAGetLastError();                        // expected-warning {{use dino_error()}}
+    (void)WSAGetLastError();                        // expected-warning {{report errors through dino_error()}}
     WSASocketA(AF_INET, SOCK_STREAM, 0, NULL, 0, 0); // expected-warning {{WSASocketA() is Windows-only}}
     WSASocketW(AF_INET, SOCK_STREAM, 0, NULL, 0, 0); // expected-warning {{WSASocketW() is Windows-only}}
     FD_ZERO(&set);

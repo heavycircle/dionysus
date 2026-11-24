@@ -36,9 +36,18 @@ unset(dino_zig_name)
 # x86 Linux means i686 (Pentium Pro and later), as Debian's and Ubuntu's i386
 # ports do; a project's own -mcpu comes later on the command line and wins.
 # Windows needs SSE2 itself, so its targets keep zig's default.
-set(dino_cpu "")
+set(dino_target_flags "")
 if(ZIG_TARGET MATCHES "^x86-linux")
-    set(dino_cpu ";-mcpu=i686")
+    set(dino_target_flags ";-mcpu=i686")
+endif()
+
+# MinGW hides two things musl always has. Without _FILE_OFFSET_BITS=64, off_t
+# and st_size are 32 bits, so stat, fseeko, ftello and ftruncate fail or wrap
+# past 2 GB. Without _POSIX_THREAD_SAFE_FUNCTIONS, gmtime_r and localtime_r
+# aren't declared. Like the target, they ride with the compiler command so
+# user flags can't drop them.
+if(ZIG_TARGET MATCHES "windows")
+    string(APPEND dino_target_flags ";-D_FILE_OFFSET_BITS=64;-D_POSIX_THREAD_SAFE_FUNCTIONS=200112L")
 endif()
 
 # One zig, found once: the compiler and the tool wrappers below name it by
@@ -47,8 +56,8 @@ find_program(DINO_ZIG zig REQUIRED)
 
 # The target rides along with the compiler command rather than CMAKE_C_FLAGS,
 # so user-supplied flags can never drop it and silently build for the host.
-set(CMAKE_C_COMPILER "${DINO_ZIG};cc;-target;${ZIG_TARGET}${dino_cpu}" CACHE STRING "C Compiler" FORCE)
-set(CMAKE_CXX_COMPILER "${DINO_ZIG};c++;-target;${ZIG_TARGET}${dino_cpu}" CACHE STRING "C++ Compiler" FORCE)
+set(CMAKE_C_COMPILER "${DINO_ZIG};cc;-target;${ZIG_TARGET}${dino_target_flags}" CACHE STRING "C Compiler" FORCE)
+set(CMAKE_CXX_COMPILER "${DINO_ZIG};c++;-target;${ZIG_TARGET}${dino_target_flags}" CACHE STRING "C++ Compiler" FORCE)
 # A cross compiler: CMake then identifies it by compiling alone. Otherwise its
 # compiler-ID step links a program with no flags at all, and zig builds a
 # Debug libc for it (about a minute, cold) that a Release build never uses.

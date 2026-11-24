@@ -111,6 +111,12 @@ endif()
 foreach(target dino_core dino_util dino_test_output dino_leakcheck dino_utf8_console)
     if(TARGET ${target})
         target_compile_definitions(${target} PRIVATE _GNU_SOURCE)
+        if(WIN32)
+            # _GNU_SOURCE also switches MinGW's printf family to its own
+            # static copy (about 18 KB in every program whose SDK code
+            # prints). The UCRT's own printf handles C99 formats.
+            target_compile_definitions(${target} PRIVATE __USE_MINGW_ANSI_STDIO=0)
+        endif()
         target_compile_options(${target} PRIVATE ${dino_sdk_warnings})
         # The sources are C11, whatever standard the project picked: CMake puts
         # this -std= after CFLAGS and CMAKE_C_FLAGS, so a project's C89 can't

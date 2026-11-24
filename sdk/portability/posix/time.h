@@ -10,11 +10,9 @@
 
 #ifdef CLOCK_REALTIME
 __typeof__(nanosleep) nanosleep __attribute__((deprecated(
-    "nanosleep() is POSIX-only; use dino_sleep_us() from <dino/core/time.h>")));
-__typeof__(clock_gettime) clock_gettime __attribute__((deprecated(
-    "clock_gettime() is POSIX-only; use dino_time_monotonic_ns() or, for CLOCK_REALTIME, dino_time_unix_ms() from <dino/core/time.h>")));
+    "nanosleep() rounds down to whole milliseconds on Windows; use dino_sleep_us() from <dino/core/time.h>")));
 __typeof__(clock_nanosleep) clock_nanosleep __attribute__((deprecated(
-    "clock_nanosleep() is POSIX-only; use dino_sleep_us() from <dino/core/time.h>")));
+    "clock_nanosleep() rounds down to whole milliseconds and takes only CLOCK_REALTIME on Windows; use dino_sleep_us() from <dino/core/time.h>")));
 #endif
 
 #endif
