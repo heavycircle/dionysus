@@ -33,7 +33,7 @@ jobs:
           app-id: ${{ vars.BACKPORT_APP }}
           private-key: ${{ secrets.BACKPORT_KEY }}
 
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Trusted base-branch code only; never the PR's head.
           ref: ${{ github.event.pull_request.base.ref }}
@@ -42,7 +42,7 @@ jobs:
           token: ${{ steps.app-token.outputs.token || github.token }}
 
       - name: Create backport PR
-        uses: korthout/backport-action@8560fb503c275d433c56f05a2f64850093baa9f7 # v4.7.0
+        uses: korthout/backport-action@ad272ff24e4a8593bf18a951a154ae6af93b26b8 # v5.0.0
         with:
           pull_title: "backport: ${pull_title}"
           label_pattern: "^ci:backport ([^ ]+)$"
