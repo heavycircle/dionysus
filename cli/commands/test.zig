@@ -81,11 +81,18 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
         // Symbols for valgrind's stack traces; the counter would only duplicate valgrind.
         opts.mode = .debug;
         opts.export_compdb = false;
-        opts.extra = std.mem.concat(ctx.arena, []const u8, &.{ &.{
-            ctx.sprint("-DCMAKE_CROSSCOMPILING_EMULATOR={s};--quiet;--error-exitcode=99;--leak-check=full;--errors-for-leak-kinds=definite,indirect;--track-origins=yes", .{valgrind}),
-            "-DDINO_DYNAMIC=ON",
-            "-DDINO_NO_LEAK_CHECK=ON",
-        }, opts.extra }) catch @panic("OOM");
+        opts.extra = std.mem.concat(ctx.arena, []const u8, &.{
+            &.{
+                // --max-stackframe: a frame up to a thread's whole 8 MiB stack is a
+                // frame. Past valgrind's 2 MB default it takes a big local array
+                // for a switch to another stack and reports its use as invalid,
+                // as on aarch64, where clang moves the stack pointer in one step.
+                ctx.sprint("-DCMAKE_CROSSCOMPILING_EMULATOR={s};--quiet;--error-exitcode=99;--leak-check=full;--errors-for-leak-kinds=definite,indirect;--track-origins=yes;--max-stackframe=8388608", .{valgrind}),
+                "-DDINO_DYNAMIC=ON",
+                "-DDINO_NO_LEAK_CHECK=ON",
+            },
+            opts.extra,
+        }) catch @panic("OOM");
     } else {
         if (all and names.items.len != 0) return ctx.usage("--all cannot be combined with explicit targets", .{});
         opts.targets = if (all) &targets.known else try build.resolveTargets(ctx, names.items);
