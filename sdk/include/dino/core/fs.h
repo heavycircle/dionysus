@@ -29,6 +29,7 @@ int dino_file_size(const char *path, uint64_t *size);
  *
  * Like snprintf: writes as much as fits in buf, always NUL-terminated when
  * size > 0, and returns the full length, so a result >= size means it was cut.
+ * On failure buf is an empty string.
  *
  * @param  buf   Destination; may be NULL when size is 0.
  * @param  size  Size of buf.

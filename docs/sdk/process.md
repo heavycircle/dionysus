@@ -14,7 +14,7 @@ that matter are handled for you:
   the SDK closes them in the child by listing `/proc/self/fd`, or, without `/proc` (a chroot, an initramfs, a container that doesn't mount it), by checking every descriptor up to the limit, which is slower. One another thread opens during the spawn can still get through. On Windows the SDK's own spawns are airtight, but a `CreateProcess` with inheritance on another thread outside the SDK (`system()`, `_popen`, a library) can inherit the child's pipe ends while a spawn runs; the pipe then sees no end of file until that program exits.
 - **Console windows:** on Windows, a parent without a console (a GUI program, a service) starts console programs without a window of their own, instead of flashing one per child.
 
-The program you run is still platform-specific: there's no `/bin/sh` on Windows. For a shell command, `dino_process_run_shell` picks the shell (`/bin/sh -c` or `cmd.exe /d /s /c`), so a command both shells read the same way, like the one below, needs no `#ifdef`.
+The program you run is still platform-specific: there's no `/bin/sh` on Windows. For a shell command, `dino_process_run_shell` picks the shell (`/bin/sh -c --` or `cmd.exe /d /s /v:OFF /c`), so a command both shells read the same way, like the one below, needs no `#ifdef`.
 
 ## Example: run a command and collect its output
 
@@ -63,7 +63,7 @@ everything it writes to stdout and stderr, and waits for it to exit.
 - **Return value:** `0` when the child ran to the end, `DINO_TIMEOUT` when it was killed for taking
   too long (`result` still holds what it wrote first), or `-1` if it couldn't be started or something failed afterwards: reading an output, waiting for the child, running out of memory (then `dino_error()` says why; `out` and `err` may be `NULL`, or hold what was read so far). Call
   `dino_process_result_free` in every case.
-- **A shell command:** `dino_process_run_shell(command, opts, &result)` is `dino_process_run` for one command line, run by `/bin/sh -c` on POSIX and by `cmd.exe /d /s /c "command"` on Windows, with the line passed to `cmd.exe` as written, quotes included. Pipes, redirections and variables follow each shell's rules, so a command using them is as portable as its syntax. A line break is refused with `DINO_EINVAL`, since `cmd.exe` would end the command there. Since 0.10.
+- **A shell command:** `dino_process_run_shell(command, opts, &result)` is `dino_process_run` for one command line, run by `/bin/sh -c -- command` on POSIX and by the system directory's `cmd.exe /d /s /v:OFF /c "command"` on Windows (no AutoRun scripts, `!` stays literal), with the line passed to `cmd.exe` as written, quotes included. A command starting with `-` is a command on both. Pipes, redirections and variables follow each shell's rules, so a command using them is as portable as its syntax. A line break is refused with `DINO_EINVAL`, since `cmd.exe` would end the command there. Since 0.10.
 - **Background processes:** a process the child started that keeps stdout, stderr or stdin open
   keeps `dino_process_run` waiting after the child exits. With a timeout it stops at the deadline
   and returns `DINO_TIMEOUT`, with what was read so far and the child's own `status`. Without

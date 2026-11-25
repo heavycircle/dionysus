@@ -123,6 +123,13 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
     if (rc != 0)
         return dino__fail_code(rc);
     int reason = DINO_EOTHER;
+    // Which of the parent's own stdio is closed, looked at before any pipe is
+    // made here (a pipe could take a closed one's number). An inherited stream
+    // that's closed becomes /dev/null, as Windows gives NUL for a missing one,
+    // so DINO_STDIO_STDOUT always has a stdout to follow.
+    int closed[3];
+    for (int fd = 0; fd < 3; fd++)
+        closed[fd] = fcntl(fd, F_GETFD) < 0;
     for (int fd = 0; fd < 3; fd++)
     {
         rc = 0;
@@ -135,7 +142,7 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
             }
             rc = posix_spawn_file_actions_adddup2(&actions, (int)dino__pipe_to_os(child[fd]), fd);
         }
-        else if (modes[fd] == DINO_STDIO_NULL)
+        else if (modes[fd] == DINO_STDIO_NULL || (modes[fd] == DINO_STDIO_INHERIT && closed[fd]))
         {
             rc = posix_spawn_file_actions_addopen(
                 &actions, fd, "/dev/null", fd == 0 ? O_RDONLY : O_WRONLY, 0);
@@ -226,7 +233,9 @@ done:
 int dino__process_spawn_shell(dino_process_t *process, const char *command,
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
 {
-    const char *const argv[] = { "/bin/sh", "-c", command, NULL };
+    // "--": a command starting with '-' is a command, not an option to sh, as
+    // it is to cmd.exe.
+    const char *const argv[] = { "/bin/sh", "-c", "--", command, NULL };
     return dino_process_spawn(process, argv, opts, pipes);
 }
 
@@ -271,6 +280,11 @@ int dino_process_detach(dino_process_t process)
     // A small stack: all the thread does is wait. glibc refuses one below its
     // own minimum plus the program's TLS, which can be more (under valgrind,
     // for one), so then the default size it is.
+    // The thread starts with every signal blocked, so none meant for the
+    // program is ever handled on it (or kills it by default there).
+    sigset_t all, old;
+    sigfillset(&all);
+    pthread_sigmask(SIG_SETMASK, &all, &old);
     pthread_attr_t attr;
     pthread_t      thread;
     int            rc = pthread_attr_init(&attr);
@@ -294,6 +308,7 @@ int dino_process_detach(dino_process_t process)
         }
         pthread_attr_destroy(&attr);
     }
+    pthread_sigmask(SIG_SETMASK, &old, NULL);
     return rc == 0 ? 0 : dino__fail_code(rc);
 }
 

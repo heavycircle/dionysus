@@ -13,6 +13,9 @@
 #include <unistd.h>
 #include <utest.h>
 #ifndef _WIN32
+#include <pthread.h>
+#endif
+#ifndef _WIN32
 #include <sys/stat.h>
 #endif
 
@@ -1091,6 +1094,85 @@ UTEST(process, stderr_into_stdout_keeps_the_order)
     dino_pipe_close(pipes.out);
     EXPECT_EQ(0, dino_process_wait(p, NULL));
 }
+
+#ifndef _WIN32
+// A parent with stdout closed: an inherited stdout is /dev/null, as Windows
+// gives NUL, so stderr has something to follow and the spawn works. The
+// child's stdin pipe is made after the check, and mustn't be mistaken for the
+// parent's stdout when it takes descriptor 1.
+UTEST(process, stderr_into_a_closed_stdout)
+{
+    int saved = dup(1);
+    ASSERT_GE(saved, 0);
+    close(1);
+    const char *const         argv[] = SHELL("echo out; echo err >&2; exit 3");
+    dino_process_spawn_opts_t opts   = { 0 };
+    opts.stdin_mode                  = DINO_STDIO_PIPE;
+    opts.stderr_mode                 = DINO_STDIO_STDOUT;
+    dino_process_t        p;
+    dino_process_pipes_t  pipes;
+    dino_process_status_t status  = { -1, 0 };
+    int                   spawned = dino_process_spawn(&p, argv, &opts, &pipes);
+    if (spawned == 0)
+    {
+        dino_pipe_close(pipes.in);
+        dino_process_wait(p, &status);
+    }
+    dup2(saved, 1);
+    close(saved);
+    ASSERT_EQ(0, spawned);
+    EXPECT_EQ(3, status.code);
+}
+
+// A command starting with '-' is a command, not an option to sh.
+UTEST(process, run_shell_takes_a_leading_dash_as_a_command)
+{
+    dino_process_result_t r;
+    ASSERT_EQ(0, dino_process_run_shell("-dino-no-such-command", NULL, &r));
+    EXPECT_EQ(127, r.status.code); // not found, where an option error is 2
+    dino_process_result_free(&r);
+}
+
+static volatile sig_atomic_t g_signal_on_main;
+static pthread_t             g_main_thread;
+
+static void note_thread(int sig)
+{
+    (void)sig;
+    g_signal_on_main = pthread_equal(pthread_self(), g_main_thread);
+}
+
+// The reaper thread blocks every signal: one sent to the process waits for a
+// thread of the program to take it.
+UTEST(process, detach_takes_no_signals)
+{
+    struct sigaction sa = { 0 }, old;
+    sa.sa_handler       = note_thread;
+    sigemptyset(&sa.sa_mask);
+    ASSERT_EQ(0, sigaction(SIGUSR1, &sa, &old));
+    g_main_thread    = pthread_self();
+    g_signal_on_main = -1;
+
+    const char *const argv[] = SHELL("sleep 1");
+    dino_process_t    p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    ASSERT_EQ(0, dino_process_detach(p));
+
+    sigset_t usr1, before;
+    sigemptyset(&usr1);
+    sigaddset(&usr1, SIGUSR1);
+    pthread_sigmask(SIG_BLOCK, &usr1, &before);
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // signalling this process, not a child
+    kill(getpid(), SIGUSR1);
+#pragma GCC diagnostic pop
+    dino_sleep_ms(50);
+    EXPECT_EQ(-1, (int)g_signal_on_main); // nobody took it while blocked here
+    pthread_sigmask(SIG_SETMASK, &before, NULL);
+    EXPECT_EQ(1, (int)g_signal_on_main);
+    sigaction(SIGUSR1, &old, NULL);
+}
+#endif
 
 UTEST(process, stdio_from_pipes_is_checked)
 {

@@ -81,6 +81,9 @@ static int copy_out(char *buf, size_t size, const char *text, size_t len)
 
 int dino_path_temp(char *buf, size_t size)
 {
+    // An empty string on every failure, as the SDK's out-parameters are.
+    if (buf && size)
+        buf[0] = '\0';
     if (!buf && size)
         return dino__fail(DINO_EINVAL);
     const char *dir = getenv("TMPDIR");
@@ -94,6 +97,9 @@ int dino_path_temp(char *buf, size_t size)
 
 int dino_path_executable(char *buf, size_t size)
 {
+    // An empty string on every failure, as the SDK's out-parameters are.
+    if (buf && size)
+        buf[0] = '\0';
     if (!buf && size)
         return dino__fail(DINO_EINVAL);
     // readlink doesn't say whether it cut the path short: grow until it fits.

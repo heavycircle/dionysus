@@ -466,6 +466,23 @@ UTEST(network, a_receive_that_runs_out_of_time_is_etimedout)
     close_pair(&p);
 }
 
+// -1 takes a limit away again: the receive waits for the byte.
+UTEST(network, minus_one_removes_a_timeout)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
+    ASSERT_EQ(0, dino_socket_set_timeouts(p.peer, 50, 50));
+    ASSERT_EQ(0, dino_socket_set_timeouts(p.peer, -1, -1));
+    dino__thread_t sender;
+    ASSERT_EQ(0, dino__thread_create(&sender, send_later, &p.client));
+    char buf[1];
+    EXPECT_EQ(1, dino_socket_recvfrom(p.peer, buf, 1, 0, NULL, NULL));
+    int result = -1;
+    dino__thread_join(sender, &result);
+    EXPECT_EQ(0, result);
+    close_pair(&p);
+}
+
 // Nobody reads, so the buffers fill and a send waits, until its limit.
 UTEST(network, a_send_that_runs_out_of_time_is_etimedout)
 {
@@ -486,8 +503,11 @@ UTEST(network, timeouts_reject_invalid_arguments)
     dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     ASSERT_NE(DINO_INVALID_SOCKET, s);
     EXPECT_EQ(0, dino_socket_set_timeouts(s, -1, -1));
-    EXPECT_EQ(0, dino_socket_set_timeouts(s, 0, 0));
-    EXPECT_EQ(-1, dino_socket_set_timeouts(s, -2, 0));
+    // 0 isn't "check once" here: it's refused, as is anything below -1.
+    EXPECT_EQ(-1, dino_socket_set_timeouts(s, 0, -1));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(-1, dino_socket_set_timeouts(s, -1, 0));
+    EXPECT_EQ(-1, dino_socket_set_timeouts(s, -2, 100));
     EXPECT_EQ(DINO_EINVAL, dino_error());
     EXPECT_EQ(-1, dino_socket_set_timeouts(DINO_INVALID_SOCKET, 10, 10));
     EXPECT_EQ(-1, dino_socket_connect_timeout(s, NULL, 0, 100));

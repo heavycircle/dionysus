@@ -38,9 +38,11 @@ struct dino__event_timers
 {
     dino__mutex_t              lock;
     struct dino__event_timer **heap;
-    size_t                     len, cap;
-    struct dino__event_timer  *all;          // every timer, fired one-shots included
-    atomic_int                 timers_first; // flips every wait: see dino__event_timers_turn
+    // len timers are in the heap; count exist (fired one-shots too), and cap
+    // is kept at count or more, so moving a timer back in never allocates.
+    size_t                    len, cap, count;
+    struct dino__event_timer *all;          // every timer, fired one-shots included
+    atomic_int                timers_first; // flips every wait: see dino__event_timers_turn
     // Threads blocked on a timeout computed from the heap: only they need
     // interrupting when an earlier timer is added. Raised under lock.
     atomic_int waiting;

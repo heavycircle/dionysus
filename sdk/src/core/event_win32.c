@@ -692,7 +692,10 @@ int dino_event_add_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t event
 
 int dino_event_mod_pipe(dino_event_loop_t loop, dino_pipe_t pipe, uint32_t events, void *userdata)
 {
-    if (!dino__event_pipe_args_valid(loop, events) || pipe == DINO_INVALID_PIPE)
+    // The same checks as an add, so a write end or one marked for a child is
+    // DINO_EINVAL here too, as on POSIX, not "not in the loop".
+    if (!dino__event_pipe_args_valid(loop, events) || pipe == DINO_INVALID_PIPE
+        || dino__pipe_is_read_end(pipe) != 1 || dino__pipe_for_child(pipe))
         return dino__fail(DINO_EINVAL);
     return mod_item((struct dino_event_loop *)loop, KIND_PIPE, pipe, events, userdata);
 }

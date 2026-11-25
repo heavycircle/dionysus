@@ -146,7 +146,7 @@ and a client each with their own loop, holding 1000 connections at once.
 | `dino_event_add_process(loop, process, ud)`                  | Report `DINO_EVENT_EXIT` once when a [process](process.md) ends.                                                 |
 | `dino_event_del_process(loop, process)`                      | Stop watching it. Must come before `dino_process_wait`.                                                          |
 | `dino_event_add_timer(loop, delay_ms, interval_ms, ud)`      | A timer firing after `delay_ms`, then every `interval_ms` (`0`: once). Returns a handle.                         |
-| `dino_event_reset_timer(loop, timer, delay_ms, interval_ms)` | Move a timer's next firing to `delay_ms` from now, with a new interval; arms a fired one-shot again. Since 0.10. |
+| `dino_event_mod_timer(loop, timer, delay_ms, interval_ms)` | Move a timer's next firing to `delay_ms` from now, with a new interval; arms a fired one-shot again. Since 0.10. |
 | `dino_event_del_timer(loop, timer)`                          | Delete a timer, fired or not. Every timer must be deleted (or the loop destroyed).                               |
 | `dino_event_wait(loop, out, max, timeout_ms)`                | Wait. Returns how many items it wrote to `out`, `0` on timeout, `-1` on error.                                   |
 | `dino_event_wake(loop)`                                      | Make a wait return a `DINO_EVENT_WAKE` item, from any thread.                                                    |
@@ -176,7 +176,7 @@ The other functions return `0` on success and `-1` on error (adding an item twic
   waited for a while) fires once and skips the periods it missed.
 - **Freeing:** a fired one-shot timer stays allocated until `dino_event_del_timer` or the loop is
   destroyed.
-- **Idle timeouts:** keep one timer per connection and push it back with `dino_event_reset_timer` on every packet. It keeps its handle and allocates nothing, where a delete and an add would free and allocate each time. A firing that was due but not yet reported is dropped by the reset.
+- **Idle timeouts:** keep one timer per connection and push it back with `dino_event_mod_timer` on every packet. It keeps its handle and allocates nothing, where a delete and an add would free and allocate each time. A firing that was due but not yet reported is dropped by the reset.
 - **Delete each timer once, through its own loop.** `dino_event_del_timer` with another loop returns `-1` and leaves the timer alone. Deleting a timer twice is undefined: the first delete frees it.
 - **Busy loops:** when timers and sockets are both ready and don't all fit in `out`, waits take
   turns at filling it first. A socket that stays readable delays a timer by one wait at most, and a

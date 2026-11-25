@@ -41,9 +41,11 @@ typedef struct
 /** What a child's stdin, stdout or stderr is connected to. */
 typedef enum
 {
-    DINO_STDIO_INHERIT = 0, /**< The parent's own stream (the default). */
-    DINO_STDIO_NULL,        /**< /dev/null or NUL: reads see end of file, writes vanish. */
-    DINO_STDIO_PIPE,        /**< A new pipe; the parent's end is in dino_process_pipes_t. */
+    /** The parent's own stream (the default); /dev/null or NUL when the parent
+     *  has none (it's closed, or a GUI program). */
+    DINO_STDIO_INHERIT = 0,
+    DINO_STDIO_NULL, /**< /dev/null or NUL: reads see end of file, writes vanish. */
+    DINO_STDIO_PIPE, /**< A new pipe; the parent's end is in dino_process_pipes_t. */
     /** An existing pipe end, from dino_pipe_create_ex with the flag for this
      *  direction, in the options' stdin_pipe, stdout_pipe or stderr_pipe: a
      *  read end for stdin, a write end for stdout and stderr. The caller keeps
@@ -198,10 +200,10 @@ int dino_process_kill(dino_process_t process);
  * writing to a full one.
  *
  * @param  process  Handle from dino_process_spawn, not yet waited for. Not
- *                  usable afterwards, whatever the result.
- * @return 0 on success, -1 on error (on POSIX, when no thread could be
- *         started to reap it: it is then reaped by nobody until this process
- *         ends).
+ *                  usable after a success.
+ * @return 0 on success, -1 on error, when nothing was changed and the handle
+ *         is still the caller's to wait for (on POSIX, no thread could be
+ *         started to reap it).
  */
 int dino_process_detach(dino_process_t process);
 
@@ -284,8 +286,9 @@ int dino_process_run(
     const char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result);
 
 /**
- * dino_process_run for a shell command line: /bin/sh -c command on POSIX,
- * cmd.exe /d /s /c "command" on Windows, with the line passed to cmd.exe as
+ * dino_process_run for a shell command line: /bin/sh -c -- command on POSIX,
+ * the system directory's cmd.exe /d /s /v:OFF /c "command" on Windows (no
+ * AutoRun scripts, and ! stays literal), with the line passed to cmd.exe as
  * written, quotes included (a { "cmd.exe", "/c", command } argv would quote
  * it again). Pipes, redirections and variables follow each shell's own rules,
  * so a command that uses them is as portable as its syntax. Since 0.10.
