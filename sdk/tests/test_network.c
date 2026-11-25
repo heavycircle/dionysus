@@ -100,20 +100,25 @@ UTEST(network, echo_ipv6)
 }
 
 // Linux defaults to dual-stack, Windows to v6-only: the SDK picks v6-only.
+// The IPv4 side of a port is taken first, by a socket that doesn't listen: a
+// v6-only socket can still bind the same port, where a dual-stack one would
+// fail, and it doesn't take IPv4 connections. (Taking the IPv6 side first and
+// then binding IPv4 to its port would race other programs: a port free for
+// IPv6 can be in use for IPv4.)
 UTEST(network, ipv6_sockets_are_v6_only_by_default)
 {
     SKIP_WITHOUT_IPV6();
-    dino_socket_t v6 = bound_socket(AF_INET6, SOCK_STREAM, "::", 1);
-    dino_socket_t v4 = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    dino_socket_t v4 = bound_socket(AF_INET, SOCK_STREAM, "0.0.0.0", 0);
+    dino_socket_t v6 = dino_socket_create(AF_INET6, SOCK_STREAM, 0);
     dino_socket_t c  = dino_socket_create(AF_INET, SOCK_STREAM, 0);
-    ASSERT_NE(DINO_INVALID_SOCKET, v6);
-    int port = local_port(v6);
-    // The IPv4 side of the port is still free, and nothing listens on it yet.
+    ASSERT_NE(DINO_INVALID_SOCKET, v4);
+    int port = local_port(v4);
+    EXPECT_EQ(0, bind_to(v6, "::", port));
+    EXPECT_EQ(0, listen(v6, 1));
     EXPECT_EQ(-1, connect_to(c, "127.0.0.1", port));
-    EXPECT_EQ(0, bind_to(v4, "0.0.0.0", port));
     dino_socket_close(c);
-    dino_socket_close(v4);
     dino_socket_close(v6);
+    dino_socket_close(v4);
 }
 
 // IPV6_V6ONLY through plain setsockopt makes a dual-stack listener.
