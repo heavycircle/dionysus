@@ -18,7 +18,8 @@ pub const usage =
     \\Options:
     \\    --all               Test every known target (see `dino targets`)
     \\    --memcheck          Run the tests under valgrind instead, in a separate
-    \\                        dynamically linked x86_64 Linux build (host only):
+    \\                        dynamically linked Linux build for the host's
+    \\                        architecture (x86_64 or aarch64):
     \\                        catches invalid reads/writes and use of uninitialized
     \\                        memory as well as leaks
     \\    -R <regex>          Only run tests whose name matches <regex>

@@ -3,6 +3,7 @@ const Io = std.Io;
 const Ctx = @import("../Ctx.zig");
 const Args = @import("../Args.zig");
 const build = @import("build.zig");
+const cmake = @import("../cmake.zig");
 const targets = @import("../targets.zig");
 const templates = @import("templates");
 
@@ -173,7 +174,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
     const status: u8 = if (configure) try configureHost(ctx, root) else 0;
 
     ctx.print("\nNext:\n", .{});
-    if (!std.mem.eql(u8, root, ".")) ctx.print("    cd {s}\n", .{root});
+    if (!std.mem.eql(u8, root, ".")) ctx.print("    {s}\n", .{cmake.commandLine(ctx, &.{ "cd", root })});
     ctx.print("    dino build        # build for this machine\n", .{});
     ctx.print("    dino run          # build and run\n", .{});
     ctx.print("    dino build --all  # build for every target\n", .{});
@@ -202,7 +203,9 @@ fn configureHost(ctx: *Ctx, root: []const u8) Ctx.Error!u8 {
         ctx.errorMessage("files were created, but configuring failed (see above)", .{});
         return 1;
     }
-    ctx.print("    created  {s}\n", .{ctx.join(&.{ root, "compile_commands.json" })});
+    // A configure that worked may still have written none to export.
+    const compdb = ctx.join(&.{ root, "compile_commands.json" });
+    if (ctx.exists(compdb)) ctx.print("    created  {s}\n", .{compdb});
     return 0;
 }
 

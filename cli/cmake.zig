@@ -262,7 +262,7 @@ pub fn build(ctx: *Ctx, cfg: Config, opts: RunOptions) Ctx.Error!bool {
 
 /// The command as it can be pasted into a shell: arguments with spaces, `;`
 /// (CMake lists) or other special characters are quoted.
-fn commandLine(ctx: *Ctx, argv: []const []const u8) []const u8 {
+pub fn commandLine(ctx: *Ctx, argv: []const []const u8) []const u8 {
     var out: std.ArrayList(u8) = .empty;
     for (argv, 0..) |arg, i| {
         if (i != 0) out.append(ctx.arena, ' ') catch @panic("OOM");

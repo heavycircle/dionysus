@@ -130,6 +130,11 @@ fn zigCompile(args: []const []const u8) ?ZigCompile {
 
 /// `[launcher] zig cc -target T <rest>` becomes `clang --target=<triple> <probe
 /// flags> <rest>`, and `zig c++` becomes `clang++`. Anything else is kept.
+///
+/// zig's own spellings in <rest> are dropped or translated, since clang reads
+/// them differently: CMake's `--target=<zig target>` (from
+/// CMAKE_<LANG>_COMPILER_TARGET) would override the probe's triple with one
+/// clang doesn't know, and on x86 zig's `-mcpu=` is clang's `-march=`.
 pub fn rewriteArgs(arena: std.mem.Allocator, args: []const []const u8, probe: Probe) ![]const []const u8 {
     const compile = zigCompile(args) orelse return args;
     const driver: []const u8 = switch (compile.driver) {
@@ -140,13 +145,21 @@ pub fn rewriteArgs(arena: std.mem.Allocator, args: []const []const u8, probe: Pr
     var out: std.ArrayList([]const u8) = .empty;
     try out.appendSlice(arena, &.{ driver, try std.fmt.allocPrint(arena, "--target={s}", .{probe.triple}) });
     try out.appendSlice(arena, probe.flags);
+    const x86 = std.mem.startsWith(u8, probe.triple, "i386") or std.mem.startsWith(u8, probe.triple, "i686") or
+        std.mem.startsWith(u8, probe.triple, "x86_64");
     var i: usize = compile.rest;
     while (i < args.len) : (i += 1) {
-        if (std.mem.eql(u8, args[i], "-target")) {
+        const arg = args[i];
+        if (std.mem.eql(u8, arg, "-target") or std.mem.eql(u8, arg, "--target")) {
             i += 1;
             continue;
         }
-        try out.append(arena, args[i]);
+        if (std.mem.startsWith(u8, arg, "--target=")) continue;
+        if (x86 and std.mem.startsWith(u8, arg, "-mcpu=")) {
+            try out.append(arena, try std.fmt.allocPrint(arena, "-march={s}", .{arg["-mcpu=".len..]}));
+            continue;
+        }
+        try out.append(arena, arg);
     }
     return out.items;
 }
@@ -320,6 +333,17 @@ test rewriteArgs {
     const launched = try rewriteArgs(a, &.{ "/usr/bin/ccache", "/opt/zig/zig", "cc", "-target", "x86_64-linux-musl", "-O0", "-c", "a.c" }, probe);
     try std.testing.expectEqual(expected.len, launched.len);
     for (expected, launched) |e, g| try std.testing.expectEqualStrings(e, g);
+    // CMake's own --target= and zig's -mcpu, as an i386 build writes them.
+    const x86_32: Probe = .{ .triple = "i386-unknown-linux5.10.0-musl", .flags = &.{} };
+    const cmake = try rewriteArgs(a, &.{ "zig", "cc", "-target", "x86-linux-musl", "-mcpu=i686", "--target=x86-linux-musl", "-c", "a.c" }, x86_32);
+    const cmake_expected = [_][]const u8{ "clang", "--target=i386-unknown-linux5.10.0-musl", "-march=i686", "-c", "a.c" };
+    try std.testing.expectEqual(cmake_expected.len, cmake.len);
+    for (cmake_expected, cmake) |e, g| try std.testing.expectEqualStrings(e, g);
+    // Elsewhere -mcpu means the same to clang and stays.
+    const arm: Probe = .{ .triple = "arm-unknown-linux-musleabihf", .flags = &.{} };
+    const arm_args = try rewriteArgs(a, &.{ "zig", "cc", "--target=arm-linux-musleabihf", "-mcpu=cortex_a7", "a.c" }, arm);
+    try std.testing.expectEqual(@as(usize, 4), arm_args.len);
+    try std.testing.expectEqualStrings("-mcpu=cortex_a7", arm_args[2]);
     const rc = [_][]const u8{ "zig", "rc", "/fo", "app.res", "app.rc" };
     try std.testing.expectEqual(@as(usize, rc.len), (try rewriteArgs(a, &rc, probe)).len);
     try std.testing.expectEqualStrings("gcc", (try rewriteArgs(a, &.{ "gcc", "-c", "a.c" }, probe))[0]);

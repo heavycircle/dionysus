@@ -94,12 +94,13 @@ const Posix = struct {
 
     fn handle(sig: SIG, info: *const linux.siginfo_t, _: ?*anyopaque) callconv(.c) void {
         last.store(@backingInt(sig), .release);
+        const pid = child.load(.acquire);
         // A positive code means the kernel sent it: a terminal key, or the
         // hangup of a closed terminal. Those go to the whole foreground
-        // process group, so the child has it already.
-        if (info.code > 0) return;
+        // process group, so a running child has it already; one not yet
+        // started doesn't, and gets it from forwardTo like any other.
+        if (info.code > 0 and pid != 0) return;
         passed_on.store(@backingInt(sig), .release);
-        const pid = child.load(.acquire);
         if (pid == 0) {
             pending.store(@backingInt(sig), .release);
         } else {

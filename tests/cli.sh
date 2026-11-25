@@ -142,6 +142,17 @@ case_sdk_checkout_edit() {
     ! grep -q 'mutex_posix\.c' out
 }
 
+# An SDK and a project under non-ASCII paths still get the UTF-8 manifest on
+# Windows: rc reads the .rc in the Windows code page, not UTF-8.
+case_non_ascii_paths_keep_the_manifest() {
+    project manifest_é
+    rm -rf "$work/sdk_é"
+    cp -r "$repo/sdk" "$work/sdk_é"
+    rm -rf "$work/sdk_é/tests/build"
+    DINO_SDK_PATH=$work/sdk_é dino build win64 >out 2>&1 || { cat out; return 1; }
+    grep -aq 'activeCodePage' build/win64/*.exe || { ls build/win64; return 1; }
+}
+
 # A library path CMake would split in two is refused by name.
 case_library_path_semicolon() {
     project library_semicolon
@@ -445,6 +456,16 @@ case_clean_memcheck() {
     [[ ! -e build/memcheck ]]
 }
 
+# Building several targets, as --all does starting with arm, leaves the editor
+# on the host's view.
+case_several_targets_export_the_host() {
+    project several_compdb
+    local host=x86_64
+    [[ $(uname -m) == aarch64 ]] && host=arm64
+    dino build arm "$host" >out 2>&1 || { cat out; return 1; }
+    grep -q "$(uname -m)-" compile_commands.json || { grep -o 'target=[^"]*' compile_commands.json | head -1; return 1; }
+}
+
 # `dino test --memcheck` leaves the editor's compile_commands.json on the
 # normal build, not the glibc one valgrind needs.
 case_memcheck_keeps_compdb() {
@@ -492,14 +513,16 @@ case_system_processor() {
     done
 }
 
-# The compile database comes from the first target only, even when that one
-# fails to configure.
-case_compdb_first_target() {
-    project compdb_first
-    echo 'if(ZIG_TARGET MATCHES powerpc)
-    message(FATAL_ERROR "no ppc")
+# The compile database comes from one target only (the host's, when it's
+# built), even when that one fails to configure.
+case_compdb_one_target() {
+    project compdb_one
+    local host=x86_64
+    [[ $(uname -m) == aarch64 ]] && host=arm64
+    echo 'if(ZIG_TARGET MATCHES "^(x86_64|aarch64)-linux")
+    message(FATAL_ERROR "not the host")
 endif()' >>CMakeLists.txt
-    dino build ppc x86_64 >/dev/null 2>&1 && return 1
+    dino build ppc "$host" >/dev/null 2>&1 && return 1
     [[ ! -e compile_commands.json ]]
 }
 
@@ -625,6 +648,21 @@ case_prebuilt_neutral_flags() {
     project prebuilt_neutral
     CFLAGS='-Wall -Wextra -Werror -std=c11 -fcolor-diagnostics' prebuilt build -v >out 2>&1 || { cat out; return 1; }
     ! sdk_compiled out
+}
+
+# A prebuilt set's build that was interrupted leaves its temporary directory;
+# the next set built sweeps it once it's old, and leaves a fresh one alone.
+case_prebuilt_sweeps_leftovers() {
+    project prebuilt_sweep
+    prebuilt build >out 2>&1 || { cat out; return 1; }
+    local set
+    set=$(find "$work/prebuilt_home" -type f -name dino-prebuilt.cmake -path '*x86_64-linux-musl*' | head -1)
+    local dir=${set%/*/*}
+    mkdir -p "$dir/old.tmp-1" "$dir/new.tmp-2"
+    touch -d '2 hours ago' "$dir/old.tmp-1"
+    prebuilt build arm >out 2>&1 || { cat out; return 1; }
+    [[ ! -e $dir/old.tmp-1 ]] || { echo "old leftover kept"; ls "$dir"; return 1; }
+    [[ -e $dir/new.tmp-2 ]] || { echo "fresh one removed"; return 1; }
 }
 
 # Anything that could change the SDK's code keeps the source build, and with
