@@ -10,9 +10,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <utest.h>
 #ifndef _WIN32
-#include <unistd.h>
+#include <sys/stat.h>
 #endif
 
 #include <dino/core/error.h>
@@ -345,6 +346,48 @@ UTEST(process, arguments_arrive_unchanged)
         out);
 }
 
+// The same through the child's C runtime, the parser process.h promises,
+// which differs from CommandLineToArgvW for some quotes. Backslashes before
+// a quote or at the end of an argument are the hard part.
+UTEST(process, arguments_arrive_unchanged_in_the_childs_argv)
+{
+    const char *const args[] = { "a\"\"b", "\"\"", "ends\\\\", "a b", "\\\\\"", "x\\\\ y\\\\",
+        "\"lead", "trail\"", " ", NULL };
+#ifdef _WIN32
+    const char *argv[16] = { self_path, "--child-argv" };
+    int         argc     = 2;
+#else
+    const char *argv[16] = { "/bin/sh", "-c", "printf '[%s]\\n' \"$@\"", "sh" };
+    int         argc     = 4;
+#endif
+    char expected[256] = "";
+    for (int i = 0; args[i]; i++)
+    {
+        argv[argc++] = args[i];
+        snprintf(
+            expected + strlen(expected), sizeof(expected) - strlen(expected), "[%s]\n", args[i]);
+    }
+    argv[argc] = NULL;
+    char out[512];
+    EXPECT_EQ(0, run(argv, NULL, out, sizeof(out)));
+    EXPECT_STREQ(expected, out);
+}
+
+#ifdef _WIN32
+// A program path with spaces in it, as under "Program Files".
+UTEST(process, program_path_with_spaces)
+{
+    CreateDirectoryA("dino test dir", NULL);
+    ASSERT_TRUE(CopyFileA(self_path, "dino test dir\\test process.exe", FALSE));
+    const char *const argv[] = { "dino test dir\\test process.exe", "--child-argv", "ok", NULL };
+    char              out[64];
+    EXPECT_EQ(0, run(argv, NULL, out, sizeof(out)));
+    EXPECT_STREQ("[ok]\n", out);
+    DeleteFileA("dino test dir\\test process.exe");
+    RemoveDirectoryA("dino test dir");
+}
+#endif
+
 #ifdef _WIN32
 // cmd.exe runs batch files and parses their command line itself, where & | < >
 // ^ ( ) start new commands unless quoted.
@@ -375,6 +418,140 @@ UTEST(process, batch_file_arguments_cant_run_commands)
     EXPECT_EQ(-1, dino_process_spawn(&p, newline, NULL, NULL));
     EXPECT_EQ(-1, dino_process_spawn(&p, dotted, NULL, NULL));
     remove("dino_test_args.cmd");
+}
+#endif
+
+#ifdef _WIN32
+// A batch file with spaces in its directory and name, which reports its first
+// argument (or that it has none) and exits 3. Removed even when a test stops
+// early.
+struct batch
+{
+    int unused;
+};
+
+#define BATCH_DIR  "dino batch dir"
+#define BATCH_FILE BATCH_DIR "\\run me.cmd"
+
+UTEST_F_SETUP(batch)
+{
+    (void)utest_fixture;
+    CreateDirectoryA(BATCH_DIR, NULL);
+    FILE *f = fopen(BATCH_FILE, "wb");
+    ASSERT_TRUE(f != NULL);
+    fputs("@echo off\r\nif \"%~1\"==\"\" (echo [none]) else (echo [%1])\r\nexit /b 3\r\n", f);
+    fclose(f);
+}
+
+UTEST_F_TEARDOWN(batch)
+{
+    (void)utest_fixture;
+    (void)utest_result;
+    remove(BATCH_FILE);
+    RemoveDirectoryA(BATCH_DIR);
+}
+
+UTEST_F(batch, relative_path_with_spaces_and_no_arguments)
+{
+    (void)utest_fixture;
+    const char *const argv[] = { BATCH_FILE, NULL };
+    char              out[64];
+    EXPECT_EQ(3, run(argv, NULL, out, sizeof(out)));
+    EXPECT_STREQ("[none]\n", out);
+}
+
+UTEST_F(batch, found_from_cwd_with_an_argument)
+{
+    (void)utest_fixture;
+    const char *const         argv[] = { ".\\run me.cmd", "a & b", NULL };
+    dino_process_spawn_opts_t opts   = { 0 };
+    opts.cwd                         = BATCH_DIR;
+    char out[64];
+    EXPECT_EQ(3, run(argv, &opts, out, sizeof(out)));
+    EXPECT_STREQ("[\"a & b\"]\n", out);
+}
+#endif
+
+UTEST(process, empty_environment)
+{
+#ifdef _WIN32
+    const char *const argv[]   = { self_path, "--child-argv", "ok", NULL };
+    const char       *expected = "[ok]\n";
+#else
+    const char *const argv[]   = SHELL("echo \"${HOME-none}\"");
+    const char       *expected = "none\n";
+#endif
+    const char *const         env[] = { NULL };
+    dino_process_spawn_opts_t opts  = { 0 };
+    opts.env                        = env;
+    char out[64];
+    EXPECT_EQ(0, run(argv, &opts, out, sizeof(out)));
+    EXPECT_STREQ(expected, out);
+}
+
+UTEST(process, id_is_the_childs_own)
+{
+#ifdef _WIN32
+    const char *const argv[] = { self_path, "--child-pid", NULL };
+#else
+    const char *const argv[] = SHELL("echo $$");
+#endif
+    dino_process_spawn_opts_t opts = { 0 };
+    opts.stdout_mode               = DINO_STDIO_PIPE;
+    dino_process_t       p;
+    dino_process_pipes_t pipes;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, &opts, &pipes));
+    unsigned long id = (unsigned long)dino_process_id(p);
+    char          out[32];
+    read_all(pipes.out, out, sizeof(out));
+    dino_pipe_close(pipes.out);
+    EXPECT_EQ(id, strtoul(out, NULL, 10));
+    EXPECT_EQ(0, dino_process_wait(p, NULL));
+}
+
+#ifndef _WIN32
+UTEST(process, bare_name_is_found_on_path)
+{
+    const char *const argv[] = { "sh", "-c", "echo ok", NULL };
+    char              out[16];
+    EXPECT_EQ(0, run(argv, NULL, out, sizeof(out)));
+    EXPECT_STREQ("ok\n", out);
+}
+#endif
+
+// Under valgrind, glibc can't report a failure in the child (see
+// missing_program_fails_to_spawn), which then exits 127.
+static int spawn_fails(const char *const argv[], const dino_process_spawn_opts_t *opts)
+{
+    dino_process_t p;
+    if (dino_process_spawn(&p, argv, opts, NULL) != 0)
+        return p == DINO_INVALID_PROCESS;
+    dino_process_status_t status = { -1, 0 };
+    dino_process_wait(p, &status);
+    const char *preload = getenv("LD_PRELOAD");
+    return preload && strstr(preload, "vgpreload") && status.code == 127;
+}
+
+UTEST(process, missing_working_directory_fails_to_spawn)
+{
+    const char *const         argv[] = SHELL("exit 0");
+    dino_process_spawn_opts_t opts   = { 0 };
+    opts.cwd                         = "dino-test-no-such-directory";
+    EXPECT_TRUE(spawn_fails(argv, &opts));
+}
+
+#ifndef _WIN32
+UTEST(process, file_without_execute_permission_fails_to_spawn)
+{
+    FILE *f = fopen("dino_test_not_executable", "w");
+    ASSERT_TRUE(f != NULL);
+    fputs("#!/bin/sh\nexit 0\n", f);
+    fclose(f);
+    chmod("dino_test_not_executable", 0644);
+    const char *const argv[] = { "./dino_test_not_executable", NULL };
+    int               failed = spawn_fails(argv, NULL);
+    remove("dino_test_not_executable");
+    EXPECT_TRUE(failed);
 }
 #endif
 
@@ -413,6 +590,15 @@ UTEST(process, exit_and_crash_are_told_apart)
     ASSERT_EQ(0, dino_process_wait(p, &status));
     EXPECT_EQ(200, status.code);
     EXPECT_EQ(0, status.signal);
+
+#ifdef _WIN32
+    // The whole 32 bits, not just the low byte POSIX keeps.
+    const char *const large[] = { self_path, "--child-exit", "70000", NULL };
+    ASSERT_EQ(0, dino_process_spawn(&p, large, NULL, NULL));
+    ASSERT_EQ(0, dino_process_wait(p, &status));
+    EXPECT_EQ(70000, status.code);
+    EXPECT_EQ(0, status.signal);
+#endif
 
     ASSERT_EQ(0, dino_process_spawn(&p, crashes, NULL, NULL));
     ASSERT_EQ(0, dino_process_wait(p, &status));
@@ -764,6 +950,45 @@ UTEST(process, run_stops_writing_at_the_timeout_when_a_grandchild_holds_the_inpu
 }
 #endif
 
+UTEST(process, wait_timeout_forever_returns_the_exit_code)
+{
+    const char *const argv[] = SHELL("exit 5");
+    dino_process_t    p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    dino_process_status_t status = { -1, 0 };
+    EXPECT_EQ(0, dino_process_wait_timeout(p, -1, &status));
+    EXPECT_EQ(5, status.code);
+}
+
+UTEST(process, run_passes_cwd_env_and_empty_input)
+{
+#ifdef _WIN32
+    const char *const argv[]                    = SHELL("cd&echo %DINO_TEST_VAR%");
+    char              systemroot[MAX_PATH + 16] = "SYSTEMROOT=";
+    const char       *root                      = getenv("SYSTEMROOT");
+    snprintf(systemroot + 11, MAX_PATH, "%s", root ? root : "");
+    const char *const env[] = { "DINO_TEST_VAR=set", systemroot, NULL };
+    const char       *cwd   = "C:\\";
+    const char       *want  = "C:\\\nset\n";
+#else
+    const char *const argv[] = SHELL("pwd; echo \"$DINO_TEST_VAR\"; cat");
+    const char *const env[]  = { "DINO_TEST_VAR=set", NULL };
+    const char       *cwd    = "/";
+    const char       *want   = "/\nset\n";
+#endif
+    dino_process_run_opts_t opts = { 0 };
+    opts.cwd                     = cwd;
+    opts.env                     = env;
+    opts.input                   = "";
+    opts.input_len               = 0;
+    dino_process_result_t r;
+    ASSERT_EQ(0, dino_process_run(argv, &opts, &r));
+    EXPECT_EQ(0, r.status.code);
+    strip_cr(r.out);
+    EXPECT_STREQ(want, r.out);
+    dino_process_result_free(&r);
+}
+
 UTEST(process, run_reports_a_missing_program)
 {
     const char *const     argv[] = { "dino-test-no-such-program", NULL };
@@ -797,6 +1022,11 @@ static int child_main(const char *mode)
             printf("[%s]\n", arg);
         }
         LocalFree(wargv);
+        return 0;
+    }
+    if (strcmp(mode, "--child-pid") == 0)
+    {
+        printf("%lu\n", (unsigned long)getpid());
         return 0;
     }
     if (strcmp(mode, "--child-cat") == 0)
@@ -839,6 +1069,14 @@ static int child_main(const char *mode)
     return 2;
 }
 
+// --child-argv: print each argument as the C runtime split it.
+static int child_argv(int argc, const char *const argv[])
+{
+    for (int i = 2; i < argc; i++)
+        printf("[%s]\n", argv[i]);
+    return 0;
+}
+
 // --child-exit <code>: end with that code, decimal or 0x hex, as the process's
 // own exit status, which can be one an exception would give.
 static int child_exit(const char *code)
@@ -853,6 +1091,8 @@ int main(int argc, const char *const argv[])
     GetModuleFileNameA(NULL, self_path, sizeof(self_path));
     if (argc > 2 && strcmp(argv[1], "--child-exit") == 0)
         return child_exit(argv[2]);
+    if (argc > 1 && strcmp(argv[1], "--child-argv") == 0)
+        return child_argv(argc, argv);
     if (argc > 1 && strncmp(argv[1], "--child-", 8) == 0)
         return child_main(argv[1]);
 #endif

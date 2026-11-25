@@ -98,6 +98,77 @@ UTEST(pipe, wait_wakes_when_another_thread_writes)
     dino_pipe_close(w);
 }
 
+static int close_later(void *arg)
+{
+    dino_sleep_ms(30);
+    return dino_pipe_close(*(dino_pipe_t *)arg);
+}
+
+UTEST(pipe, waiting_forever_wakes_when_the_writer_closes)
+{
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    dino__thread_t t;
+    ASSERT_EQ(0, dino__thread_create(&t, close_later, &w));
+
+    EXPECT_EQ(0, dino_pipe_wait(r, -1));
+    char buf[4];
+    EXPECT_EQ(0, dino_pipe_read(r, buf, sizeof(buf)));
+
+    int result = -1;
+    EXPECT_EQ(0, dino__thread_join(t, &result));
+    EXPECT_EQ(0, result);
+    dino_pipe_close(r);
+}
+
+struct fill
+{
+    dino_pipe_t w, done;
+};
+
+static int fill_64_kb(void *arg)
+{
+    struct fill *f = arg;
+    static char  chunk[4096];
+    for (int sent = 0; sent < 65536;)
+    {
+        int rc = dino_pipe_write(f->w, chunk, sizeof(chunk));
+        if (rc <= 0)
+            return -1;
+        sent += rc;
+    }
+    return dino_pipe_write(f->done, "x", 1) == 1 ? 0 : -1;
+}
+
+// The documented capacity, on every platform: 64 KB go in with nobody reading.
+UTEST(pipe, holds_64_kb_before_a_write_blocks)
+{
+    dino_pipe_t r, w, done_r;
+    struct fill f;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    ASSERT_EQ(0, dino_pipe_create(&done_r, &f.done));
+    f.w = w;
+    dino__thread_t t;
+    ASSERT_EQ(0, dino__thread_create(&t, fill_64_kb, &f));
+
+    EXPECT_EQ(0, dino_pipe_wait(done_r, 5000));
+
+    // Drain, so a writer that did block finishes either way.
+    char buf[8192];
+    int  received = 0, n;
+    while (received < 65536 && (n = dino_pipe_read(r, buf, sizeof(buf))) > 0)
+        received += n;
+    EXPECT_EQ(65536, received);
+
+    int result = -1;
+    EXPECT_EQ(0, dino__thread_join(t, &result));
+    EXPECT_EQ(0, result);
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+    dino_pipe_close(done_r);
+    dino_pipe_close(f.done);
+}
+
 // Far more than the 64 KB a pipe holds, so the writer blocks until the reader
 // catches up; partial writes are continued.
 #define BIG (1 << 20)
@@ -272,6 +343,20 @@ UTEST(pipe, wait_on_a_write_end_fails)
     EXPECT_EQ(-1, dino_pipe_wait(w, 10));
     dino_pipe_close(r);
     EXPECT_EQ(-1, dino_pipe_wait(w, 10));
+    dino_pipe_close(w);
+}
+
+UTEST(pipe, each_end_works_only_one_way)
+{
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    char buf[4] = "abc";
+    EXPECT_EQ(-1, dino_pipe_read(w, buf, sizeof(buf)));
+    EXPECT_EQ(-1, dino_pipe_write(r, buf, sizeof(buf)));
+    // Neither failure got in the way of the right direction.
+    EXPECT_EQ(3, dino_pipe_write(w, buf, 3));
+    EXPECT_EQ(3, dino_pipe_read(r, buf, sizeof(buf)));
+    dino_pipe_close(r);
     dino_pipe_close(w);
 }
 

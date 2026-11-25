@@ -17,6 +17,14 @@ static const uint64_t g_durations[] = {
 };
 static atomic_int g_woke;
 
+static int sleep_longest_ms(void *arg)
+{
+    (void)arg;
+    dino_sleep_ms(UINT32_MAX);
+    atomic_fetch_add(&g_woke, 1);
+    return 0;
+}
+
 static int sleep_for(void *arg)
 {
     dino_sleep_us(*(const uint64_t *)arg);
@@ -32,6 +40,9 @@ UTEST(sleep, huge_durations_dont_wrap_to_short_sleeps)
         ASSERT_EQ(dino__thread_create(&t, sleep_for, (void *)&g_durations[i]), 0);
         ASSERT_EQ(dino__thread_detach(t), 0);
     }
+    dino__thread_t t;
+    ASSERT_EQ(dino__thread_create(&t, sleep_longest_ms, NULL), 0);
+    ASSERT_EQ(dino__thread_detach(t), 0);
     dino_sleep_ms(200);
     ASSERT_EQ(atomic_load(&g_woke), 0);
 }

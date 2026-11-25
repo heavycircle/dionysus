@@ -170,6 +170,89 @@ UTEST(logging, long_lines_are_truncated_with_a_newline)
     EXPECT_EQ('\n', buf[strlen(buf) - 1]);
 }
 
+static void emit_with_newline(void)
+{
+    DINO_LOG_INFO("already ends\n");
+}
+
+UTEST(logging, a_format_ending_in_a_newline_gets_no_second_one)
+{
+    char buf[256];
+    dino_log_set_level(DINO_LOG_LEVEL_INFO);
+    capture(buf, sizeof buf, emit_with_newline);
+    EXPECT_EQ(1u, count_lines(buf));
+    EXPECT_NE(NULL, strstr(buf, ": already ends\n"));
+}
+
+// "HH:MM:SS.mmm [I] f.c:1: " is 24 bytes, so a message of 998 fills the 1024
+// byte buffer exactly, with the newline and the terminator.
+static char message[1100];
+
+static void emit_message(void)
+{
+    dino_log_write(DINO_LOG_LEVEL_INFO, "f.c", 1, "%s", message);
+}
+
+static size_t xs(const char *s)
+{
+    size_t n = 0;
+    for (; *s; s++)
+        n += *s == 'x';
+    return n;
+}
+
+UTEST(logging, lines_at_the_length_limit)
+{
+    char buf[2048];
+    dino_log_set_level(DINO_LOG_LEVEL_INFO);
+
+    memset(message, 'x', 998);
+    message[998] = '\0';
+    EXPECT_EQ(1023u, capture(buf, sizeof buf, emit_message));
+    EXPECT_EQ(998u, xs(buf));
+    EXPECT_EQ('\n', buf[1022]);
+
+    // One more is one too many: the last x makes way for the newline.
+    message[998] = 'x';
+    message[999] = '\0';
+    EXPECT_EQ(1023u, capture(buf, sizeof buf, emit_message));
+    EXPECT_EQ(998u, xs(buf));
+
+    // A newline of its own that just fits stays the only one.
+    message[997] = '\n';
+    message[998] = '\0';
+    EXPECT_EQ(1022u, capture(buf, sizeof buf, emit_message));
+    EXPECT_EQ(1u, count_lines(buf));
+}
+
+static void emit_windows_path(void)
+{
+    dino_log_write(DINO_LOG_LEVEL_WARN, "C:\\src\\lib\\net.c", 12, "msg");
+}
+
+UTEST(logging, a_windows_path_is_cut_to_its_file_name)
+{
+    char buf[256];
+    dino_log_set_level(DINO_LOG_LEVEL_INFO);
+    capture(buf, sizeof buf, emit_windows_path);
+    EXPECT_NE(NULL, strstr(buf, "[W] net.c:12: msg\n"));
+}
+
+static void emit_bad_levels(void)
+{
+    dino_log_write(DINO_LOG_LEVEL_OFF, "f.c", 1, "off");
+    dino_log_write((dino_log_level_t)99, "f.c", 1, "too high");
+    dino_log_write((dino_log_level_t)-1, "f.c", 1, "negative");
+}
+
+// What isn't a level to write at writes nothing, even with everything enabled.
+UTEST(logging, writing_at_off_or_an_invalid_level_writes_nothing)
+{
+    char buf[256];
+    dino_log_set_level(DINO_LOG_LEVEL_TRACE);
+    EXPECT_EQ(0u, capture(buf, sizeof buf, emit_bad_levels));
+}
+
 static void emit_keeping_errno(void)
 {
     errno = ERANGE;
