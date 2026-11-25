@@ -21,6 +21,8 @@ tar -xJf dino-<version>-x86_64-linux.tar.xz
 install -m755 dino-<version>-x86_64-linux/dino ~/.local/bin/
 ```
 
+To check that an archive was built by this repository's release workflow from the tagged commit, not only that it downloaded whole, verify its provenance attestation with the [GitHub CLI](https://cli.github.com/): `gh attestation verify dino-<version>-x86_64-linux.tar.xz -R heavycircle/dionysus`. Releases from 1.0 on have one (see [SECURITY.md](../../SECURITY.md)).
+
 Archives are published for Linux x86_64 and aarch64 (`.tar.xz`) and for Windows x86_64 (`.zip`).
 Windows hosts aren't tested yet; Linux is the supported host.
 

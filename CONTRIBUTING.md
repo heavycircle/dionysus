@@ -154,8 +154,11 @@ scripts/tidy.sh            clang-tidy on the SDK for x86_64 and win64
 .clang-format, .clang-tidy C style and static-analysis rules (also written by dino init)
 .clang-format-ignore       files clang-format leaves alone (the vendored utest.h)
 cliff.toml                 release-notes config for git-cliff
-.github/workflows/         CI, nightly, release and backport workflows
+.github/workflows/         CI, PR title, nightly, release and backport workflows
 .github/actions/setup-zig/ installs the pinned Zig in workflows
+.github/dependabot.yml     weekly updates of the pinned actions and the Docker base image
+SECURITY.md                how to report a vulnerability, and how to verify a download
+THIRD-PARTY-LICENSES       notices for the code in dino that isn't ours, shipped in the archives
 Dockerfile                 build and test image
 .devcontainer/             devcontainer using that image
 ```
@@ -293,7 +296,9 @@ examples, docs) and the version this script installs, together.
 
 ### CI
 
-`.github/workflows/ci.yml` runs on every PR and on pushes to `main` and `release-*`:
+`.github/workflows/ci.yml` runs on every PR and on pushes to `main` and `release-*`. `.github/workflows/pr-title.yml` checks a PR's title with `scripts/lintcommit.sh --subject`, since a squash merge lands the title as the commit subject.
+
+Every action a workflow uses is pinned to a full commit hash, with its version in a comment (`uses: owner/action@<sha> # v1.2.3`). Pin a new one the same way; dependabot moves the pins.
 
 | Job                                  | What it checks                                                                                                                                                                                                                                                                                                                               |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -510,6 +515,7 @@ Commits before this document existed use `scope: subject` (`cli: dino init/...`)
 - Open a draft PR for work in progress.
 - Include what you tested (targets built, examples run, size changes). Put `Closes #N` in the
   description.
+- **Title it like a commit subject** (`fix(sdk): …`, see [Commit messages](#commit-messages)): a squash merge uses the title as the commit's subject, and CI checks it.
 
 ## Issues and labels
 

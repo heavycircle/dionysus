@@ -7,7 +7,8 @@
 #   docker run --rm -v "$PWD:/work" dionysus dino run arm64
 #   docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples
 
-FROM debian:trixie-slim AS base
+# Pinned by digest, so a rebuild gets the same base; dependabot moves it.
+FROM debian:trixie-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0 AS base
 
 ARG ZIG_VERSION=0.17.1
 ARG ZIG_SHA256=3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a
