@@ -128,9 +128,9 @@ and a client each with their own loop, holding 1000 connections at once.
 | `DINO_EVENT_WAKE`    | another thread called `dino_event_wake`                       | `NULL`        |
 | `DINO_EVENT_ONESHOT` | (interest only) report once, then disarm until the next `mod` |               |
 
-`READ` and `WRITE` are reported only for a socket watched for them. `ERROR` comes whenever it happens. `HANGUP` comes with `READ` when the socket is watched for it, so a handler that only looks at `READ` still finds the end of the stream with a `recv` that returns `0`. A socket watched for neither `READ` nor `WRITE` reports a reset (`ERROR | HANGUP`) but not a peer that only closed or shut down its side: that lasts, and would end every wait at once. Two cases still differ by platform:
+`READ` and `WRITE` are reported only for a socket watched for them. `ERROR` comes whenever it happens. `HANGUP` comes with `READ` when the socket is watched for it, so a handler that only looks at `READ` still finds the end of the stream with a `recv` that returns `0`. Like `READ`, `HANGUP` is level-triggered: every wait reports it again until the socket is deleted (or disarmed with `ONESHOT`), so stop watching a socket once its peer is gone. A socket watched for neither `READ` nor `WRITE` (`events` of `0`) reports a reset (`ERROR | HANGUP`) but not a peer that only closed or shut down its side: that lasts, and would end every wait at once. Two cases still differ by platform:
 
-- A refused non-blocking `connect` reports `WRITE | ERROR`, and on Linux `HANGUP` too.
+- A refused non-blocking `connect` reports `ERROR` (with `WRITE`, if watched for it), and on Linux `HANGUP`, and `READ` if watched for it, too. Read the reason with `dino_socket_error`.
 - A socket that is neither connected, connecting nor listening reports `HANGUP` at once on Linux
   (with `WRITE`, if watched for it) and nothing on Windows. Add a socket after `connect` or `listen`.
 
@@ -150,8 +150,7 @@ and a client each with their own loop, holding 1000 connections at once.
 | `dino_event_wait(loop, out, max, timeout_ms)`                | Wait. Returns how many items it wrote to `out`, `0` on timeout, `-1` on error.           |
 | `dino_event_wake(loop)`                                      | Make a wait return a `DINO_EVENT_WAKE` item, from any thread.                            |
 
-Everything returns `0` on success and `-1` on error (adding an item twice, or deleting one that isn't
-there, is an error), except the create functions, which return a handle or its invalid value.
+The other functions return `0` on success and `-1` on error (adding an item twice, or deleting one that isn't there, is an error). The exceptions are `dino_event_loop_create` and `dino_event_add_timer`, which return a handle or its invalid value, `dino_event_wait`, which returns a count, and `dino_event_loop_destroy`, which returns nothing.
 
 ## Threads
 
@@ -160,7 +159,7 @@ there, is an error), except the create functions, which return a handle or its i
   thread wakes a wait in another to include it.
 - **Stopping or handing over work:** `dino_event_wake` makes a waiting thread return a
   `DINO_EVENT_WAKE` item. Use it to stop a loop or to tell it there's work queued for it. Wakes not
-  yet reported merge into one.
+  yet reported merge into one. It is safe in a signal handler, so a `SIGINT` handler can stop a loop; save and restore `errno` around it.
 - **Several threads on one loop:** add sockets with `DINO_EVENT_ONESHOT`, so one event goes to one
   thread, and rearm each with `dino_event_mod_socket` once that thread has handled it. Without
   `ONESHOT`, one ready socket wakes every waiting thread on Linux but only one on Windows.

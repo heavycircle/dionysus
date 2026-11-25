@@ -14,7 +14,7 @@ Where Linux and Windows differ, and what the SDK provides for each. Memory maps 
 
 | **Domain**   | **Linux**             | **Windows**               | **Required?** | **Description**                                                              | **SDK**                               |
 | ------------ | --------------------- | ------------------------- | ------------- | ---------------------------------------------------------------------------- | ------------------------------------- |
-| Networking   | `sys/socket.h`        | `winsock2.h`              | Required      | `WSAStartup`/`WSACleanup`                                                    | [`network.h`](../docs/sdk/network.md) |
+| Networking   | `sys/socket.h`        | `winsock2.h`              | Required      | a `SOCKET` isn't a descriptor; the SDK provides the POSIX headers on Windows | [`network.h`](../docs/sdk/network.md) |
 | Processes    | `fork` / `exec`       | `CreateProcess`           | Required      | Windows has no `fork`                                                        | [`process.h`](../docs/sdk/process.md) |
 | Multiplexing | `epoll`               | `IOCP`                    | Required      | Windows has no `epoll`                                                       | [`event.h`](../docs/sdk/event.md)     |
 | Threading    | `pthread_create`      | `CreateThread`            | Use pthreads  | winpthreads, linked statically (8–10 KB); the SDK adds monotonic timed waits | [`thread.h`](../docs/sdk/thread.md)   |
@@ -23,4 +23,7 @@ Where Linux and Windows differ, and what the SDK provides for each. Memory maps 
 | Timing       | `time` / `clock`      | `QueryPerformanceCounter` | Recommended   | Clock has no nanosecond precision                                            | [`time.h`](../docs/sdk/time.md)       |
 | Memory Map   | `mmap`                | `CreateFileMapping`       | Recommended   | Slower and bulky                                                             | not yet (#22)                         |
 | Sleeping     | `sleep` / `usleep`    | `Sleep`                   | Recommended   | `sleep` works in seconds                                                     | [`time.h`](../docs/sdk/time.md)       |
-| Multiplexing | `select`              | `select`                  | Optional      | Inefficient, `event.h` scales better                                         | [`io.h`](../docs/sdk/io.md)           |
+| Multiplexing | `poll` / `select`     | `WSAPoll` / `select`      | Use libc      | the SDK defines `poll()` on Windows; `event.h` scales better                 | [`poll.h`](../docs/sdk/io.md)         |
+| Pipes        | `pipe`                | `CreatePipe`              | Required      | Windows' anonymous pipes can't be waited on                                  | [`pipe.h`](../docs/sdk/pipe.md)       |
+| Environment  | `setenv` / `unsetenv` | `_putenv_s`               | Use libc      | the SDK defines `setenv` and `unsetenv` on Windows                           | [libc](../docs/sdk/libc.md)           |
+| Logging      | `syslog`              | `ReportEvent`             | Optional      | leveled lines on stderr, the same on every target                           | [`logging.h`](../docs/sdk/logging.md) |

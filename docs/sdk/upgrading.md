@@ -280,6 +280,22 @@ if (rc == DINO_TIMEOUT)
 
 Code that tested `== -1` for "busy" must test for `DINO_TIMEOUT`.
 
+## To 0.6.2
+
+Fixes only; nothing fails to build. These change what a program sees at run time.
+
+### `dino_file_size` follows symbolic links on Windows
+
+A link to a file was rejected on Windows. It now reports the size of the file it points to, as on Linux; a link to a directory, or one whose target is gone, fails as the directory or the missing file would.
+
+### Unlocking a mutex the thread doesn't hold fails on Windows too
+
+`dino_mutex_unlock` from a thread that doesn't hold the mutex, of a free mutex, or once too often after a recursive lock, returned `-1` on Linux but was undefined on Windows (a test hung under wine). It returns `-1` on both now and leaves the mutex as it was, and `dino_cond_wait` on a mutex the caller doesn't hold fails the same way. (`dino_mutex` is gone in 0.9; see [threads are plain pthreads](#threads-are-plain-pthreads).)
+
+### Very long sleeps no longer return at once
+
+`dino_sleep_us` with a delay from about `UINT64_MAX / 2000` microseconds up wrapped its deadline and returned at once. The deadline now saturates, so a huge delay sleeps for as long as the program runs.
+
 ## To 0.6.1
 
 Fixes only; nothing fails to build. These change what a program sees at run time.
@@ -296,13 +312,13 @@ return `0` once the background process let go.
 A descriptor the program opened without close-on-exec (with `open`, `dup` or `socket` rather than
 the SDK) reached every child on Linux, though the docs said children get only stdin, stdout and
 stderr, as on Windows. It is closed in the child now. A program that handed a child a descriptor
-this way passes it as stdin, stdout or stderr instead.
+this way now has to send the data through one of the child's stdio pipes.
 
 ### A relative program path is found from `cwd` on Windows too
 
 `dino_process_spawn` with `cwd` set and a relative `argv[0]` such as `./tool` looked for the
 program in the new directory on Linux but in the parent's on Windows. Both use `cwd` now. Code that
-relied on Windows' old behaviour passes an absolute path.
+relied on Windows' old behavior passes an absolute path.
 
 ## To 0.6
 
@@ -312,8 +328,7 @@ consistent across the SDK, so 1.0 starts clean.
 
 ### Renamed types
 
-Every type in `process.h` now starts with `dino_process_`, and every type in `network.h` with
-`dino_socket_`. Rename them in your code; their contents are unchanged.
+The run and spawn types in `process.h` now start with `dino_process_`, and the socket types in `network.h` with `dino_socket_`. Rename them in your code; their contents are unchanged.
 
 | 0.5                      | 0.6                          |
 | ------------------------ | ---------------------------- |
@@ -392,7 +407,7 @@ IPv4 socket to `"0.0.0.0"` on the same port, or calls `dino_socket_set_v6only(so
 ### Accepted sockets are blocking on Windows too
 
 `dino_socket_accept` on a non-blocking listener returned a non-blocking socket on Windows and a
-blocking one on Linux. Both return a blocking socket now. Code that relied on the Windows behaviour
+blocking one on Linux. Both return a blocking socket now. Code that relied on the Windows behavior
 calls `dino_socket_set_nonblocking(conn, 1)` after accepting, which works on every version.
 
 ### New

@@ -41,8 +41,8 @@ typedef struct dino_event_timer *dino_event_timer_t;
 #define DINO_EVENT_WRITE 0x0004 /**< A send won't block, or a connect finished. */
 #define DINO_EVENT_ERROR 0x0008 /**< Always reported. */
 /** The peer closed or shut down its side, so a read returns 0 (with READ, if
- *  watched for it). Reported for an item watched for READ or WRITE; with
- *  neither, only a reset is, with ERROR. */
+ *  watched for it). Reported for an item watched for READ or WRITE, by every
+ *  wait until it is deleted; with neither, only a reset is, with ERROR. */
 #define DINO_EVENT_HANGUP  0x0010
 #define DINO_EVENT_WAKE    0x0100 /**< From dino_event_wake; userdata is NULL. */
 #define DINO_EVENT_TIMER   0x0200 /**< A timer fired; userdata is the timer's. */
@@ -84,7 +84,7 @@ void dino_event_loop_destroy(dino_event_loop_t loop);
  * @param  loop      Loop to add to.
  * @param  sock      Socket to watch.
  * @param  events    DINO_EVENT_READ and/or DINO_EVENT_WRITE, optionally with
- *                   DINO_EVENT_ONESHOT.
+ *                   DINO_EVENT_ONESHOT; 0 watches for ERROR (a reset) only.
  * @param  userdata  Returned with every event for this socket.
  * @return 0 on success, -1 on error. dino_error() (dino/core/error.h) is
  *         DINO_EEXIST when sock is already added; a mod or del of something
@@ -189,6 +189,10 @@ int dino_event_wait(dino_event_loop_t loop, dino_event_t *out, int max, int time
  * Make a wait on this loop return a DINO_EVENT_WAKE item, now or, if no thread
  * is waiting, at the next wait. Wakes not yet reported are merged into one.
  * Use it to stop a loop or hand it work from another thread.
+ *
+ * Safe in a signal handler (it writes to an eventfd on Linux; on Windows a
+ * console handler runs on a thread of its own), but it may change errno, so
+ * save and restore errno around it.
  *
  * @param  loop  Loop to wake.
  * @return 0 on success, -1 on error.

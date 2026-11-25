@@ -31,7 +31,7 @@ targets and runs it that way; the socket examples check every step and exit nonz
 | Threading    | [`thread_example`](./thread_example/main.c)              | `pthread.h`                             | Four `pthread_create` workers counting to ten million, each sum returned through `pthread_join`                                                                                                           |
 
 `network_example` and `io_example` also run as two processes for a
-two-terminal demo: start one with `server`, then the other with `client`.
+two-terminal demo: start one with `server`, then the other with `client` (`io_example`'s server gives up after 5 seconds without one).
 
 ```sh
 dino run -C examples/network_example -- server   # terminal 1

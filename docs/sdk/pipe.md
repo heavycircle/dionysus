@@ -63,13 +63,13 @@ int main(void)
 
 ## Functions
 
-| Function                                  | Does                                                                          | Returns                                           |
-| ----------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
-| `dino_pipe_create(&read_end, &write_end)` | A new pipe. Neither end is inherited by child processes unless passed to one. | `0`, `-1`                                         |
-| `dino_pipe_read(p, buf, len)`             | Read up to `len` bytes, waiting until at least one is there.                  | bytes read; `0` at end of file (or `len` 0); `-1` |
-| `dino_pipe_write(p, buf, len)`            | Write up to `len` bytes, waiting while the pipe is full.                      | bytes written (maybe fewer than `len`), `-1`      |
-| `dino_pipe_wait(p, timeout_ms)`           | Wait until a read won't block: data, or end of file.                          | `0`, `DINO_TIMEOUT`, `-1`                         |
-| `dino_pipe_close(p)`                      | Close one end.                                                                | `0`, `-1`                                         |
+| Function                                  | Does                                                                                                                         | Returns                                           |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `dino_pipe_create(&read_end, &write_end)` | A new pipe. Neither end is inherited by child processes; a child's stdio pipes come from [`dino_process_spawn`](process.md). | `0`, `-1`                                         |
+| `dino_pipe_read(p, buf, len)`             | Read up to `len` bytes, waiting until at least one is there.                                                                 | bytes read; `0` at end of file (or `len` 0); `-1` |
+| `dino_pipe_write(p, buf, len)`            | Write up to `len` bytes, waiting while the pipe is full.                                                                     | bytes written (maybe fewer than `len`), `-1`      |
+| `dino_pipe_wait(p, timeout_ms)`           | Wait until a read won't block: data, or end of file.                                                                         | `0`, `DINO_TIMEOUT`, `-1`                         |
+| `dino_pipe_close(p)`                      | Close one end.                                                                                                               | `0`, `-1`                                         |
 
 ## Rules
 

@@ -67,7 +67,7 @@ int main(void)
 ## Notes
 
 - **Size on Windows:** winpthreads adds about 8–10 KB to a Windows program that uses pthreads. The SDK's own code uses the Win32 API directly, so a program that never calls pthreads doesn't carry it.
-- **Stack size:** a thread's default stack is 128 KiB with musl and 1 MiB on Windows, so deep recursion that works on Windows can overflow on Linux. Set it with `pthread_attr_setstacksize`, or keep large buffers on the heap.
+- **Stack size:** a thread's default stack is 128 KiB with musl and 16 MiB on Windows, so deep recursion that works on Windows can overflow on Linux. Set it with `pthread_attr_setstacksize`, or keep large buffers on the heap.
 - **Thread-local storage:** `_Thread_local` works on every target.
 - **C11 `<threads.h>`** exists on Linux only; MinGW has none. Use pthreads.
 
