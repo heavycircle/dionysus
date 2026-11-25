@@ -62,6 +62,7 @@ if(WIN32)
     target_sources(dino_core PRIVATE src/core/winsock_auto_win32.c)
     add_library(dino_libc STATIC
         src/libc/getentropy_win32.c
+        src/libc/mkdir_win32.c
         src/libc/poll_win32.c
         src/libc/remove_win32.c
         src/libc/rename_win32.c
@@ -71,6 +72,7 @@ endif()
 
 # Optional extras built on dino_core (logging, ...), kept out of the core library.
 add_library(dino_util STATIC
+    src/util/fs.c
     src/util/logging.c
 )
 target_link_libraries(dino_util PUBLIC dino_core)

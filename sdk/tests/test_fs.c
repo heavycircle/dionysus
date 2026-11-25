@@ -5,6 +5,9 @@
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
 
 #ifdef _WIN32
 #include <io.h>
@@ -20,6 +23,7 @@
 
 #include <dino/core/error.h>
 #include <dino/core/fs.h>
+#include <dino/util/fs.h>
 
 static int resize(const char *path, uint64_t size)
 {
@@ -398,5 +402,164 @@ UTEST(fs_init, without_dev_null_the_descriptor_is_still_taken)
     EXPECT_EQ(-1, got);
 }
 #endif
+
+/* ---- mkdir and dino_mkdir_p ---- */
+
+static int is_dir(const char *path)
+{
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+// POSIX's two-argument mkdir, on Windows too, with errno as on Linux.
+UTEST(mkdir, takes_a_mode_and_sets_errno)
+{
+    rmdir("dino_mkdir_one");
+    ASSERT_EQ(0, mkdir("dino_mkdir_one", 0755));
+    EXPECT_TRUE(is_dir("dino_mkdir_one"));
+    errno = 0;
+    EXPECT_EQ(-1, mkdir("dino_mkdir_one", 0755));
+    EXPECT_EQ(EEXIST, errno);
+    errno = 0;
+    EXPECT_EQ(-1, mkdir("dino_mkdir_missing/child", 0755));
+    EXPECT_EQ(ENOENT, errno);
+    EXPECT_EQ(0, rmdir("dino_mkdir_one"));
+}
+
+UTEST(mkdir, a_utf8_name)
+{
+    const char *name = "dino_r\xc3\xa9pertoire";
+    rmdir(name);
+    ASSERT_EQ(0, mkdir(name, 0700));
+    EXPECT_TRUE(is_dir(name));
+    EXPECT_EQ(0, rmdir(name));
+}
+
+UTEST(mkdir_p, creates_every_missing_level)
+{
+    rmdir("dino_mkp/a/b/c");
+    rmdir("dino_mkp/a/b");
+    rmdir("dino_mkp/a");
+    rmdir("dino_mkp");
+    ASSERT_EQ(0, dino_mkdir_p("dino_mkp/a/b/c", 0755));
+    EXPECT_TRUE(is_dir("dino_mkp/a/b/c"));
+    // Already there, with a trailing separator and a doubled one.
+    EXPECT_EQ(0, dino_mkdir_p("dino_mkp/a/b/c/", 0755));
+    EXPECT_EQ(0, dino_mkdir_p("dino_mkp//a", 0755));
+#ifdef _WIN32
+    EXPECT_EQ(0, dino_mkdir_p("dino_mkp\\a\\b\\d", 0755));
+    EXPECT_TRUE(is_dir("dino_mkp/a/b/d"));
+    rmdir("dino_mkp/a/b/d");
+#endif
+    EXPECT_EQ(0, rmdir("dino_mkp/a/b/c"));
+    EXPECT_EQ(0, rmdir("dino_mkp/a/b"));
+    EXPECT_EQ(0, rmdir("dino_mkp/a"));
+    EXPECT_EQ(0, rmdir("dino_mkp"));
+}
+
+// An absolute path, from the temporary directory: the root (/, C:\) is never
+// created.
+UTEST(mkdir_p, an_absolute_path)
+{
+    char tmp[1024], path[1200];
+    ASSERT_GT(dino_path_temp(tmp, sizeof(tmp)), 0);
+    snprintf(path, sizeof(path), "%s/dino_mkp_abs/x", tmp);
+    ASSERT_EQ(0, dino_mkdir_p(path, 0755));
+    EXPECT_TRUE(is_dir(path));
+    EXPECT_EQ(0, rmdir(path));
+    snprintf(path, sizeof(path), "%s/dino_mkp_abs", tmp);
+    EXPECT_EQ(0, rmdir(path));
+}
+
+UTEST(mkdir_p, a_file_in_the_way_fails)
+{
+    ASSERT_EQ(0, write_file("dino_mkp_file", "x"));
+    EXPECT_EQ(-1, dino_mkdir_p("dino_mkp_file", 0755));
+    EXPECT_EQ(DINO_EEXIST, dino_error());
+    EXPECT_EQ(-1, dino_mkdir_p("dino_mkp_file/sub", 0755));
+    remove("dino_mkp_file");
+    EXPECT_EQ(-1, dino_mkdir_p("", 0755));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(-1, dino_mkdir_p(NULL, 0755));
+}
+
+/* ---- dino_path_temp and dino_path_executable ---- */
+
+UTEST(path, temp_is_a_directory_without_a_trailing_separator)
+{
+    char buf[1024];
+    int  len = dino_path_temp(buf, sizeof(buf));
+    ASSERT_GT(len, 0);
+    ASSERT_LT(len, (int)sizeof(buf));
+    EXPECT_EQ((size_t)len, strlen(buf));
+    EXPECT_TRUE(is_dir(buf));
+    EXPECT_NE('/', buf[len - 1]);
+    EXPECT_NE('\\', buf[len - 1]);
+}
+
+// The variable each platform reads first: TMPDIR, or TMP on Windows.
+UTEST(path, temp_follows_the_environment)
+{
+#ifdef _WIN32
+    const char *var = "TMP";
+#else
+    const char *var = "TMPDIR";
+#endif
+    char before[1024], dir[1200], buf[1200];
+    ASSERT_GT(dino_path_temp(before, sizeof(before)), 0);
+    snprintf(dir, sizeof(dir), "%s/dino_path_tmp", before);
+    mkdir(dir, 0700);
+    const char *old   = getenv(var);
+    char       *saved = old ? strdup(old) : NULL;
+    char        with_slash[1210];
+    snprintf(with_slash, sizeof(with_slash), "%s/", dir);
+    ASSERT_EQ(0, setenv(var, with_slash, 1));
+    int len = dino_path_temp(buf, sizeof(buf));
+    if (saved)
+        setenv(var, saved, 1);
+    else
+        unsetenv(var);
+    free(saved);
+    rmdir(dir);
+    ASSERT_GT(len, 0);
+#ifdef _WIN32
+    // GetTempPathW gives back a full path with backslashes.
+    for (char *c = dir; *c; c++)
+        if (*c == '/')
+            *c = '\\';
+    for (char *c = buf; *c; c++)
+        if (*c == '/')
+            *c = '\\';
+    EXPECT_EQ(0, _stricmp(dir, buf));
+#else
+    EXPECT_STREQ(dir, buf);
+#endif
+}
+
+UTEST(path, executable_is_this_program)
+{
+    char buf[1024];
+    int  len = dino_path_executable(buf, sizeof(buf));
+    ASSERT_GT(len, 0);
+    ASSERT_LT(len, (int)sizeof(buf));
+    EXPECT_EQ((size_t)len, strlen(buf));
+    EXPECT_NE(NULL, strstr(buf, "test_fs"));
+    struct stat st;
+    EXPECT_EQ(0, stat(buf, &st));
+}
+
+// As snprintf: what fits, NUL-terminated, and the full length back.
+UTEST(path, a_short_buffer_gets_a_cut_path_and_the_full_length)
+{
+    char full[1024], small[8];
+    int  len = dino_path_executable(full, sizeof(full));
+    ASSERT_GT(len, 8);
+    EXPECT_EQ(len, dino_path_executable(small, sizeof(small)));
+    EXPECT_EQ(7u, strlen(small));
+    EXPECT_EQ(0, strncmp(full, small, 7));
+    EXPECT_EQ(len, dino_path_executable(NULL, 0));
+    EXPECT_EQ(dino_path_temp(full, sizeof(full)), dino_path_temp(NULL, 0));
+    EXPECT_EQ(-1, dino_path_temp(NULL, 4));
+}
 
 UTEST_MAIN()
