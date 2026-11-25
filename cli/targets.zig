@@ -31,8 +31,15 @@ pub const known = [_]Target{
 };
 
 /// valgrind can't see the allocator inside a static binary, so --memcheck
-/// builds the tests against dynamic glibc and runs each one under valgrind.
-pub const memcheck: Target = .{
+/// builds the tests against dynamic glibc and runs each one under valgrind,
+/// for the host's own architecture: x86_64, or aarch64 (the arm64 image).
+pub const memcheck: Target = if (builtin.cpu.arch == .aarch64) .{
+    .name = "memcheck",
+    .triple = "aarch64-linux-gnu",
+    .description = "AArch64 Linux, dynamically linked, for valgrind",
+    .arch = .aarch64,
+    .os = .linux,
+} else .{
     .name = "memcheck",
     .triple = "x86_64-linux-gnu",
     .description = "x86_64 Linux, dynamically linked, for valgrind",

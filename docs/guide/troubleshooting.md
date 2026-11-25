@@ -127,7 +127,7 @@ allocated. See [Testing](testing.md#the-leak-check).
 
 **`--memcheck needs valgrind; install it (or use the dino Docker image)`**
 
-Install valgrind. `--memcheck` also needs an x86_64 Linux host, and takes no targets.
+Install valgrind. `--memcheck` also needs an x86_64 or aarch64 Linux host, and takes no targets.
 
 **`No tests were found!!!`**
 

@@ -27,6 +27,7 @@ set -eu
 # world-writable drive_c in /opt/wine-prefix; wine only checks who owns the
 # prefix directory itself.
 own_wine_prefix() {
+    [ -d /opt/wine-prefix ] || return 0 # no wine in this image (arm64)
     prefix=$HOME/.wine
     if [ ! -O "$prefix" ]; then
         mkdir -p "$prefix"

@@ -121,7 +121,7 @@ pub fn main(ctx: *Ctx, raw: []const []const u8) Ctx.Error!u8 {
 
     ctx.print("\nFor `dino test --memcheck` (optional):\n", .{});
     if (targets.runnerFor(targets.memcheck) != .native) {
-        report(ctx, false, "valgrind", "needs an x86_64 Linux host");
+        report(ctx, false, "valgrind", "needs an x86_64 or aarch64 Linux host");
     } else if (ctx.findProgram("valgrind")) |p| {
         report(ctx, true, "valgrind", p);
     } else {

@@ -87,6 +87,8 @@ docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/exampl
 The image has `dino` built from the source tree at image build time, so rebuild the image after
 changing `cli/` or `sdk/`.
 
+It builds natively on amd64 and arm64 hosts (Apple silicon included), and so does the devcontainer. The arm64 image has no wine, so Windows builds can't run there: `tests/image.sh` and `tests/docker.sh` skip them on arm64, and `tests/cli.sh`, whose cases expect an x86_64 host, runs in the amd64 image. `docker build --platform linux/arm64 -t dionysus:arm64 .` builds the arm64 image on an amd64 machine under emulation (slowly), to test it.
+
 The container starts as root only to pick a user (`scripts/docker-entrypoint.sh`): the owner of the
 working directory, so files written into a mounted project keep their owner. `dino` (UID 1000) is
 remapped to that UID; a root-owned mount (rootless Docker, Docker Desktop) runs as root; `--user` is

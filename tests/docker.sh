@@ -20,6 +20,10 @@ failed=0
 # shellcheck disable=SC2016
 parallel_wine='pids=; for i in 1 2 3 4 5 6; do wine cmd /c exit 0 & pids="$pids $!"; done
     for pid in $pids; do wait "$pid" || exit 1; done'
+# The arm64 image has no wine (see the Dockerfile).
+if [[ $(docker image inspect -f '{{.Architecture}}' "$image") == arm64 ]]; then
+    parallel_wine=true
+fi
 
 # Usage: check NAME UID[:GID] [docker run args...] (GID defaults to UID)
 check() {

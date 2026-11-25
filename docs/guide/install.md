@@ -110,7 +110,7 @@ All required tools found.
 - **Runners** are optional. A `MISS` only means `dino run` and `dino test` can't run that target
   here; `dino build` still builds it. `native` means the host runs it directly: an x86_64 Linux
   machine runs `i386` binaries without qemu. For `win32`, doctor only finds `wine`; whether that wine can run 32-bit programs (a `wine32` package, or a WoW64 build) is not something it can tell.
-- **valgrind** is only needed for `dino test --memcheck`, which runs on x86_64 Linux hosts.
+- **valgrind** is only needed for `dino test --memcheck`, which runs on x86_64 and aarch64 Linux hosts.
 
 ## Environment variables
 
