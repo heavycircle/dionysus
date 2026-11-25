@@ -4,8 +4,12 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <netinet/in.h>
+#include <poll.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
+
+#include <dino/core/time.h>
 
 #include "error_internal.h"
 
@@ -79,6 +83,86 @@ int dino_socket_connect(dino_socket_t sock, const struct sockaddr *addr, socklen
     return dino__fail_os();
 }
 
+int dino_socket_connect_timeout(
+    dino_socket_t sock, const struct sockaddr *addr, socklen_t len, int timeout_ms)
+{
+    if (!addr || timeout_ms < -1)
+        return dino__fail(DINO_EINVAL);
+    if (dino_socket_set_nonblocking(sock, 1) != 0)
+        return -1;
+    int rc = 0;
+    if (connect((int)sock, addr, len) != 0)
+    {
+        if (errno != EINPROGRESS && errno != EINTR)
+        {
+            rc = dino__fail_os();
+        }
+        else
+        {
+            uint64_t      deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
+            struct pollfd pfd      = { (int)sock, POLLOUT, 0 };
+            int           ready;
+            for (;;)
+            {
+                int wait = timeout_ms;
+                if (timeout_ms > 0)
+                {
+                    uint64_t now = dino_time_monotonic_ns();
+                    wait         = now >= deadline ? 0 : (int)((deadline - now + 999999) / 1000000);
+                }
+                ready = poll(&pfd, 1, wait);
+                if (ready >= 0 || errno != EINTR)
+                    break;
+            }
+            if (ready < 0)
+                rc = dino__fail_os();
+            else if (ready == 0)
+                rc = DINO_TIMEOUT;
+            else
+            {
+                int code = dino_socket_error(sock);
+                rc       = code ? dino__fail(code) : 0;
+            }
+        }
+    }
+    // Blocking again, keeping the reason a failure was reported.
+    int code = dino_error();
+    dino_socket_set_nonblocking(sock, 0);
+    dino__error_set(code);
+    return rc;
+}
+
+// A receive or send that ran out of SO_RCVTIMEO/SO_SNDTIMEO says EAGAIN on
+// Linux, as a non-blocking socket with nothing to do does; Windows says
+// WSAETIMEDOUT. Told apart here, on the failure path only.
+static int fail_timed_out(dino_socket_t sock, int flags)
+{
+    if ((errno == EAGAIN || errno == EWOULDBLOCK) && !(flags & MSG_DONTWAIT))
+    {
+        int mode = fcntl((int)sock, F_GETFL, 0);
+        if (mode != -1 && !(mode & O_NONBLOCK))
+            return dino__fail(DINO_ETIMEDOUT);
+    }
+    return dino__fail_os();
+}
+
+int dino_socket_set_timeouts(dino_socket_t sock, int recv_ms, int send_ms)
+{
+    if (recv_ms < -1 || send_ms < -1)
+        return dino__fail(DINO_EINVAL);
+    const int options[2] = { SO_RCVTIMEO, SO_SNDTIMEO };
+    const int values[2]  = { recv_ms, send_ms };
+    for (int i = 0; i < 2; i++)
+    {
+        if (values[i] < 0)
+            continue;
+        struct timeval tv = { (time_t)(values[i] / 1000), (suseconds_t)(values[i] % 1000) * 1000 };
+        if (setsockopt((int)sock, SOL_SOCKET, options[i], &tv, sizeof(tv)) != 0)
+            return dino__fail_os();
+    }
+    return 0;
+}
+
 int dino_socket_send(dino_socket_t sock, const void *buf, size_t len, int flags)
 {
     if (len > 0 && !buf)
@@ -90,7 +174,7 @@ int dino_socket_send(dino_socket_t sock, const void *buf, size_t len, int flags)
     do
         sent = (int)send((int)sock, buf, (size_t)dino__clamp_len(len), flags | MSG_NOSIGNAL);
     while (sent < 0 && errno == EINTR);
-    return sent < 0 ? dino__fail_os() : sent;
+    return sent < 0 ? fail_timed_out(sock, flags) : sent;
 }
 
 int dino_socket_recvfrom(
@@ -103,7 +187,7 @@ int dino_socket_recvfrom(
         received = (int)recvfrom(
             (int)sock, buf, (size_t)dino__clamp_len(len), flags, from, from ? fromlen : NULL);
     while (received < 0 && errno == EINTR);
-    return received < 0 ? dino__fail_os() : received;
+    return received < 0 ? fail_timed_out(sock, flags) : received;
 }
 
 // Stream sockets only. On a datagram socket Linux's SO_REUSEADDR lets a second
