@@ -4,11 +4,15 @@
 # belong to the host user rather than to the image's `dino` user (UID 1000):
 #
 #   --user was given (--user 0 too)   run as that user
-#   owner is UID 1000                 run as dino
+#   owner is UID and GID 1000         run as dino
 #   owner is root                     run as root (rootless Docker and Docker
 #                                     Desktop map the host user to root inside
 #                                     the container)
-#   any other owner                   give `dino` that UID and GID, run as it
+#   any other owner                   give `dino` that UID and GID, run as it;
+#                                     with a read-only root filesystem, where
+#                                     dino can't be changed, run as that UID
+#                                     and GID directly (HOME in /tmp, so
+#                                     --read-only needs --tmpfs /tmp)
 #
 # The image starts as root in the group dino-entrypoint (the Dockerfile's
 # USER); --user 0 starts in group 0, which is how it's told apart.
@@ -43,10 +47,11 @@ own_wine_prefix() {
 }
 
 # The image's zig cache in /opt, warmed in the published images, unless the
-# user chose one: ZIG_GLOBAL_CACHE_DIR, or a cache mounted at zig's default
-# place in the home directory, as the Docker guide suggests.
+# user chose one (ZIG_GLOBAL_CACHE_DIR, or a cache mounted at zig's default
+# place in the home directory) or it can't be written (--read-only), where zig
+# keeps its default in $HOME.
 use_image_zig_cache() {
-    if [ -z "${ZIG_GLOBAL_CACHE_DIR-}" ] && [ ! -e "$HOME/.cache/zig" ]; then
+    if [ -z "${ZIG_GLOBAL_CACHE_DIR-}" ] && [ ! -e "$HOME/.cache/zig" ] && [ -w /opt/zig-cache ]; then
         export ZIG_GLOBAL_CACHE_DIR=/opt/zig-cache
     fi
 }
@@ -87,7 +92,13 @@ if [ "$uid" = 0 ]; then
 fi
 
 image_uid=$(id -u dino)
-if [ "$uid" != "$image_uid" ]; then
+image_gid=$(id -g dino)
+if [ "$uid" != "$image_uid" ] || [ "$gid" != "$image_gid" ]; then
+    if [ ! -w /etc/passwd ]; then
+        # --read-only: no account to change. The non-root path above sets up
+        # HOME, the wine prefix and the zig cache for a UID without one.
+        exec setpriv --reuid="$uid" --regid="$gid" --clear-groups dino-entrypoint "$@"
+    fi
     # -o: the host UID/GID may already belong to an account in the image.
     groupmod -o -g "$gid" dino
     # Not usermod -u: it re-owns everything under the home directory, mounts
@@ -95,10 +106,12 @@ if [ "$uid" != "$image_uid" ]; then
     sed -i "s/^dino:\([^:]*\):[0-9]*:[0-9]*:/dino:\1:$uid:$gid:/" /etc/passwd
     # Re-own only what the image made: files still owned by its UID, on the
     # image's own filesystem. -xdev keeps find out of mounts, but it still
-    # lists each mount point, so those are told apart by device.
-    home_dev=$(stat -c %d /home/dino)
+    # lists each mount point, so those are told apart by device: the root
+    # filesystem's, not /home/dino's, which is a mount's own when something
+    # is mounted at /home/dino itself.
+    image_dev=$(stat -c %d /)
     find /home/dino -xdev -user "$image_uid" -printf '%D %p\n' | while read -r dev path; do
-        if [ "$dev" = "$home_dev" ]; then chown -h "$uid:$gid" "$path"; fi
+        if [ "$dev" = "$image_dev" ]; then chown -h "$uid:$gid" "$path"; fi
     done
 fi
 

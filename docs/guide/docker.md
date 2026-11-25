@@ -37,15 +37,14 @@ The alias always works on the current directory, so `-C <dir>` must name a path 
 
 ## File ownership
 
-The image starts as root only to choose a user, then runs your command as the owner of `/work`. So
-`build/` and `compile_commands.json` belong to you on the host, with no `-u` flag. This also works
-under rootless Docker and Docker Desktop, where your files appear to be owned by root inside the
-container.
+The image starts as root only to choose a user, then runs your command as the owner of `/work`, user and group. So `build/` and `compile_commands.json` belong to you on the host, with no `-u` flag. This also works under rootless Docker and Docker Desktop, where your files appear to be owned by root inside the container.
 
 Passing `--user` yourself also works; the image then runs as that user. That includes `--user 0`
 (or `--user root`), to run as root whoever owns `/work`.
 
-Mounts under the image's home directory are left as they are, read-only ones included. To share a zig cache between runs, mount it anywhere and name it in `ZIG_GLOBAL_CACHE_DIR`, which works whichever user the command runs as (a cache mounted at `/home/dino/.cache/zig` is used only when it runs as `dino`, not as root under rootless Docker and Docker Desktop, or with `--user`):
+With a read-only root filesystem (`--read-only`), the image can't change its own user to match, so it runs the command as the owner's UID and GID directly, with a home directory in `/tmp`. Give it a writable `/tmp` (`--read-only --tmpfs /tmp`). zig then keeps its cache in that home directory, which starts empty in each container, and Windows targets can't be run, since wine needs to write to its prefix in the image.
+
+Mounts in or at the image's home directory are left as they are, read-only ones included. To share a zig cache between runs, mount it anywhere and name it in `ZIG_GLOBAL_CACHE_DIR`, which works whichever user the command runs as (a cache mounted at `/home/dino/.cache/zig` is used only when it runs as `dino`, not as root under rootless Docker and Docker Desktop, or with `--user`):
 
 ```sh
 docker run --rm -v "$PWD:/work" -v "$HOME/.cache/zig:/zig-cache" -e ZIG_GLOBAL_CACHE_DIR=/zig-cache \

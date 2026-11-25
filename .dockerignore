@@ -1,5 +1,13 @@
-.git
-.zig-cache
-zig-out
+# Only what the Dockerfile copies: nothing else in the checkout (a local .env,
+# dist/, build trees) is sent to the builder.
+*
+!build.zig
+!build.zig.zon
+!.clang-format
+!.clang-tidy
+!cli
+!sdk
+!scripts/docker-entrypoint.sh
 **/build
-compile_commands.json
+**/.zig-cache
+**/compile_commands.json
