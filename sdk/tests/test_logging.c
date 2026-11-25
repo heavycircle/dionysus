@@ -11,8 +11,11 @@
 #define NUM_THREADS      4
 #define LINES_PER_THREAD 200
 
+// Empty when the log file can't be made, so callers' checks fail instead of
+// reading an unset buffer.
 static size_t capture(char *buf, size_t size, void (*emit)(void))
 {
+    buf[0]  = '\0';
     FILE *f = fopen(LOG_FILE, "w+");
     if (!f)
         return 0;
@@ -166,7 +169,8 @@ UTEST(logging, long_lines_are_truncated_with_a_newline)
     dino_log_set_level(DINO_LOG_LEVEL_INFO);
     capture(buf, sizeof buf, emit_long);
     EXPECT_EQ(1u, count_lines(buf));
-    EXPECT_LE(strlen(buf), 1023u);
+    EXPECT_EQ(1023u, strlen(buf));
+    EXPECT_NE(NULL, strstr(buf, "[E] test_logging.c:"));
     EXPECT_EQ('\n', buf[strlen(buf) - 1]);
 }
 
@@ -259,12 +263,23 @@ static void emit_keeping_errno(void)
     DINO_LOG_ERROR("errno is %d", errno);
 }
 
+// Into a stream opened for reading, so the write itself fails and sets errno:
+// only a restore can leave the caller's value.
 UTEST(logging, errno_is_preserved)
 {
-    char buf[256];
+    FILE *f = fopen(LOG_FILE, "w");
+    ASSERT_TRUE(f != NULL);
+    fclose(f);
+    f = fopen(LOG_FILE, "r");
+    ASSERT_TRUE(f != NULL);
     dino_log_set_level(DINO_LOG_LEVEL_INFO);
-    capture(buf, sizeof buf, emit_keeping_errno);
-    EXPECT_EQ(ERANGE, errno);
+    dino_log_set_output(f);
+    emit_keeping_errno();
+    int after = errno;
+    dino_log_set_output(NULL);
+    fclose(f);
+    remove(LOG_FILE);
+    EXPECT_EQ(ERANGE, after);
 }
 
 static int log_lines(void *arg)

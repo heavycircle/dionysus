@@ -20,25 +20,14 @@
 #include "../src/core/thread_internal.h"
 #include "net_helpers.h"
 
-#define PORT 18900
-
 static dino_socket_t tcp(void)
 {
     return dino_socket_create(AF_INET, SOCK_STREAM, 0);
 }
 
-static dino_socket_t listener(int port)
+static dino_socket_t listener(void)
 {
-    dino_socket_t s = tcp();
-    if (s == DINO_INVALID_SOCKET)
-        return s;
-    dino_socket_set_reuseaddr(s, 1);
-    if (bind_to(s, "127.0.0.1", port) != 0 || listen(s, 4) != 0)
-    {
-        dino_socket_close(s);
-        return DINO_INVALID_SOCKET;
-    }
-    return s;
+    return bound_socket(AF_INET, SOCK_STREAM, "127.0.0.1", 4);
 }
 
 UTEST(error, every_code_has_a_message)
@@ -86,12 +75,12 @@ static int fail_elsewhere(void *arg)
 
 UTEST(error, each_thread_has_its_own)
 {
-    dino_socket_t a = listener(PORT + 1);
-    ASSERT_NE(DINO_INVALID_SOCKET, a);
+    dino_socket_t a;
+    int           port = refusing_port(&a);
+    ASSERT_GT(port, 0);
     dino_socket_t b = tcp();
     ASSERT_NE(DINO_INVALID_SOCKET, b);
-    // Nothing listens on this port.
-    ASSERT_EQ(-1, connect_to(b, "127.0.0.1", PORT + 1 + 1000));
+    ASSERT_EQ(-1, connect_to(b, "127.0.0.1", port));
     ASSERT_EQ(DINO_ECONNREFUSED, dino_error());
 
     dino__thread_t t;
@@ -108,14 +97,14 @@ UTEST(error, each_thread_has_its_own)
 
 UTEST(error, nothing_to_read_or_accept_is_again)
 {
-    dino_socket_t server = listener(PORT + 2);
+    dino_socket_t server = listener();
     ASSERT_NE(DINO_INVALID_SOCKET, server);
     ASSERT_EQ(0, dino_socket_set_nonblocking(server, 1));
     EXPECT_EQ(DINO_INVALID_SOCKET, dino_socket_accept(server, NULL, NULL));
     EXPECT_EQ(DINO_EAGAIN, dino_error());
 
     dino_socket_t client = tcp();
-    ASSERT_EQ(0, connect_to(client, "127.0.0.1", PORT + 2));
+    ASSERT_EQ(0, connect_to(client, "127.0.0.1", local_port(server)));
     ASSERT_EQ(0, dino_socket_set_nonblocking(client, 1));
     char byte;
     EXPECT_EQ(-1, dino_socket_recvfrom(client, &byte, 1, 0, NULL, NULL));
@@ -127,12 +116,15 @@ UTEST(error, nothing_to_read_or_accept_is_again)
 
 UTEST(error, refused_connection)
 {
-    // Nothing listens here: bound, never listening, then closed.
+    dino_socket_t holder;
+    int           port = refusing_port(&holder);
+    ASSERT_GT(port, 0);
     dino_socket_t client = tcp();
     ASSERT_NE(DINO_INVALID_SOCKET, client);
-    EXPECT_EQ(-1, connect_to(client, "127.0.0.1", PORT + 3));
+    EXPECT_EQ(-1, connect_to(client, "127.0.0.1", port));
     EXPECT_EQ(DINO_ECONNREFUSED, dino_error());
     dino_socket_close(client);
+    dino_socket_close(holder);
 }
 
 static int wait_writable(dino_socket_t s)
@@ -145,12 +137,12 @@ static int wait_writable(dino_socket_t s)
 // writable, then ask it how the connect ended.
 UTEST(error, nonblocking_connect_that_succeeds)
 {
-    dino_socket_t server = listener(PORT + 4);
+    dino_socket_t server = listener();
     ASSERT_NE(DINO_INVALID_SOCKET, server);
     dino_socket_t client = tcp();
     ASSERT_EQ(0, dino_socket_set_nonblocking(client, 1));
 
-    int rc = connect_to(client, "127.0.0.1", PORT + 4);
+    int rc = connect_to(client, "127.0.0.1", local_port(server));
     if (rc != 0)
     {
         ASSERT_EQ(DINO_EINPROGRESS, dino_error());
@@ -164,10 +156,13 @@ UTEST(error, nonblocking_connect_that_succeeds)
 
 UTEST(error, nonblocking_connect_that_is_refused)
 {
+    dino_socket_t holder;
+    int           port = refusing_port(&holder);
+    ASSERT_GT(port, 0);
     dino_socket_t client = tcp();
     ASSERT_EQ(0, dino_socket_set_nonblocking(client, 1));
 
-    int rc = connect_to(client, "127.0.0.1", PORT + 5);
+    int rc = connect_to(client, "127.0.0.1", port);
     ASSERT_EQ(-1, rc);
     int code = dino_error();
     if (code == DINO_EINPROGRESS)
@@ -178,15 +173,16 @@ UTEST(error, nonblocking_connect_that_is_refused)
     EXPECT_EQ(DINO_ECONNREFUSED, code);
 
     dino_socket_close(client);
+    dino_socket_close(holder);
     EXPECT_EQ(DINO_EINVAL, dino_socket_error(DINO_INVALID_SOCKET));
 }
 
 UTEST(error, writing_to_a_closed_peer)
 {
-    dino_socket_t server = listener(PORT + 6);
+    dino_socket_t server = listener();
     ASSERT_NE(DINO_INVALID_SOCKET, server);
     dino_socket_t client = tcp();
-    ASSERT_EQ(0, connect_to(client, "127.0.0.1", PORT + 6));
+    ASSERT_EQ(0, connect_to(client, "127.0.0.1", local_port(server)));
     dino_socket_t peer = dino_socket_accept(server, NULL, NULL);
     ASSERT_NE(DINO_INVALID_SOCKET, peer);
     dino_socket_close(peer);
@@ -291,7 +287,7 @@ UTEST(error, event_loop)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
-    dino_socket_t s = listener(PORT + 7);
+    dino_socket_t s = listener();
     ASSERT_NE(DINO_INVALID_SOCKET, s);
 
     EXPECT_EQ(-1, dino_event_mod_socket(loop, s, DINO_EVENT_READ, NULL));

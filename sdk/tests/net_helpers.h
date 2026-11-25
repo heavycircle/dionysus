@@ -70,6 +70,46 @@ static inline int local_port(dino_socket_t s)
                                     : ntohs(((struct sockaddr_in *)&ss)->sin_port);
 }
 
+// A socket bound to ip on a port the system picks, listening if backlog > 0,
+// so no two tests, or two runs at once, ever want the same port.
+static inline dino_socket_t bound_socket(int domain, int type, const char *ip, int backlog)
+{
+    dino_socket_t s = dino_socket_create(domain, type, 0);
+    if (s == DINO_INVALID_SOCKET)
+        return s;
+    if (bind_to(s, ip, 0) != 0 || (backlog > 0 && listen(s, backlog) != 0))
+    {
+        dino_socket_close(s);
+        return DINO_INVALID_SOCKET;
+    }
+    return s;
+}
+
+// A port on 127.0.0.1 that refuses connections: bound, so nobody else takes
+// it, but not listening. Close *holder when done; -1 on failure.
+static inline int refusing_port(dino_socket_t *holder)
+{
+    *holder = bound_socket(AF_INET, SOCK_STREAM, "127.0.0.1", 0);
+    return *holder == DINO_INVALID_SOCKET ? -1 : local_port(*holder);
+}
+
+// Whether ::1 can be bound: not in a container or VM with IPv6 turned off.
+static inline int has_ipv6_loopback(void)
+{
+    dino_socket_t s = bound_socket(AF_INET6, SOCK_STREAM, "::1", 0);
+    if (s == DINO_INVALID_SOCKET)
+        return 0;
+    dino_socket_close(s);
+    return 1;
+}
+
+#define SKIP_WITHOUT_IPV6()                                                                        \
+    do                                                                                             \
+    {                                                                                              \
+        if (!has_ipv6_loopback())                                                                  \
+            UTEST_SKIP("no IPv6 loopback on this host");                                           \
+    } while (0)
+
 static inline int set_int_option(dino_socket_t s, int level, int name, int value)
 {
     return setsockopt(s, level, name, (const char *)&value, sizeof(value));

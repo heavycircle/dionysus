@@ -19,9 +19,6 @@
 #include "../src/core/thread_internal.h"
 #include "net_helpers.h"
 
-// Each test file has its own port range: ctest runs test executables in parallel.
-#define PORT 18100
-
 struct pair
 {
     dino_socket_t server, client, peer;
@@ -29,17 +26,14 @@ struct pair
 
 // Listener, connected client and the accepted peer, all in one thread:
 // connect() completes against the listen backlog before accept().
-static int open_pair(struct pair *p, int domain, const char *ip, int port)
+static int open_pair(struct pair *p, int domain, const char *ip)
 {
-    p->server = dino_socket_create(domain, SOCK_STREAM, 0);
+    p->server = bound_socket(domain, SOCK_STREAM, ip, 1);
     p->client = dino_socket_create(domain, SOCK_STREAM, 0);
     p->peer   = DINO_INVALID_SOCKET;
     if (p->server == DINO_INVALID_SOCKET || p->client == DINO_INVALID_SOCKET)
         return -1;
-    dino_socket_set_reuseaddr(p->server, 1);
-    if (bind_to(p->server, ip, port) != 0 || listen(p->server, 1) != 0)
-        return -1;
-    if (connect_to(p->client, ip, port) != 0)
+    if (connect_to(p->client, ip, local_port(p->server)) != 0)
         return -1;
     p->peer = dino_socket_accept(p->server, NULL, NULL);
     return p->peer == DINO_INVALID_SOCKET ? -1 : 0;
@@ -55,10 +49,10 @@ static void close_pair(struct pair *p)
         dino_socket_close(p->server);
 }
 
-static void echo(int *utest_result, int domain, const char *ip, int port)
+static void echo(int *utest_result, int domain, const char *ip)
 {
     struct pair p;
-    ASSERT_EQ(0, open_pair(&p, domain, ip, port));
+    ASSERT_EQ(0, open_pair(&p, domain, ip));
 
     char buf[8] = { 0 };
     EXPECT_EQ(4, dino_socket_send(p.client, "ping", 4, 0));
@@ -86,36 +80,37 @@ UTEST(network, create_takes_the_platform_constants)
     ASSERT_NE(DINO_INVALID_SOCKET, s);
     EXPECT_EQ(0, dino_socket_close(s));
     EXPECT_EQ(DINO_INVALID_SOCKET, dino_socket_create(-1, SOCK_STREAM, 0));
-    EXPECT_NE(0, dino_error());
+    EXPECT_NE(0, dino_error()); // which code depends on the platform
 }
 
 UTEST(network, close_invalid_socket_fails)
 {
-    EXPECT_NE(0, dino_socket_close(DINO_INVALID_SOCKET));
+    EXPECT_EQ(-1, dino_socket_close(DINO_INVALID_SOCKET));
 }
 
 UTEST(network, echo_ipv4)
 {
-    echo(utest_result, AF_INET, "127.0.0.1", PORT);
+    echo(utest_result, AF_INET, "127.0.0.1");
 }
 
 UTEST(network, echo_ipv6)
 {
-    echo(utest_result, AF_INET6, "::1", PORT + 1);
+    SKIP_WITHOUT_IPV6();
+    echo(utest_result, AF_INET6, "::1");
 }
 
 // Linux defaults to dual-stack, Windows to v6-only: the SDK picks v6-only.
 UTEST(network, ipv6_sockets_are_v6_only_by_default)
 {
-    dino_socket_t v6 = dino_socket_create(AF_INET6, SOCK_STREAM, 0);
+    SKIP_WITHOUT_IPV6();
+    dino_socket_t v6 = bound_socket(AF_INET6, SOCK_STREAM, "::", 1);
     dino_socket_t v4 = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     dino_socket_t c  = dino_socket_create(AF_INET, SOCK_STREAM, 0);
-    dino_socket_set_reuseaddr(v6, 1);
-    ASSERT_EQ(0, bind_to(v6, "::", PORT + 9));
-    ASSERT_EQ(0, listen(v6, 1));
+    ASSERT_NE(DINO_INVALID_SOCKET, v6);
+    int port = local_port(v6);
     // The IPv4 side of the port is still free, and nothing listens on it yet.
-    EXPECT_NE(0, connect_to(c, "127.0.0.1", PORT + 9));
-    EXPECT_EQ(0, bind_to(v4, "0.0.0.0", PORT + 9));
+    EXPECT_EQ(-1, connect_to(c, "127.0.0.1", port));
+    EXPECT_EQ(0, bind_to(v4, "0.0.0.0", port));
     dino_socket_close(c);
     dino_socket_close(v4);
     dino_socket_close(v6);
@@ -124,13 +119,13 @@ UTEST(network, ipv6_sockets_are_v6_only_by_default)
 // IPV6_V6ONLY through plain setsockopt makes a dual-stack listener.
 UTEST(network, clearing_v6only_accepts_ipv4_peers)
 {
+    SKIP_WITHOUT_IPV6();
     dino_socket_t v6 = dino_socket_create(AF_INET6, SOCK_STREAM, 0);
     dino_socket_t c  = dino_socket_create(AF_INET, SOCK_STREAM, 0);
-    dino_socket_set_reuseaddr(v6, 1);
     ASSERT_EQ(0, set_int_option(v6, IPPROTO_IPV6, IPV6_V6ONLY, 0));
-    ASSERT_EQ(0, bind_to(v6, "::", PORT + 10));
+    ASSERT_EQ(0, bind_to(v6, "::", 0));
     ASSERT_EQ(0, listen(v6, 1));
-    ASSERT_EQ(0, connect_to(c, "127.0.0.1", PORT + 10));
+    ASSERT_EQ(0, connect_to(c, "127.0.0.1", local_port(v6)));
     dino_socket_t peer = dino_socket_accept(v6, NULL, NULL);
     EXPECT_NE(DINO_INVALID_SOCKET, peer);
     EXPECT_EQ(2, dino_socket_send(c, "hi", 2, 0));
@@ -149,9 +144,9 @@ UTEST(network, reuseaddr_never_shares_a_listening_port)
     dino_socket_t b = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     EXPECT_EQ(0, dino_socket_set_reuseaddr(a, 1));
     EXPECT_EQ(0, dino_socket_set_reuseaddr(b, 1));
-    ASSERT_EQ(0, bind_to(a, "127.0.0.1", PORT + 12));
+    ASSERT_EQ(0, bind_to(a, "127.0.0.1", 0));
     ASSERT_EQ(0, listen(a, 1));
-    EXPECT_NE(0, bind_to(b, "127.0.0.1", PORT + 12));
+    EXPECT_EQ(-1, bind_to(b, "127.0.0.1", local_port(a)));
     EXPECT_EQ(DINO_EADDRINUSE, dino_socket_last_error());
     EXPECT_EQ(0, dino_socket_set_reuseaddr(a, 0));
     EXPECT_EQ(-1, dino_socket_set_reuseaddr(DINO_INVALID_SOCKET, 1));
@@ -170,8 +165,8 @@ UTEST(network, reuseaddr_never_shares_a_udp_port)
     ASSERT_NE(DINO_INVALID_SOCKET, b);
     EXPECT_EQ(0, dino_socket_set_reuseaddr(a, 1));
     EXPECT_EQ(0, dino_socket_set_reuseaddr(b, 1));
-    ASSERT_EQ(0, bind_to(a, "127.0.0.1", PORT + 13));
-    EXPECT_NE(0, bind_to(b, "127.0.0.1", PORT + 13));
+    ASSERT_EQ(0, bind_to(a, "127.0.0.1", 0));
+    EXPECT_EQ(-1, bind_to(b, "127.0.0.1", local_port(a)));
     dino_socket_close(b);
     dino_socket_close(a);
 }
@@ -211,6 +206,7 @@ UTEST(network, udp_server_answers_the_sender_ipv4)
 
 UTEST(network, udp_server_answers_the_sender_ipv6)
 {
+    SKIP_WITHOUT_IPV6();
     udp_answer(utest_result, AF_INET6, "::1");
 }
 
@@ -254,12 +250,10 @@ UTEST(network, a_datagram_to_a_closed_port_doesnt_fail_the_next_receive)
 // accept reports the peer, which is the client's own local address.
 UTEST(network, accept_reports_the_peer_address)
 {
-    dino_socket_t server = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    dino_socket_t server = bound_socket(AF_INET, SOCK_STREAM, "127.0.0.1", 1);
     dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
-    dino_socket_set_reuseaddr(server, 1);
-    ASSERT_EQ(0, bind_to(server, "127.0.0.1", PORT + 20));
-    ASSERT_EQ(0, listen(server, 1));
-    ASSERT_EQ(0, connect_to(client, "127.0.0.1", PORT + 20));
+    ASSERT_NE(DINO_INVALID_SOCKET, server);
+    ASSERT_EQ(0, connect_to(client, "127.0.0.1", local_port(server)));
     struct sockaddr_in peer;
     socklen_t          len  = sizeof(peer);
     dino_socket_t      conn = dino_socket_accept(server, (struct sockaddr *)&peer, &len);
@@ -278,9 +272,13 @@ UTEST(network, accept_reports_the_peer_address)
 UTEST(network, posix_calls_work_on_a_dino_socket)
 {
     struct pair p;
-    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1", PORT + 4));
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
     EXPECT_EQ(0, set_int_option(p.client, IPPROTO_TCP, TCP_NODELAY, 1));
-    EXPECT_EQ(PORT + 4, local_port(p.server));
+    // getsockname on the listener, getpeername on the client: the same port.
+    struct sockaddr_in to;
+    socklen_t          to_len = sizeof(to);
+    ASSERT_EQ(0, getpeername(p.client, (struct sockaddr *)&to, &to_len));
+    EXPECT_EQ(local_port(p.server), ntohs(to.sin_port));
     EXPECT_EQ(0, shutdown(p.client, SHUT_WR));
     char buf[4];
     EXPECT_EQ(0, recv_some(p.peer, buf, sizeof(buf)));
@@ -318,11 +316,8 @@ UTEST(network, accept_on_unlistened_socket_fails)
 
 UTEST(network, nonblocking_accept_returns_immediately)
 {
-    dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    dino_socket_t s = bound_socket(AF_INET, SOCK_STREAM, "127.0.0.1", 1);
     ASSERT_NE(DINO_INVALID_SOCKET, s);
-    dino_socket_set_reuseaddr(s, 1);
-    ASSERT_EQ(0, bind_to(s, "127.0.0.1", PORT + 3));
-    ASSERT_EQ(0, listen(s, 1));
     EXPECT_EQ(0, dino_socket_set_nonblocking(s, 1));
     // Nobody is connecting: a blocking accept would hang here.
     EXPECT_EQ(DINO_INVALID_SOCKET, dino_socket_accept(s, NULL, NULL));
@@ -340,12 +335,12 @@ static int send_later(void *arg)
 UTEST(network, accepted_sockets_are_blocking)
 {
     struct pair p;
-    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1", PORT + 8));
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
     dino_socket_close(p.peer);
     dino_socket_close(p.client);
     ASSERT_EQ(0, dino_socket_set_nonblocking(p.server, 1));
     p.client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
-    ASSERT_EQ(0, connect_to(p.client, "127.0.0.1", PORT + 8));
+    ASSERT_EQ(0, connect_to(p.client, "127.0.0.1", local_port(p.server)));
     p.peer = dino_socket_accept(p.server, NULL, NULL);
     ASSERT_NE(DINO_INVALID_SOCKET, p.peer);
 
@@ -365,7 +360,7 @@ UTEST(network, accepted_sockets_are_blocking)
 UTEST(network, nonblocking_recv_and_back_to_blocking)
 {
     struct pair p;
-    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1", PORT + 21));
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
     char buf[1];
     ASSERT_EQ(0, dino_socket_set_nonblocking(p.peer, 1));
     EXPECT_EQ(-1, dino_socket_recvfrom(p.peer, buf, 1, 0, NULL, NULL));
@@ -385,7 +380,7 @@ UTEST(network, nonblocking_recv_and_back_to_blocking)
 UTEST(network, null_buffers_are_rejected)
 {
     struct pair p;
-    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1", PORT + 7));
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
     ASSERT_EQ(8, dino_socket_send(p.client, "abcdefgh", 8, 0));
     EXPECT_EQ(-1, dino_socket_recvfrom(p.peer, NULL, 4, 0, NULL, NULL));
     EXPECT_EQ(-1, dino_socket_send(p.client, NULL, 4, 0));
@@ -402,7 +397,7 @@ UTEST(network, null_buffers_are_rejected)
 UTEST(network, send_to_a_closed_peer_fails_without_killing_the_process)
 {
     struct pair p;
-    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1", PORT + 6));
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
     dino_socket_close(p.peer);
     p.peer = DINO_INVALID_SOCKET;
 
@@ -437,7 +432,7 @@ static int inheritable(dino_socket_t s)
 UTEST(network, sockets_are_not_inherited_by_children)
 {
     struct pair p;
-    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1", PORT + 5));
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
     EXPECT_EQ(0, inheritable(p.server));
     EXPECT_EQ(0, inheritable(p.client));
     EXPECT_EQ(0, inheritable(p.peer));
