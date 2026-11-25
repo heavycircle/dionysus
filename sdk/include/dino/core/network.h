@@ -109,7 +109,7 @@ int dino_socket_connect(dino_socket_t sock, const struct sockaddr *addr, socklen
 /**
  * Connect, giving up after timeout_ms. A plain blocking connect waits as long
  * as the system's own limit, about 21 seconds on Windows and two minutes or
- * more on Linux. Since 0.10.
+ * more on Linux. Since 1.0.
  *
  * The socket is blocking afterwards, whatever it was before: Windows can't say
  * which mode a socket is in, so the mode can't be put back. After
@@ -180,7 +180,7 @@ int dino_socket_set_reuseaddr(dino_socket_t sock, int enable);
 /**
  * Limit how long a blocking receive or send on sock waits: SO_RCVTIMEO and
  * SO_SNDTIMEO, which take a struct timeval on POSIX and a DWORD on Windows.
- * Since 0.10.
+ * Since 1.0.
  *
  * A dino_socket_recvfrom or dino_socket_send that runs out of time fails with
  * DINO_ETIMEDOUT on every platform (raw recv() says EAGAIN on Linux and

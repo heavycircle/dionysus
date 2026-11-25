@@ -47,9 +47,9 @@ typedef enum
     /** An existing pipe end, from dino_pipe_create_ex with the flag for this
      *  direction, in the options' stdin_pipe, stdout_pipe or stderr_pipe: a
      *  read end for stdin, a write end for stdout and stderr. The caller keeps
-     *  it, and closes its copy once the spawn returns. Since 0.10. */
+     *  it, and closes its copy once the spawn returns. Since 1.0. */
     DINO_STDIO_PIPE_END,
-    /** stderr only: wherever stdout goes, as 2>&1 does. Since 0.10. */
+    /** stderr only: wherever stdout goes, as 2>&1 does. Since 1.0. */
     DINO_STDIO_STDOUT,
 } dino_stdio_t;
 
@@ -66,7 +66,7 @@ typedef struct
      */
     const char *const *env;
     dino_stdio_t       stdin_mode, stdout_mode, stderr_mode;
-    /** The pipe ends for streams set to DINO_STDIO_PIPE_END. Since 0.10. */
+    /** The pipe ends for streams set to DINO_STDIO_PIPE_END. Since 1.0. */
     dino_pipe_t stdin_pipe, stdout_pipe, stderr_pipe;
 } dino_process_spawn_opts_t;
 
@@ -192,7 +192,7 @@ int dino_process_kill(dino_process_t process);
  * Let a process run on without waiting for it: start and forget. The handle
  * is released, and the process is reaped by the SDK when it ends, so it never
  * lingers as a zombie on POSIX (there, a small thread waits for it) or holds a
- * handle on Windows. Its exit code is lost. Since 0.10.
+ * handle on Windows. Its exit code is lost. Since 1.0.
  *
  * Pipes from the spawn stay the caller's: close them, or the child may block
  * writing to a full one.
@@ -288,7 +288,7 @@ int dino_process_run(
  * cmd.exe /d /s /c "command" on Windows, with the line passed to cmd.exe as
  * written, quotes included (a { "cmd.exe", "/c", command } argv would quote
  * it again). Pipes, redirections and variables follow each shell's own rules,
- * so a command that uses them is as portable as its syntax. Since 0.10.
+ * so a command that uses them is as portable as its syntax. Since 1.0.
  *
  * @param  command  One line, UTF-8; a line break is refused with DINO_EINVAL
  *                  (cmd.exe would end the command there).

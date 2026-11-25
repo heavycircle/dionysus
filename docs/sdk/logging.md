@@ -66,7 +66,7 @@ aren't written.
 - **Flushed every line**, so nothing is lost if the program crashes: each line costs what an `fprintf` plus `fflush` does, a system call. Below the current level a line costs only the level check. For many lines a second, raise the level or give `dino_log_set_output` a stream of your own.
 - **Length:** lines over 1 KB are truncated.
 - **`errno`** is left as it was, so logging inside error handling doesn't disturb it.
-- **A callback** runs in the thread that logged, one line at a time under the lock that keeps lines whole: it must not log itself, and should be quick. Since 0.10 (`#if DINO_VERSION_AT_LEAST(0, 10, 0)`).
+- **A callback** runs in the thread that logged, one line at a time under the lock that keeps lines whole: it must not log itself, and should be quick. Since 1.0 (`#if DINO_VERSION_AT_LEAST(1, 0, 0)`).
 
 ```c
 #include <syslog.h>
