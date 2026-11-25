@@ -10,19 +10,19 @@ Every project `dino` builds can use it: `dino_executable()` links it, or link it
 
 ## Modules
 
-| Module                   | Header                | Library     | For                                                           |
-| ------------------------ | --------------------- | ----------- | ------------------------------------------------------------- |
-| [Runtime](runtime.md)    | none                  | `dino_core` | process-wide setup, which is automatic                        |
-| [Errors](error.md)       | `dino/core/error.h`   | `dino_core` | why a call failed, with the same codes on every platform      |
-| [Network](network.md)    | `dino/core/network.h` | `dino_core` | TCP and UDP sockets over IPv4 and IPv6                        |
-| [Poll and select](io.md) | `poll.h`              | `dino_core` | plain `poll()` and `select()` on every target                 |
-| [Event loop](event.md)   | `dino/core/event.h`   | `dino_core` | waiting on many sockets, pipes, processes and timers at once  |
-| [Threads](thread.md)     | `dino/core/thread.h`  | `dino_core` | pthreads everywhere; monotonic timed waits, thread IDs        |
-| [Pipes](pipe.md)         | `dino/core/pipe.h`    | `dino_core` | byte pipes between threads and processes                      |
-| [Processes](process.md)  | `dino/core/process.h` | `dino_core` | running programs, their stdio and exit codes; the environment |
-| [Files](fs.md)           | `dino/core/fs.h`      | `dino_core` | file sizes over 2 GB; stdio for programs the kernel starts    |
-| [Time](time.md)          | `dino/core/time.h`    | `dino_core` | sleeping, a monotonic clock, the wall clock                   |
-| [Logging](logging.md)    | `dino/util/logging.h` | `dino_util` | leveled log lines on stderr                                   |
+| Module                   | Header                             | Library                  | For                                                                                                                    |
+| ------------------------ | ---------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- |
+| [Runtime](runtime.md)    | none                               | `dino_core`              | process-wide setup, which is automatic                                                                                 |
+| [Errors](error.md)       | `dino/core/error.h`                | `dino_core`              | why a call failed, with the same codes on every platform                                                               |
+| [Network](network.md)    | `dino/core/network.h`              | `dino_core`              | TCP and UDP sockets over IPv4 and IPv6                                                                                 |
+| [Poll and select](io.md) | `poll.h`                           | `dino_core`              | plain `poll()` and `select()` on every target                                                                          |
+| [Event loop](event.md)   | `dino/core/event.h`                | `dino_core`              | waiting on many sockets, pipes, processes and timers at once                                                           |
+| [Threads](thread.md)     | `dino/core/thread.h`               | `dino_core`              | pthreads everywhere; monotonic timed waits, thread IDs                                                                 |
+| [Pipes](pipe.md)         | `dino/core/pipe.h`                 | `dino_core`              | byte pipes between threads and processes                                                                               |
+| [Processes](process.md)  | `dino/core/process.h`              | `dino_core`              | running programs, their stdio and exit codes; the environment                                                          |
+| [Files](fs.md)           | `dino/core/fs.h`, `dino/util/fs.h` | `dino_core`, `dino_util` | file sizes over 2 GB; the temporary directory and the program's path; `mkdir -p`; stdio for programs the kernel starts |
+| [Time](time.md)          | `dino/core/time.h`                 | `dino_core`              | sleeping, a monotonic clock, the wall clock                                                                            |
+| [Logging](logging.md)    | `dino/util/logging.h`              | `dino_util`              | leveled log lines on stderr                                                                                            |
 
 Also: [dino vs libc](libc.md), when the C library is already portable,
 [gotchas](gotchas.md), the platform differences the API can't hide, and

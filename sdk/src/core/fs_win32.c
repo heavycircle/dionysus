@@ -91,3 +91,68 @@ int dino_fs_init(void)
 {
     return 0;
 }
+
+// As snprintf: as much as fits, NUL-terminated, and the full length back, for
+// a wide string converted to UTF-8.
+static int copy_out_wide(char *buf, size_t size, const WCHAR *text, int wlen)
+{
+    int len = WideCharToMultiByte(CP_UTF8, 0, text, wlen, NULL, 0, NULL, NULL);
+    if (len <= 0 && wlen > 0)
+        return dino__fail(DINO_EINVAL);
+    char *utf8 = malloc((size_t)len + 1);
+    if (!utf8)
+        return dino__fail(DINO_ENOMEM);
+    WideCharToMultiByte(CP_UTF8, 0, text, wlen, utf8, len, NULL, NULL);
+    if (size > 0)
+    {
+        size_t n = (size_t)len < size - 1 ? (size_t)len : size - 1;
+        memcpy(buf, utf8, n);
+        buf[n] = '\0';
+    }
+    free(utf8);
+    return len;
+}
+
+int dino_path_temp(char *buf, size_t size)
+{
+    if (!buf && size)
+        return dino__fail(DINO_EINVAL);
+    WCHAR path[MAX_PATH + 2];
+    DWORD len = GetTempPathW(MAX_PATH + 2, path);
+    if (len == 0 || len > MAX_PATH + 1)
+        return dino__fail_os();
+    // Without the trailing backslash GetTempPathW always adds, unless all that
+    // is left is a drive's root ("C:\").
+    while (len > 3 && (path[len - 1] == L'\\' || path[len - 1] == L'/'))
+        len--;
+    return copy_out_wide(buf, size, path, (int)len);
+}
+
+int dino_path_executable(char *buf, size_t size)
+{
+    if (!buf && size)
+        return dino__fail(DINO_EINVAL);
+    // GetModuleFileNameW cuts a long path short and says so only by filling
+    // the buffer: grow until it fits, up to the 32767 characters a path has.
+    for (DWORD cap = MAX_PATH; cap <= 32768; cap *= 2)
+    {
+        WCHAR *path = malloc(cap * sizeof(WCHAR));
+        if (!path)
+            return dino__fail(DINO_ENOMEM);
+        DWORD len = GetModuleFileNameW(NULL, path, cap);
+        if (len == 0)
+        {
+            dino__error_set_os();
+            free(path);
+            return -1;
+        }
+        if (len < cap)
+        {
+            int rc = copy_out_wide(buf, size, path, (int)len);
+            free(path);
+            return rc;
+        }
+        free(path);
+    }
+    return dino__fail(DINO_EINVAL);
+}

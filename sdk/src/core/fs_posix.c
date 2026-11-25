@@ -5,7 +5,10 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -64,4 +67,55 @@ int dino__fs_init_with(const char *null_device)
 int dino_fs_init(void)
 {
     return dino__fs_init_with("/dev/null");
+}
+
+// As snprintf: as much as fits, NUL-terminated, and the full length back.
+static int copy_out(char *buf, size_t size, const char *text, size_t len)
+{
+    if (len > (size_t)INT_MAX)
+        return dino__fail(DINO_EINVAL);
+    if (size > 0)
+        snprintf(buf, size, "%.*s", (int)len, text);
+    return (int)len;
+}
+
+int dino_path_temp(char *buf, size_t size)
+{
+    if (!buf && size)
+        return dino__fail(DINO_EINVAL);
+    const char *dir = getenv("TMPDIR");
+    if (!dir || !*dir)
+        dir = "/tmp";
+    size_t len = strlen(dir);
+    while (len > 1 && dir[len - 1] == '/')
+        len--;
+    return copy_out(buf, size, dir, len);
+}
+
+int dino_path_executable(char *buf, size_t size)
+{
+    if (!buf && size)
+        return dino__fail(DINO_EINVAL);
+    // readlink doesn't say whether it cut the path short: grow until it fits.
+    for (size_t cap = 256; cap <= 65536; cap *= 2)
+    {
+        char *path = malloc(cap);
+        if (!path)
+            return dino__fail(DINO_ENOMEM);
+        ssize_t len = readlink("/proc/self/exe", path, cap);
+        if (len < 0)
+        {
+            int code = dino__error_from_os();
+            free(path);
+            return dino__fail(code);
+        }
+        if ((size_t)len < cap)
+        {
+            int rc = copy_out(buf, size, path, (size_t)len);
+            free(path);
+            return rc;
+        }
+        free(path);
+    }
+    return dino__fail(DINO_EINVAL);
 }
