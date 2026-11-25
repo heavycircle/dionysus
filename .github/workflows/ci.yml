@@ -93,8 +93,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [arm, arm64, i386, ppc, win32, win64, x86_64]
-    name: targets (${{ matrix.target }})
+        include:
+          - { target: arm, runner: qemu }
+          - { target: arm64, runner: qemu }
+          - { target: i386, runner: native }
+          - { target: ppc, runner: qemu }
+          - { target: win32, runner: wine }
+          - { target: win64, runner: wine }
+          - { target: x86_64, runner: native }
+    # Named for the target and how its binaries run, as on main.
+    name: targets-${{ matrix.target }}-${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -174,6 +182,7 @@ jobs:
         run: docker run --rm -v "$PWD:/repo:ro" dionysus:ci /repo/tests/cli.sh
 
   docker:
+    name: docker-amd64
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -194,6 +203,7 @@ jobs:
 
   # Cross-compiled here, as users do it, and run by the `windows` jobs.
   windows-build:
+    name: windows-cross-build
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -235,7 +245,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [win32, win64]
-    name: windows (${{ matrix.target }})
+    name: windows-${{ matrix.target }}-native
     steps:
       - uses: actions/download-artifact@v4
         with:
