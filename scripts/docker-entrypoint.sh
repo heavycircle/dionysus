@@ -57,6 +57,17 @@ use_image_zig_cache() {
     fi
 }
 
+# HOME for root: /root, or a directory in /tmp when the root filesystem is
+# read-only, as for any UID whose home can't be written.
+root_home() {
+    HOME=/root
+    if [ ! -w "$HOME" ]; then
+        HOME=/tmp/home-0
+        mkdir -p "$HOME"
+    fi
+    export HOME
+}
+
 if [ "${1-}" = --own-wine-prefix ]; then
     own_wine_prefix
     exit 0
@@ -76,7 +87,7 @@ fi
 
 # By number: --user 0:<gid> may name a group with no name.
 if [ "$(id -g)" != "$(getent group dino-entrypoint | cut -d: -f3)" ]; then
-    export HOME=/root
+    root_home
     own_wine_prefix
     use_image_zig_cache
     exec "$@"
@@ -86,7 +97,7 @@ uid=$(stat -c %u .)
 gid=$(stat -c %g .)
 
 if [ "$uid" = 0 ]; then
-    export HOME=/root
+    root_home
     own_wine_prefix
     use_image_zig_cache
     exec setpriv --reuid=0 --regid=0 --init-groups "$@"

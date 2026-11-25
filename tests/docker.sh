@@ -78,6 +78,24 @@ else
     failed=1
 fi
 
+# The same as root, for a root-owned project (rootless Docker) and --user 0:
+# /root can't be written either, so HOME is in the tmpfs.
+for how in root-owned --user=0; do
+    mkdir -p "$work/read-only-$how"
+    docker run --rm -v "$work/read-only-$how:/p" --entrypoint chown "$image" 0:0 /p
+    args=()
+    [[ $how == --user=0 ]] && args=(--user 0)
+    if docker run --rm --read-only --tmpfs /tmp "${args[@]}" -v "$work/read-only-$how:/work" "$image" sh -c \
+        'dino init app >/dev/null && dino build -C app >/dev/null && echo "$(id -u) $HOME"' \
+        >"$work/read-only-$how.log" 2>&1 && [[ $(tail -n 1 "$work/read-only-$how.log") == "0 /tmp/home-0" ]]; then
+        echo "ok      read-only, $how: HOME in /tmp"
+    else
+        echo "FAILED: read-only, $how"
+        sed 's/^/        /' "$work/read-only-$how.log" | tail -n 20
+        failed=1
+    fi
+done
+
 # A mount under /home/dino (a zig cache, say) isn't re-owned when dino is
 # remapped, and a read-only one doesn't stop the run. One owned by the image's
 # UID 1000 is the case a plain `find -xdev` would still touch: it visits the

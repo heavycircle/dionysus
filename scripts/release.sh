@@ -142,8 +142,12 @@ echo "image, and then publishes the image and the GitHub Release."
 if [[ $branch == main ]]; then
     echo "Then create the backport label for the new branch:"
     echo "    gh label create 'ci:backport release-$major.$minor' --color FBCA04"
-    if ((minor > 0)); then
+    # The newest series before this one, from its tags: 0.9 for 1.0.0, whose
+    # minor alone doesn't say.
+    previous=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | sed 's/^v//; s/\.[0-9]*$//' | sort -uV |
+        grep -vx "$major\.$minor" | tail -n 1)
+    if [[ -n $previous ]]; then
         echo "and retire the previous one, since only the newest release branch is supported:"
-        echo "    gh label delete 'ci:backport release-$major.$((minor - 1))' --yes"
+        echo "    gh label delete 'ci:backport release-$previous' --yes"
     fi
 fi

@@ -52,6 +52,8 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       newest: ${{ steps.version.outputs.newest }}
       newest_in_series: ${{ steps.version.outputs.newest_in_series }}
+      images: ${{ steps.images.outputs.images }}
+      image_count: ${{ steps.images.outputs.count }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -74,6 +76,20 @@ jobs:
           echo "newest=$([[ $newest == "$TAG" ]] && echo true || echo false)" >>"$GITHUB_OUTPUT"
           echo "newest_in_series=$([[ $series == "$TAG" ]] && echo true || echo false)" >>"$GITHUB_OUTPUT"
           echo "$TAG: version $version, newest release: $newest, newest ${version%.*}.x: $series"
+
+      # A tag from before 1.0 has an amd64-only Dockerfile: on the arm runner it
+      # would build an image holding x86_64 zig. Redone, it keeps amd64 alone.
+      - name: Architectures the tag's Dockerfile builds
+        id: images
+        run: |
+          if grep -q ZIG_SHA256_ARM64 Dockerfile; then
+            images='[{"arch":"amd64","os":"ubuntu-24.04"},{"arch":"arm64","os":"ubuntu-24.04-arm"}]'
+          else
+            images='[{"arch":"amd64","os":"ubuntu-24.04"}]'
+            echo "::notice::$TAG's Dockerfile builds amd64 only; no arm64 image"
+          fi
+          echo "images=$images" >>"$GITHUB_OUTPUT"
+          echo "count=$(jq length <<<"$images")" >>"$GITHUB_OUTPUT"
 
       - uses: ./.github/actions/setup-zig
 
@@ -111,9 +127,7 @@ jobs:
     timeout-minutes: 60
     strategy:
       matrix:
-        include:
-          - { arch: amd64, os: ubuntu-24.04 }
-          - { arch: arm64, os: ubuntu-24.04-arm }
+        include: ${{ fromJSON(needs.build.outputs.images) }}
     name: image-${{ matrix.arch }}
     permissions:
       contents: read
@@ -207,12 +221,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Tag both architectures
+      - name: Tag the architectures
         id: manifest
         env:
           VERSION: ${{ needs.build.outputs.version }}
           NEWEST: ${{ needs.build.outputs.newest }}
           NEWEST_IN_SERIES: ${{ needs.build.outputs.newest_in_series }}
+          COUNT: ${{ needs.build.outputs.image_count }}
         run: |
           image=ghcr.io/${GITHUB_REPOSITORY,,}
           tags=(-t "$image:$VERSION")
@@ -220,7 +235,7 @@ jobs:
           [[ $NEWEST == true ]] && tags+=(-t "$image:stable" -t "$image:latest")
           sources=()
           for digest in "$RUNNER_TEMP"/digests/*; do sources+=("$image@sha256:${digest##*/}"); done
-          ((${#sources[@]} == 2)) || { echo "::error::expected 2 image digests, got ${#sources[@]}"; exit 1; }
+          ((${#sources[@]} == COUNT)) || { echo "::error::expected $COUNT image digests, got ${#sources[@]}"; exit 1; }
           docker buildx imagetools create "${tags[@]}" "${sources[@]}"
           digest=$(docker buildx imagetools inspect "$image:$VERSION" --format '{{json .Manifest}}' | jq -r .digest)
           echo "image=$image" >>"$GITHUB_OUTPUT"
