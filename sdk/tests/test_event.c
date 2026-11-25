@@ -26,26 +26,20 @@
 #include "../src/core/thread_internal.h"
 #include "net_helpers.h"
 
-// Each test file has its own port range: ctest runs test executables in parallel.
-#define PORT 18300
-
 struct pair
 {
     dino_socket_t server, client, peer;
 };
 
 // peer is the accepted end and is non-blocking; client writes into it.
-static int open_pair(struct pair *p, int port)
+static int open_pair(struct pair *p)
 {
-    p->server = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    p->server = bound_socket(AF_INET, SOCK_STREAM, "127.0.0.1", 1);
     p->client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     p->peer   = DINO_INVALID_SOCKET;
     if (p->server == DINO_INVALID_SOCKET || p->client == DINO_INVALID_SOCKET)
         return -1;
-    dino_socket_set_reuseaddr(p->server, 1);
-    if (bind_to(p->server, "127.0.0.1", port) != 0 || listen(p->server, 1) != 0)
-        return -1;
-    if (connect_to(p->client, "127.0.0.1", port) != 0)
+    if (connect_to(p->client, "127.0.0.1", local_port(p->server)) != 0)
         return -1;
     p->peer = dino_socket_accept(p->server, NULL, NULL);
     if (p->peer == DINO_INVALID_SOCKET)
@@ -69,11 +63,19 @@ struct event
     struct pair       p;
 };
 
+// A failed setup skips the teardown, so it releases what it made itself:
+// otherwise the leak check would blame the failure on a leak.
 UTEST_F_SETUP(event)
 {
     utest_fixture->loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, utest_fixture->loop);
-    ASSERT_EQ(0, open_pair(&utest_fixture->p, PORT));
+    int rc = open_pair(&utest_fixture->p);
+    if (rc != 0)
+    {
+        close_pair(&utest_fixture->p);
+        dino_event_loop_destroy(utest_fixture->loop);
+    }
+    ASSERT_EQ(0, rc);
 }
 
 UTEST_F_TEARDOWN(event)
@@ -276,7 +278,7 @@ UTEST_F(event, del_with_a_poll_in_flight_then_destroy)
 UTEST_F(event, small_out_array_keeps_the_rest)
 {
     struct pair q;
-    ASSERT_EQ(0, open_pair(&q, PORT + 1));
+    ASSERT_EQ(0, open_pair(&q));
     int          a, b;
     dino_event_t out[1];
     ASSERT_EQ(
@@ -1241,32 +1243,18 @@ UTEST(event, destroy_with_a_process_still_registered)
 
 /* ---- connections ---- */
 
-static dino_socket_t listener_on(int port)
-{
-    dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
-    if (s == DINO_INVALID_SOCKET)
-        return s;
-    dino_socket_set_reuseaddr(s, 1);
-    if (bind_to(s, "127.0.0.1", port) != 0 || listen(s, 4) != 0)
-    {
-        dino_socket_close(s);
-        return DINO_INVALID_SOCKET;
-    }
-    return s;
-}
-
 UTEST(event, listener_is_readable_with_a_connection_to_accept)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
-    dino_socket_t server = listener_on(PORT + 2);
+    dino_socket_t server = bound_socket(AF_INET, SOCK_STREAM, "127.0.0.1", 4);
     ASSERT_NE(DINO_INVALID_SOCKET, server);
     ASSERT_EQ(0, dino_event_add_socket(loop, server, DINO_EVENT_READ, &server));
 
     dino_event_t out[4];
     EXPECT_EQ(0, dino_event_wait(loop, out, 4, 50));
     dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
-    ASSERT_EQ(0, connect_to(client, "127.0.0.1", PORT + 2));
+    ASSERT_EQ(0, connect_to(client, "127.0.0.1", local_port(server)));
     ASSERT_EQ(1, dino_event_wait(loop, out, 4, 5000));
     EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
     EXPECT_EQ((void *)&server, out[0].userdata);
@@ -1286,12 +1274,12 @@ UTEST(event, nonblocking_connect_reports_write_once_connected)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
-    dino_socket_t server = listener_on(PORT + 3);
+    dino_socket_t server = bound_socket(AF_INET, SOCK_STREAM, "127.0.0.1", 4);
     ASSERT_NE(DINO_INVALID_SOCKET, server);
     dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
     ASSERT_EQ(0, dino_socket_set_nonblocking(client, 1));
 
-    int rc = connect_to(client, "127.0.0.1", PORT + 3);
+    int rc = connect_to(client, "127.0.0.1", local_port(server));
     ASSERT_TRUE(rc == 0 || dino_error() == DINO_EINPROGRESS);
     ASSERT_EQ(0, dino_event_add_socket(loop, client, DINO_EVENT_WRITE, NULL));
     dino_event_t out[4];
@@ -1306,22 +1294,11 @@ UTEST(event, nonblocking_connect_reports_write_once_connected)
     dino_event_loop_destroy(loop);
 }
 
-// A port that refuses connections: bound, so nobody else takes it, but not
-// listening.
-static dino_socket_t refusing_port(int *port)
-{
-    dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
-    if (s == DINO_INVALID_SOCKET || bind_to(s, "127.0.0.1", 0) != 0)
-        return DINO_INVALID_SOCKET;
-    *port = local_port(s);
-    return s;
-}
-
 static uint32_t refused_connect_events(uint32_t interest)
 {
-    int           port;
-    dino_socket_t bound = refusing_port(&port);
-    if (bound == DINO_INVALID_SOCKET)
+    dino_socket_t bound;
+    int           port = refusing_port(&bound);
+    if (port < 0)
         return 0;
     dino_event_loop_t loop   = dino_event_loop_create();
     dino_socket_t     client = dino_socket_create(AF_INET, SOCK_STREAM, 0);

@@ -331,7 +331,7 @@ UTEST(mutex, unlock_by_another_thread_fails_and_keeps_the_lock)
     // Still held by this thread: another one can't take it.
     ASSERT_EQ(0, dino__thread_create(&t, try_lock, &result));
     dino__thread_join(t, NULL);
-    EXPECT_NE(0, result);
+    EXPECT_EQ(DINO_TIMEOUT, result);
 
     EXPECT_EQ(0, dino__mutex_unlock(g_mutex));
     dino__mutex_destroy(g_mutex);
@@ -358,8 +358,8 @@ UTEST(mutex, unlock_without_lock_fails)
 
 UTEST(mutex, invalid_handle_is_rejected)
 {
-    EXPECT_NE(0, dino__mutex_lock(DINO__INVALID_MUTEX));
-    EXPECT_NE(0, dino__mutex_unlock(DINO__INVALID_MUTEX));
+    EXPECT_EQ(-1, dino__mutex_lock(DINO__INVALID_MUTEX));
+    EXPECT_EQ(-1, dino__mutex_unlock(DINO__INVALID_MUTEX));
     EXPECT_EQ(-1, dino__mutex_trylock(DINO__INVALID_MUTEX));
     dino__mutex_destroy(DINO__INVALID_MUTEX);
 }

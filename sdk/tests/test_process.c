@@ -886,17 +886,20 @@ UTEST(process, run_kills_after_the_timeout)
     const char *const argv[] = SHELL("echo started; exec sleep 60");
 #endif
     dino_process_run_opts_t opts = { 0 };
-    opts.timeout_ms              = 200;
+    opts.timeout_ms              = 2000;
     dino_process_result_t r;
     uint64_t              start = dino_time_monotonic_ns();
     EXPECT_EQ(DINO_TIMEOUT, dino_process_run(argv, &opts, &r));
-    EXPECT_GE((dino_time_monotonic_ns() - start) / 1000000, 200u);
+    EXPECT_GE((dino_time_monotonic_ns() - start) / 1000000, 2000u);
     EXPECT_EQ(DINO_EXIT_KILLED, r.status.code);
 #ifndef _WIN32
     EXPECT_STREQ("started\n", r.out);
 #endif
     dino_process_result_free(&r);
 }
+
+// Every deadline here is seconds, not the time a child takes to start: under
+// qemu-user on a busy runner /bin/sh can take most of a second to print.
 
 // The child exits at once, but a background process it started holds stdout
 // open for seconds: run stops reading at its timeout.
@@ -907,8 +910,8 @@ UTEST(process, run_stops_reading_at_the_timeout_when_a_grandchild_holds_the_outp
     // A process can take most of a second to start under wine.
     int timeout = 1500;
 #else
-    const char *const argv[]  = SHELL("sleep 3 & echo hi");
-    int               timeout = 300;
+    const char *const argv[]  = SHELL("sleep 10 & echo hi");
+    int               timeout = 2000;
 #endif
     dino_process_run_opts_t opts = { 0 };
     opts.timeout_ms              = timeout;
@@ -929,7 +932,7 @@ UTEST(process, run_stops_writing_at_the_timeout_when_a_grandchild_holds_the_inpu
 {
     // Through fd 3: sh gives a background job /dev/null as stdin before its own
     // redirections apply.
-    const char *const argv[] = SHELL("exec 3<&0; sleep 3 <&3 3<&- >/dev/null 2>&1 & exit 0");
+    const char *const argv[] = SHELL("exec 3<&0; sleep 10 <&3 3<&- >/dev/null 2>&1 & exit 0");
     enum
     {
         SIZE = 1 << 20
@@ -939,11 +942,11 @@ UTEST(process, run_stops_writing_at_the_timeout_when_a_grandchild_holds_the_inpu
     dino_process_run_opts_t opts = { 0 };
     opts.input                   = input;
     opts.input_len               = SIZE;
-    opts.timeout_ms              = 300;
+    opts.timeout_ms              = 2000;
     dino_process_result_t r;
     uint64_t              start = dino_time_monotonic_ns();
     EXPECT_EQ(DINO_TIMEOUT, dino_process_run(argv, &opts, &r));
-    EXPECT_LT((dino_time_monotonic_ns() - start) / 1000000, 2000u);
+    EXPECT_LT((dino_time_monotonic_ns() - start) / 1000000, 5000u);
     EXPECT_EQ(0, r.status.code);
     dino_process_result_free(&r);
     free(input);

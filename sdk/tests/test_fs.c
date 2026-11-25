@@ -27,6 +27,10 @@ static int resize(const char *path, uint64_t size)
     if (!f)
         return -1;
 #ifdef _WIN32
+    // Sparse first: NTFS would otherwise allocate the whole size on disk.
+    DWORD unused;
+    DeviceIoControl(
+        (HANDLE)_get_osfhandle(_fileno(f)), FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &unused, NULL);
     int rc = _chsize_s(_fileno(f), (long long)size) == 0 ? 0 : -1;
 #else
     int rc = ftruncate(fileno(f), (off_t)size);
@@ -200,11 +204,12 @@ UTEST(file_size, symlink_to_a_directory_fails)
 }
 
 // Past both the 2 GiB and 4 GiB limits that dino_file_size exists for. The
-// file is sparse, so it costs no disk space.
+// file is sparse, so it costs no disk space, on NTFS too.
 UTEST(file_size, larger_than_4_gib)
 {
     const char    *path = "dino_test_large.bin";
     const uint64_t size = 5ull << 30;
+    remove(path); // left by a run that stopped early
     ASSERT_EQ(0, resize(path, size));
     uint64_t got = 0;
     EXPECT_EQ(0, dino_file_size(path, &got));
