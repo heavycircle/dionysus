@@ -165,14 +165,15 @@ set(DINO_NO_PLATFORM_WARNINGS ON)
 project(app C)
 ```
 
-| Option                      | Effect                                                                                                                                                             |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DINO_NO_AUTO_RUNTIME`      | don't run the SDK's setup before `main()` (see [runtime](../sdk/runtime.md))                                                                                       |
-| `DINO_NO_LIBC_SHIMS`        | don't provide the SDK's Windows `rename`, `remove`, `setenv`, `unsetenv`, `getentropy` and `poll` (see [dino vs libc](../sdk/libc.md)), for a project with its own |
-| `DINO_NO_LEAK_CHECK`        | don't link the leak check into `dino_test()` executables                                                                                                           |
-| `DINO_NO_UTF8_MANIFEST`     | don't make Windows executables use UTF-8, for a project with its own manifest (see [UTF-8 on Windows](../sdk/fs.md#utf-8-on-windows))                              |
-| `DINO_NO_PLATFORM_WARNINGS` | don't warn about platform calls that have a `dino_*` replacement                                                                                                   |
-| `DINO_LINK_FOR`             | `speed` or `size`: what a Release build links for (see [Building](building.md#what-release-optimizes-for)); `speed` on Linux, `size` on Windows by default         |
+| Option                      | Effect                                                                                                                                                                      |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DINO_NO_AUTO_RUNTIME`      | don't run the SDK's setup before `main()` (see [runtime](../sdk/runtime.md))                                                                                                |
+| `DINO_NO_LIBC_SHIMS`        | don't provide the SDK's Windows `rename`, `remove`, `setenv`, `unsetenv`, `getentropy`, `poll` and `mkdir` (see [dino vs libc](../sdk/libc.md)), for a project with its own |
+| `DINO_NO_MKDIR_SHIM`        | leave out only the Windows two-argument `mkdir`, a macro that can clash with a project's own (see [fs](../sdk/fs.md#creating-directories))                                  |
+| `DINO_NO_LEAK_CHECK`        | don't link the leak check into `dino_test()` executables                                                                                                                    |
+| `DINO_NO_UTF8_MANIFEST`     | don't make Windows executables use UTF-8, for a project with its own manifest (see [UTF-8 on Windows](../sdk/fs.md#utf-8-on-windows))                                       |
+| `DINO_NO_PLATFORM_WARNINGS` | don't warn about platform calls that have a `dino_*` replacement                                                                                                            |
+| `DINO_LINK_FOR`             | `speed` or `size`: what a Release build links for (see [Building](building.md#what-release-optimizes-for)); `speed` on Linux, `size` on Windows by default                  |
 
 ## Using the SDK from an existing project
 

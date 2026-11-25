@@ -808,6 +808,54 @@ int main(void)
 C
     rm tests/test_main.c
     CFLAGS='-std=c89 -pedantic-errors' dino build >out 2>&1 || { cat out; return 1; }
+    # On Windows the SDK's own POSIX headers come in (sys/stat.h, the sockets):
+    # the project's warnings mustn't reach them.
+    sed -i 's|#include <pthread.h>|#include <pthread.h>\n#include <sys/stat.h>\n#include <sys/socket.h>\n#include <netdb.h>\n#include <poll.h>|' src/main.c
+    CFLAGS='-std=c89 -pedantic-errors' dino build x86_64 win64 >out 2>&1 || { cat out; return 1; }
+}
+
+# Every form of mkdir builds on Windows with -Werror: POSIX's two arguments,
+# MinGW's one, and a project's own macro defined first. DINO_NO_MKDIR_SHIM
+# leaves MinGW's alone.
+case_mkdir_forms_on_windows() {
+    project mkdir_forms
+    cat >src/main.c <<'C'
+#include <sys/stat.h>
+
+int one_argument(const char *p);
+int own_macro(const char *p);
+
+int main(void)
+{
+    int rc = mkdir("dino_two", 0755);
+#ifdef _WIN32
+    rc |= mkdir("dino_one");
+#endif
+    return rc | one_argument("dino_a") | own_macro("dino_b");
+}
+C
+    cat >src/one.c <<'C'
+#include <sys/stat.h>
+#ifdef _WIN32
+int one_argument(const char *p) { return mkdir(p); }
+#else
+int one_argument(const char *p) { return mkdir(p, 0755); }
+#endif
+C
+    cat >src/own.c <<'C'
+#ifdef _WIN32
+#include <direct.h>
+#define mkdir(p, m) _mkdir(p)
+#endif
+#include <sys/stat.h>
+int own_macro(const char *p) { return mkdir(p, 0755); }
+C
+    rm tests/test_main.c
+    CFLAGS='-Werror' dino build win64 x86_64 >out 2>&1 || { cat out; return 1; }
+    # Turned off, MinGW's one-argument mkdir is the one left, so the
+    # two-argument call no longer builds.
+    dino build win64 -- -DDINO_NO_MKDIR_SHIM=ON >out 2>&1 && { cat out; return 1; }
+    grep -q "too many arguments to function call, expected 1, have 2" out || { cat out; return 1; }
 }
 
 # A project's own header with a wrapped name (spawn.h here, process.h on

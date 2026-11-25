@@ -435,6 +435,73 @@ UTEST(mkdir, a_utf8_name)
     EXPECT_EQ(0, rmdir(name));
 }
 
+// A part of the path that is a file: ENOTDIR on Linux, and on Windows too,
+// which says "path not found" itself.
+UTEST(mkdir, a_file_on_the_way_is_enotdir)
+{
+    ASSERT_EQ(0, write_file("dino_mkdir_file", "x"));
+    errno = 0;
+    EXPECT_EQ(-1, mkdir("dino_mkdir_file/sub", 0755));
+    EXPECT_EQ(ENOTDIR, errno);
+    remove("dino_mkdir_file");
+}
+
+#ifdef _WIN32
+// MinGW's own one-argument form still builds, through the same UTF-8 path.
+UTEST(mkdir, the_one_argument_form_works_on_windows)
+{
+    rmdir("dino_mkdir_1arg");
+    ASSERT_EQ(0, mkdir("dino_mkdir_1arg"));
+    EXPECT_TRUE(is_dir("dino_mkdir_1arg"));
+    EXPECT_EQ(0, rmdir("dino_mkdir_1arg"));
+}
+
+// A \\?\ path: the prefix and the drive are the root, never created.
+UTEST(mkdir_p, a_path_with_the_long_path_prefix)
+{
+    char tmp[1024], path[1200];
+    ASSERT_GT(dino_path_temp(tmp, sizeof(tmp)), 0);
+    for (char *c = tmp; *c; c++)
+        if (*c == '/')
+            *c = '\\';
+    snprintf(path, sizeof(path), "\\\\?\\%s\\dino_mkp_long\\x", tmp);
+    ASSERT_EQ(0, dino_mkdir_p(path, 0755));
+    EXPECT_TRUE(is_dir(path + 4));
+    EXPECT_EQ(0, rmdir(path + 4));
+    snprintf(path, sizeof(path), "%s\\dino_mkp_long", tmp);
+    EXPECT_EQ(0, rmdir(path));
+}
+#else
+// As mkdir -p -m: only the last directory gets the mode as given; the ones on
+// the way stay writable for their owner, so the next could be made in them.
+UTEST(mkdir_p, only_the_last_directory_gets_a_read_only_mode)
+{
+    ASSERT_EQ(0, dino_mkdir_p("dino_mkp_ro/a/b", 0555));
+    struct stat st;
+    ASSERT_EQ(0, stat("dino_mkp_ro/a", &st));
+    EXPECT_TRUE(st.st_mode & S_IWUSR);
+    ASSERT_EQ(0, stat("dino_mkp_ro/a/b", &st));
+    EXPECT_FALSE(st.st_mode & S_IWUSR);
+    EXPECT_EQ(0, rmdir("dino_mkp_ro/a/b"));
+    EXPECT_EQ(0, rmdir("dino_mkp_ro/a"));
+    EXPECT_EQ(0, rmdir("dino_mkp_ro"));
+}
+#endif
+
+// A success leaves dino_error() as it was, though mkdir failed on the parts
+// that were already there.
+UTEST(mkdir_p, success_keeps_the_last_error)
+{
+    ASSERT_EQ(0, dino_mkdir_p("dino_mkp_keep/a", 0755));
+    uint64_t size;
+    EXPECT_EQ(-1, dino_file_size(NULL, &size));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(0, dino_mkdir_p("dino_mkp_keep/a", 0755));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    rmdir("dino_mkp_keep/a");
+    rmdir("dino_mkp_keep");
+}
+
 UTEST(mkdir_p, creates_every_missing_level)
 {
     rmdir("dino_mkp/a/b/c");

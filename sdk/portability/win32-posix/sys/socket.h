@@ -1,3 +1,4 @@
+#pragma GCC system_header
 // POSIX socket declarations on Windows, where MinGW ships no <sys/socket.h>:
 // Winsock under the POSIX header names, so the same includes work on every
 // target. A SOCKET is still not a file descriptor: create, close, accept,

@@ -38,6 +38,13 @@ elseif(TARGET dino_libc)
     set_property(TARGET dino_core APPEND PROPERTY INTERFACE_LINK_LIBRARIES dino_libc)
 endif()
 
+# The two-argument mkdir on Windows is a macro (win32-posix/sys/stat.h), which
+# can clash with a project's own; this leaves out just that one.
+option(DINO_NO_MKDIR_SHIM "Don't define POSIX's two-argument mkdir on Windows" OFF)
+if(DINO_NO_MKDIR_SHIM)
+    target_compile_definitions(dino_core INTERFACE DINO_NO_MKDIR_SHIM)
+endif()
+
 option(DINO_NO_PLATFORM_WARNINGS "Don't warn about platform calls that have a dino_* replacement" OFF)
 if(DINO_NO_PLATFORM_WARNINGS)
     target_compile_definitions(dino_core INTERFACE DINO_ALLOW_PLATFORM_CALLS)
