@@ -38,7 +38,11 @@ check() {
         return
     fi
     local foreign
-    foreign=$(docker run --rm -v "$dir:/p" --entrypoint find "$image" /p ! -uid "$owner" -printf '%u %p\n')
+    foreign=$(docker run --rm -v "$dir:/p" --entrypoint find "$image" /p ! -uid "$owner" -printf '%u %p\n') || {
+        echo "FAILED: $name: couldn't list the project's files"
+        failed=1
+        return
+    }
     if [[ -n $foreign ]]; then
         echo "FAILED: $name: files not owned by UID $owner:"
         echo "$foreign" | head -n 5 | sed 's/^/        /'

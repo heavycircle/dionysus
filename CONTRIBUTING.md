@@ -144,6 +144,8 @@ tests/cli.sh               checks the dino command line end to end
 tests/cmake-minimum.sh     builds and tests with the oldest supported CMake
 tests/configure.sh         checks that CMake configure checks test the target being built
 tests/docker.sh            checks the image's entrypoint (file ownership, wine)
+tests/pins.sh              checks that the Zig and CMake versions pinned in several files agree
+tests/lintcommit.sh        checks scripts/lintcommit.sh against subjects it must accept and reject
 tests/image.sh             smoke test of a built image, run before a release pushes it
 scripts/release.sh         cuts a release (see Releases)
 scripts/dist.sh            builds the release archives
@@ -295,7 +297,7 @@ examples, docs) and the version this script installs, together.
 
 | Job                                  | What it checks                                                                                                                                                                                                                                                                                                                               |
 | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lint`                               | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), and commit messages                                                                                                                                                             |
+| `lint`                               | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), the version pins (`tests/pins.sh`), the commit linter (`tests/lintcommit.sh`) and commit messages                                                                               |
 | `unit`                               | `zig build test`, and `tests/cmake-minimum.sh`                                                                                                                                                                                                                                                                                               |
 | `targets (<target>)`                 | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh`, `tests/docs.sh` and `tests/configure.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
 | `cli`                                | `tests/cli.sh` in the same image; a job of its own because it is the slowest check and doesn't depend on the target                                                                                                                                                                                                                          |
@@ -312,6 +314,7 @@ git ls-files '*.c' '*.h' | xargs uvx --from clang-format==19.1.7 clang-format --
 git ls-files '*.sh' | xargs uvx --from shellcheck-py==0.10.0.1 shellcheck
 tests/headers.sh
 scripts/tidy.sh uvx --from clang-tidy==19.1.0 clang-tidy
+tests/pins.sh && tests/lintcommit.sh
 scripts/lintcommit.sh origin/main..HEAD
 docker build -t dionysus . && docker run --rm -e CFLAGS="-Wall -Wextra -Werror" \
     -v "$PWD:/repo:ro" dionysus /repo/tests/examples.sh /repo/examples

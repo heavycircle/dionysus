@@ -131,6 +131,7 @@ fn find(name: []const u8) ?Command {
 
 test {
     _ = @import("Args.zig");
+    _ = @import("Ctx.zig");
     _ = @import("cmake.zig");
     _ = @import("compdb.zig");
     _ = @import("libraries.zig");

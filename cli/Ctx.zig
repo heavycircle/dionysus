@@ -207,3 +207,20 @@ pub fn exitCode(term: std.process.Child.Term) u8 {
         .unknown => 1,
     };
 }
+
+test exitCode {
+    try std.testing.expectEqual(@as(u8, 0), exitCode(.{ .exited = 0 }));
+    try std.testing.expectEqual(@as(u8, 42), exitCode(.{ .exited = 42 }));
+    try std.testing.expectEqual(@as(u8, 128 + 15), exitCode(.{ .signal = @fromBackingInt(@intCast(15)) }));
+    try std.testing.expectEqual(@as(u8, 1), exitCode(.{ .unknown = 0 }));
+}
+
+test interruptedCode {
+    var ctx: Ctx = undefined;
+    ctx.interrupted = null;
+    try std.testing.expectEqual(@as(?u8, null), ctx.interruptedCode());
+    ctx.interrupted = 2;
+    try std.testing.expectEqual(@as(?u8, 130), ctx.interruptedCode());
+    ctx.interrupted = 200;
+    try std.testing.expectEqual(@as(?u8, 255), ctx.interruptedCode());
+}
