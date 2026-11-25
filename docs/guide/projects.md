@@ -88,7 +88,7 @@ target_link_libraries(storage PUBLIC dino_core)
 
 ## Libraries
 
-Everything links statically, so libraries need to be static (`STATIC`), or header-only (`INTERFACE`).
+Everything links statically (on Windows, all but the system's C runtime DLL), so libraries need to be static (`STATIC`), or header-only (`INTERFACE`).
 
 - **Your own code or vendored third-party code** in the repository: `add_library()` or
   `add_subdirectory()`, as above. Silence warnings in code you don't own with
@@ -165,14 +165,14 @@ set(DINO_NO_PLATFORM_WARNINGS ON)
 project(app C)
 ```
 
-| Option                      | Effect                                                                                                                                                     |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DINO_NO_AUTO_RUNTIME`      | don't run the SDK's setup before `main()` (see [runtime](../sdk/runtime.md))                                                                               |
-| `DINO_NO_LIBC_SHIMS`        | don't provide the SDK's Windows `rename`, `remove`, `setenv`, `unsetenv` and `getentropy` (see [dino vs libc](../sdk/libc.md)), for a project with its own |
-| `DINO_NO_LEAK_CHECK`        | don't link the leak check into `dino_test()` executables                                                                                                   |
-| `DINO_NO_UTF8_MANIFEST`     | don't make Windows executables use UTF-8, for a project with its own manifest (see [UTF-8 on Windows](../sdk/fs.md#utf-8-on-windows))                      |
-| `DINO_NO_PLATFORM_WARNINGS` | don't warn about platform calls that have a `dino_*` replacement                                                                                           |
-| `DINO_LINK_FOR`             | `speed` or `size`: what a Release build links for (see [Building](building.md#what-release-optimizes-for)); `speed` on Linux, `size` on Windows by default |
+| Option                      | Effect                                                                                                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `DINO_NO_AUTO_RUNTIME`      | don't run the SDK's setup before `main()` (see [runtime](../sdk/runtime.md))                                                                                       |
+| `DINO_NO_LIBC_SHIMS`        | don't provide the SDK's Windows `rename`, `remove`, `setenv`, `unsetenv`, `getentropy` and `poll` (see [dino vs libc](../sdk/libc.md)), for a project with its own |
+| `DINO_NO_LEAK_CHECK`        | don't link the leak check into `dino_test()` executables                                                                                                           |
+| `DINO_NO_UTF8_MANIFEST`     | don't make Windows executables use UTF-8, for a project with its own manifest (see [UTF-8 on Windows](../sdk/fs.md#utf-8-on-windows))                              |
+| `DINO_NO_PLATFORM_WARNINGS` | don't warn about platform calls that have a `dino_*` replacement                                                                                                   |
+| `DINO_LINK_FOR`             | `speed` or `size`: what a Release build links for (see [Building](building.md#what-release-optimizes-for)); `speed` on Linux, `size` on Windows by default         |
 
 ## Using the SDK from an existing project
 
@@ -187,5 +187,4 @@ version that matches the `dino` binary.
 
 ## Building with plain CMake
 
-`dino` adds these CMake settings, and nothing else. They're listed under
-[Building without dino](building.md#without-dino).
+The CMake settings `dino` adds are listed under [Building without dino](building.md#without-dino).

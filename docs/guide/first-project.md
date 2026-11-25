@@ -10,7 +10,7 @@ dino run
 Hello from hello!
 ```
 
-That's a complete project: `dino run` configured it, built it for this machine, and ran it.
+That's a complete project: `dino run` configured it, built it for this machine, and ran it. Its progress (`==> x86_64 ...`, the build, the binary's size) goes to stderr, so stdout carries only the program's output.
 
 ## What `dino init` creates
 
@@ -31,7 +31,7 @@ before the first build and your editor works straight away. `--no-configure` ski
 
 The project, and its program, are named after the directory. A name that CMake or dino already
 uses for a target is refused before anything is written: `all`, `clean`, `help`, `install`,
-`package`, `preinstall`, `test`, `test_main`, anything starting with `dino_`, and the names of directories in `build/<target>/` (`CMakeFiles`, `Testing`, `_dino`, `_dino_libs`). An existing project is never refused for its name.
+`package`, `preinstall`, `test`, `test_main`, CMake's other target names (`package_source`, `edit_cache`, `rebuild_cache`, `ALL_BUILD`, ...), anything starting with `dino_`, and the names of directories in `build/<target>/` (`CMakeFiles`, `Testing`, `_dino`, `_dino_libs`). An existing project is never refused for its name.
 
 The generated `CMakeLists.txt`:
 
@@ -105,6 +105,10 @@ dino build --all
     build/x86_64/test_main (36.2 KiB)
 
 ==> summary: 7 succeeded, 0 failed
+    ok       arm
+    ok       arm64
+...
+    ok       x86_64
 ```
 
 Each target gets its own `build/<target>/` directory. The Linux binaries are fully static, so they

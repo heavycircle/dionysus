@@ -21,9 +21,11 @@ The `dino init` template turns every `tests/test_*.c` into a test executable:
 file(GLOB TESTS CONFIGURE_DEPENDS tests/test_*.c)
 foreach(test ${TESTS})
     get_filename_component(test_name ${test} NAME_WE)
-    dino_test(${test_name} ${test} LIBRARIES core)   # the code under test, if it's a library
+    dino_test(${test_name} ${test})
 endforeach()
 ```
+
+When the code under test is a library of the project's own, link it with `LIBRARIES`: `dino_test(${test_name} ${test} LIBRARIES core)`.
 
 `dino_test(name sources... [LIBRARIES targets...])` is `add_executable()` plus the test framework, and links the listed targets. For anything else, the name is an ordinary CMake target.
 
@@ -88,6 +90,7 @@ Keep the program's logic in a library that both the program and the tests link, 
 - **In parallel:** test executables run in parallel (`-j`, default: the number of CPUs). Tests that
   open sockets should each use their own ports.
 - **Filtering:** `-R <regex>` runs only the test executables whose names match.
+- **Working directory:** each test runs in `build/<target>/`, not the project root, so a test that opens a fixture file should build its path from the source directory, for example with `target_compile_definitions(test_import PRIVATE FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures")`.
 - **Timeouts:** a test executable that runs longer than 120 seconds is stopped and fails as `Timeout`. Its output ends with the `[ RUN ]` line of the case that was running, since test executables write to stdout unbuffered. `--timeout <seconds>` changes the limit for one run; for a test that is always slow, set it in `CMakeLists.txt`, which takes precedence over `--timeout`:
 
   ```cmake
@@ -95,7 +98,7 @@ Keep the program's logic in a library that both the program and the tests link, 
   ```
 
 - **ctest arguments:** anything after `--` goes to `ctest`, e.g.
-  `dino test -- --repeat until-fail:20` to hunt a flaky test, or `dino test -- --output-on-failure`.
+  `dino test -- --repeat until-fail:20` to hunt a flaky test, or `dino test -- --schedule-random`. dino already passes `--output-on-failure`.
 - **Exit code:** non-zero if any test failed on any target, with a summary per target at the end.
 
 ## The leak check

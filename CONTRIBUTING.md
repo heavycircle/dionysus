@@ -39,7 +39,7 @@ Dionysus lets you write C once and get tiny, fully static binaries for Linux (mu
 <https://ziglang.org/download/>, extract it anywhere, and put the directory on your `PATH`:
 
 ```sh
-tar -xJf zig-x86_64-linux-0.17.1.tar.xz -C ~/.local/opt
+mkdir -p ~/.local/opt && tar -xJf zig-x86_64-linux-0.17.1.tar.xz -C ~/.local/opt
 export PATH="$HOME/.local/opt/zig-x86_64-linux-0.17.1:$PATH"   # add to your shell profile
 zig version                                                   # 0.17.1
 ```
@@ -114,17 +114,21 @@ after changing `cli/` or `sdk/`.
 build.zig, build.zig.zon   Zig build for dino; build.zig.zon holds the version
 cli/                       dino source (main.zig, commands/, cmake.zig, libraries.zig, ...)
 sdk/
-  include/dino/core/       public headers: error, event, fs, io, network, pipe, process,
-                           thread, time
+  include/dino/core/       public headers: error, event, fs, network, pipe, process, thread,
+                           time
   include/dino/util/       extras built on core: logging
   src/core/                implementations: <module>.c (shared, if any), <module>_posix.c and
                            <module>_win32.c (one is built per platform)
   src/util/                implementations of the util headers
+  src/libc/                Windows definitions of libc names MinGW lacks (rename, poll, ...)
+  src/windows/             the UTF-8 console setup linked into Windows executables
   cmake/                   toolchain.cmake, flags.cmake, Dino.cmake, version.h.in
   portability/             wrappers for system headers that warn about calls with a dino_*
-                           replacement (common/, posix/, win32/)
+                           replacement (common/, posix/, win32/), and the POSIX socket
+                           headers for Windows (win32-posix/)
   CMakeLists.txt           the dino_core and dino_util static libraries
-  testing/                 utest.h (vendored) and the leak counter, for dino_test()
+  testing/                 utest.h (a wrapper; vendor/ holds the original) and the leak
+                           counter, for dino_test()
   tests/                   the SDK's own tests, one test_<module>.c per module
 docs/                      user documentation: README.md (index), guide/ (using dino),
                            sdk/ (the dino_* modules)
@@ -138,6 +142,7 @@ tests/docs.sh              checks docs links and builds and runs the C programs 
 tests/headers.sh           checks every public header compiles alone as C and C++ and stays namespaced
 tests/cli.sh               checks the dino command line end to end
 tests/cmake-minimum.sh     builds and tests with the oldest supported CMake
+tests/configure.sh         checks that CMake configure checks test the target being built
 tests/docker.sh            checks the image's entrypoint (file ownership, wine)
 tests/image.sh             smoke test of a built image, run before a release pushes it
 scripts/release.sh         cuts a release (see Releases)
@@ -145,8 +150,9 @@ scripts/dist.sh            builds the release archives
 scripts/lintcommit.sh      checks commit messages
 scripts/tidy.sh            clang-tidy on the SDK for x86_64 and win64
 .clang-format, .clang-tidy C style and static-analysis rules (also written by dino init)
+.clang-format-ignore       files clang-format leaves alone (the vendored utest.h)
 cliff.toml                 release-notes config for git-cliff
-.github/workflows/         CI, release and backport workflows
+.github/workflows/         CI, nightly, release and backport workflows
 .github/actions/setup-zig/ installs the pinned Zig in workflows
 Dockerfile                 build and test image
 .devcontainer/             devcontainer using that image
@@ -287,19 +293,20 @@ examples, docs) and the version this script installs, together.
 
 `.github/workflows/ci.yml` runs on every PR and on pushes to `main` and `release-*`:
 
-| Job                                  | What it checks                                                                                                                                                                                                                                                                                                         |
-| ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lint`                               | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), and commit messages                                                                                                                                       |
-| `unit`                               | `zig build test`, and `tests/cmake-minimum.sh`                                                                                                                                                                                                                                                                         |
-| `targets (<target>)`                 | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh` and `tests/docs.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
-| `cli`                                | `tests/cli.sh` in the same image; a job of its own because it is the slowest check and doesn't depend on the target                                                                                                                                                                                                    |
-| `docker`                             | `tests/docker.sh` on the same image: the entrypoint (file ownership, wine)                                                                                                                                                                                                                                             |
-| `windows (win32)`, `windows (win64)` | the SDK tests, cross-compiled by `windows-build` on Linux with `-Wall -Wextra -Werror`, run on Windows itself by `tests/windows.sh`                                                                                                                                                                                    |
+| Job                                  | What it checks                                                                                                                                                                                                                                                                                                                               |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lint`                               | `zig fmt --check`, `clang-format --dry-run --Werror`, `shellcheck`, the public headers (`tests/headers.sh`), clang-tidy on the SDK (x86_64 and win64 views), and commit messages                                                                                                                                                             |
+| `unit`                               | `zig build test`, and `tests/cmake-minimum.sh`                                                                                                                                                                                                                                                                                               |
+| `targets (<target>)`                 | for one target with `-Wall -Wextra -Werror`, in the Docker image built from the PR (so it tests the PR's `dino`): `tests/examples.sh`, the SDK tests with `tests/sdk.sh`, `tests/warnings.sh`, `tests/docs.sh` and `tests/configure.sh`; the x86_64 job also runs the SDK tests under valgrind and the warnings against glibc (`--memcheck`) |
+| `cli`                                | `tests/cli.sh` in the same image; a job of its own because it is the slowest check and doesn't depend on the target                                                                                                                                                                                                                          |
+| `docker`                             | `tests/docker.sh` on the same image: the entrypoint (file ownership, wine)                                                                                                                                                                                                                                                                   |
+| `windows (win32)`, `windows (win64)` | the SDK tests, cross-compiled by `windows-build` on Linux with `-Wall -Wextra -Werror`, run on Windows itself by `tests/windows.sh`                                                                                                                                                                                                          |
 
 Run the same checks locally before asking for review:
 
 ```sh
 zig fmt --check build.zig cli && zig build test
+zig build   # zig-out/bin/dino, which cmake-minimum.sh and tidy.sh use
 tests/cmake-minimum.sh
 git ls-files '*.c' '*.h' | xargs uvx --from clang-format==19.1.7 clang-format --dry-run --Werror
 git ls-files '*.sh' | xargs uvx --from shellcheck-py==0.10.0.1 shellcheck
@@ -311,7 +318,11 @@ docker build -t dionysus . && docker run --rm -e CFLAGS="-Wall -Wextra -Werror" 
 docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/sdk.sh --all
 docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/warnings.sh
 docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/docs.sh
+docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/sdk.sh --memcheck
+docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" dionysus /repo/tests/warnings.sh --memcheck
+docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/configure.sh x86_64
 docker run --rm -v "$PWD:/repo:ro" dionysus /repo/tests/cli.sh
+tests/docker.sh dionysus
 ```
 
 The linters are pinned through [uv](https://docs.astral.sh/uv/) so everyone formats with the same
@@ -555,7 +566,7 @@ include `<dino/version.h>` for `DINO_VERSION`, `DINO_VERSION_MAJOR`, `DINO_VERSI
 
 **Tags:** `vX.Y.Z` tags are annotated and never moved. Two tags move, both set by CI:
 `stable` points at the newest release (a patch for an older line doesn't move it), and `nightly`
-at the last `main` commit the nightly build published. Never push either by hand.
+at the last `main` commit the nightly build published. Never push either by hand; nothing enforces this, so it is up to whoever has push access.
 
 ## Releases
 
@@ -603,7 +614,7 @@ image is pushed, and last the GitHub Release is published:
 To redo a release (a failed run, a fixed workflow), run **release** from the Actions tab with the
 tag as input, or `gh workflow run release -f tag=vX.Y.Z`. It replaces the assets, keeps the notes,
 and republishes the image. The `ci` jobs run on the tag again first; for a tag older than today's
-`ci.yml`, whose tree lacks the scripts it calls, add `-f ci=false`.
+`ci.yml`, whose tree lacks the scripts it calls, add `-f ci=false`. A redo runs `main`'s `release.yml` but builds from the tag's tree, so only fixes to the workflow file itself take effect: `scripts/dist.sh`, the `Dockerfile` and the `setup-zig` action are the tag's. The image is rebuilt against the Debian packages of the day, not the ones the first run used.
 
 **Nightly.** `.github/workflows/nightly.yml` runs daily (and on demand) from `main`. When `main` has
 moved since the last nightly and its `ci` run succeeded, it rebuilds the `nightly` prerelease:

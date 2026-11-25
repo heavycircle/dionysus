@@ -116,7 +116,8 @@ pub const ExecOptions = struct {
 
 /// Runs a child with inherited stdio and returns its exit status,
 /// using the shell convention of 128 + signal for signalled children.
-/// dino waits for it even when interrupted (see signals.zig).
+/// On Linux and Windows dino waits for it even when interrupted (see
+/// signals.zig); elsewhere an interrupt ends dino without waiting.
 pub fn exec(ctx: *Ctx, argv: []const []const u8, options: ExecOptions) Error!u8 {
     ctx.out.flush() catch {};
     ctx.err.flush() catch {};
