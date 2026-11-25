@@ -2,6 +2,10 @@
 # the results: zig, cmake, ninja, qemu-user for the Linux targets, wine for
 # the Windows targets, and valgrind for `dino test --memcheck`.
 #
+# Builds for linux/amd64 and linux/arm64. The arm64 image has no wine: Debian's
+# wine runs only programs of the machine's own architecture, so there it builds
+# win32 and win64 but can't run them.
+#
 #   docker build -t dionysus .
 #   docker run --rm -v "$PWD:/work" dionysus dino build --all
 #   docker run --rm -v "$PWD:/work" dionysus dino run arm64
@@ -10,20 +14,28 @@
 FROM debian:trixie-slim AS base
 
 ARG ZIG_VERSION=0.17.1
-ARG ZIG_SHA256=3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a
+ARG ZIG_SHA256_AMD64=3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a
+ARG ZIG_SHA256_ARM64=a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795
 
-# i386 multiarch is what lets wine run 32-bit (win32) executables.
-RUN dpkg --add-architecture i386 \
+# On amd64, i386 multiarch is what lets wine run 32-bit (win32) executables.
+RUN if [ "$(dpkg --print-architecture)" = amd64 ]; then \
+        dpkg --add-architecture i386 && wine="wine wine64 wine32:i386"; \
+    fi \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates curl xz-utils file \
         cmake ninja-build make \
         qemu-user valgrind \
-        wine wine64 wine32:i386 \
+        ${wine-} \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz \
-    && echo "${ZIG_SHA256}  /tmp/zig.tar.xz" | sha256sum -c - \
+RUN case "$(dpkg --print-architecture)" in \
+        amd64) arch=x86_64 sha=$ZIG_SHA256_AMD64 ;; \
+        arm64) arch=aarch64 sha=$ZIG_SHA256_ARM64 ;; \
+        *) echo "no zig for $(dpkg --print-architecture)" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL "https://ziglang.org/download/${ZIG_VERSION}/zig-${arch}-linux-${ZIG_VERSION}.tar.xz" -o /tmp/zig.tar.xz \
+    && echo "${sha}  /tmp/zig.tar.xz" | sha256sum -c - \
     && mkdir -p /opt/zig \
     && tar -xJf /tmp/zig.tar.xz -C /opt/zig --strip-components=1 \
     && rm /tmp/zig.tar.xz
@@ -45,7 +57,10 @@ FROM base
 COPY --from=build /usr/local/bin/dino /usr/local/bin/dino
 COPY scripts/docker-entrypoint.sh /usr/local/bin/dino-entrypoint
 
-RUN useradd --create-home dino && install -d -o dino -g dino /work && groupadd --system dino-entrypoint
+# ~/.cache exists in the image, so a cache mounted under it (a zig cache, say)
+# doesn't leave Docker to create it owned by root, where dino couldn't write.
+RUN useradd --create-home dino && install -d -o dino -g dino /work /home/dino/.cache \
+    && groupadd --system dino-entrypoint
 
 ENV WINEDEBUG=-all
 # Wine maps Windows file names and arguments to Unix ones through the locale:
@@ -57,7 +72,9 @@ ENV LANG=C.UTF-8
 # from the entrypoint) is a few KB that links into it. The chmod has to share
 # the layer, or Docker copies all 1.4 GB again. The build's wineserver directory
 # and the prefix's pointer to it are dropped: each user's prefix names its own.
-RUN install -d -o dino -g dino /opt/wine-prefix \
+# Skipped where there's no wine (arm64).
+RUN if ! command -v wineboot >/dev/null; then exit 0; fi \
+    && install -d -o dino -g dino /opt/wine-prefix \
     && setpriv --reuid=dino --regid=dino --init-groups sh -c \
         'HOME=/home/dino WINEPREFIX=/opt/wine-prefix wineboot --init >/dev/null 2>&1; \
          WINEPREFIX=/opt/wine-prefix wineserver --wait' \

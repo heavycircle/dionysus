@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Versions pinned in more than one place must agree:
 #   - Zig: build.zig.zon's minimum_zig_version, the Dockerfile and the CI's
-#     setup-zig action, with the same checksum in the last two
+#     setup-zig action, with the same x86_64 checksum in the last two
 #   - CMake: the oldest that doctor accepts (min_cmake in
 #     cli/commands/doctor.zig) is what the SDK, dino init's template and the
 #     examples ask for
@@ -21,7 +21,7 @@ same() {
 
 zon=$(sed -n 's/^ *\.minimum_zig_version = "\(.*\)",$/\1/p' build.zig.zon)
 docker_zig=$(sed -n 's/^ARG ZIG_VERSION=//p' Dockerfile)
-docker_sha=$(sed -n 's/^ARG ZIG_SHA256=//p' Dockerfile)
+docker_sha=$(sed -n 's/^ARG ZIG_SHA256_AMD64=//p' Dockerfile)
 action=.github/actions/setup-zig/action.yml
 action_zig=$(sed -n 's/^ *ZIG_VERSION: //p' "$action")
 action_sha=$(sed -n 's/^ *ZIG_SHA256: //p' "$action")

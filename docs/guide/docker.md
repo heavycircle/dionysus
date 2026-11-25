@@ -7,7 +7,7 @@ The `ghcr.io/heavycircle/dionysus` image has everything `dino` needs and can run
 - qemu-user and wine (64 and 32-bit), to run the `arm`, `arm64`, `ppc`, `win32` and `win64` builds
 - valgrind, for `dino test --memcheck`
 
-With it, the only thing a machine or a CI runner needs is Docker. The image is built for x86_64 (`linux/amd64`) only for now; on an arm64 host (Apple silicon, Graviton) it runs under emulation, if at all ([#163](https://github.com/heavycircle/dionysus/issues/163)).
+With it, the only thing a machine or a CI runner needs is Docker. The image is built for `linux/amd64` and `linux/arm64`, and Docker pulls the one for its host: an arm64 machine (Apple silicon, Graviton, Ampere) runs it natively. The arm64 image has no wine, since Debian's wine only runs programs of the machine's own architecture: it builds `win32` and `win64` but can't run or test them, and `dino doctor` reports wine missing. To run Windows builds on an arm64 host, pass `--platform linux/amd64` and Docker runs the amd64 image under emulation, more slowly.
 
 ```sh
 docker run --rm -v "$PWD:/work" ghcr.io/heavycircle/dionysus:stable dino build --all

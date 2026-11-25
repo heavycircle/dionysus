@@ -136,7 +136,7 @@ To find _where_ the leak comes from, use `--memcheck`.
 dino test --memcheck
 ```
 
-It builds the tests again in `build/memcheck/`, for x86_64 Linux against the dynamic glibc (valgrind
+It builds the tests again in `build/memcheck/`, for the host's own Linux (x86_64 or aarch64) against the dynamic glibc (valgrind
 can't see the allocator inside a static binary), and runs each test under valgrind. It always builds Debug, for valgrind's stack traces, so it takes no `--release`, and it leaves `compile_commands.json` on the normal build. As well as
 leaks, with the stack that allocated them, it catches reads and writes out of bounds, use after free
 and use of uninitialized memory:
@@ -148,7 +148,7 @@ and use of uninitialized memory:
    by utest_run_kv_delete (tests/test_kv.c:42)
 ```
 
-It needs an x86_64 Linux host with valgrind installed. The Docker image has it. `dino clean memcheck`
+It needs an x86_64 or aarch64 Linux host with valgrind installed. The Docker image has it, on both architectures. `dino clean memcheck`
 removes `build/memcheck/`.
 
 ## In CI

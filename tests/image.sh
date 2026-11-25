@@ -9,11 +9,15 @@
 #
 # With DINO_IMAGE_WARM=1 (release.yml), the image must also have been built
 # with WARM_ZIG_CACHE=1: its zig cache already holds every target's C library.
+#
+# The arm64 image has no wine (see the Dockerfile): there win32 and win64 are
+# built but not run, and their runner is the one thing doctor may miss.
 set -uo pipefail
 
 image=${1:?usage: tests/image.sh IMAGE [VERSION]}
 version=${2:-}
 failed=0
+arch=$(docker image inspect -f '{{.Architecture}}' "$image")
 
 fail() {
     echo "FAILED: $1"
@@ -30,23 +34,31 @@ else
 fi
 
 # doctor exits 0 when only a runner is missing; the image must have them all.
-if ! doctor=$(docker run --rm "$image" dino doctor 2>&1) || grep -q '\[MISS\]' <<<"$doctor"; then
+missing=$(docker run --rm "$image" dino doctor 2>&1 | grep '\[MISS\]')
+[[ $arch == arm64 ]] && missing=$(grep -Ev '\[MISS\] (wine|win32|win64) ' <<<"$missing")
+if ! docker run --rm "$image" dino doctor >/dev/null 2>&1 || [[ -n $missing ]]; then
     fail "dino doctor reports something missing"
-    echo "        ${doctor//$'\n'/$'\n'        }"
+    echo "        ${missing//$'\n'/$'\n'        }"
 else
-    echo "ok      dino doctor finds every tool and runner"
+    echo "ok      dino doctor finds every tool and runner ($arch)"
 fi
 
-# Expanded by the container's sh.
+# Expanded by the container's sh. Every target is built; those it can run are
+# run and tested.
+skip=
+[[ $arch == arm64 ]] && skip='win32|win64'
 # shellcheck disable=SC2016
 project='set -e
     dino init app >/dev/null
     cd app
     dino build --all
+    runnable=
     for target in $(dino targets | sed -n "s/^[* ] \([a-z0-9]*\)  .*/\1/p"); do
+        case "$target" in '"${skip:-none}"') continue ;; esac
         dino run "$target" --no-build
+        runnable="$runnable $target"
     done
-    dino test --all'
+    dino test $runnable'
 if log=$(docker run --rm "$image" sh -c "$project" 2>&1); then
     echo "ok      a new project builds, runs and passes its tests on every target"
 else
