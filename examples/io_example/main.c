@@ -5,11 +5,13 @@
 #include <string.h>
 #include <sys/socket.h>
 
+#include <dino/core/error.h>
 #include <dino/core/network.h>
 
 /* Waiting on sockets with plain poll(), on every target: the SDK provides it
    on Windows, over WSAPoll, which waits on sockets only. */
 
+// The port of the two-terminal mode; the self-test lets the system pick one.
 #define PORT        8081
 #define BUFFER_SIZE 1024
 #define TIMEOUT_MS  5000
@@ -25,6 +27,7 @@ static struct sockaddr_in loopback(int port)
     return addr;
 }
 
+// Port 0 lets the system pick a free port; bound_port() says which.
 static dino_socket_t listen_on(int port)
 {
     dino_socket_t sock = dino_socket_create(AF_INET, SOCK_STREAM, 0);
@@ -35,10 +38,21 @@ static dino_socket_t listen_on(int port)
     struct sockaddr_in addr = loopback(port);
     if (bind(sock, (struct sockaddr *)&addr, sizeof(addr)) != 0 || listen(sock, 5) != 0)
     {
+        printf("[Server] Can't listen on port %d: %s (FAILED)\n", port,
+            dino_error_message(dino_socket_last_error()));
         dino_socket_close(sock);
         return DINO_INVALID_SOCKET;
     }
     return sock;
+}
+
+static int bound_port(dino_socket_t sock)
+{
+    struct sockaddr_in addr;
+    socklen_t          len = sizeof(addr);
+    if (getsockname(sock, (struct sockaddr *)&addr, &len) != 0)
+        return -1;
+    return ntohs(addr.sin_port);
 }
 
 static dino_socket_t connect_to(int port)
@@ -88,12 +102,17 @@ static int run_server(void)
     dino_socket_t server = listen_on(PORT);
     if (server == DINO_INVALID_SOCKET)
         return 0;
-    printf("[Server] Listening on port %d (poll-based, %dms timeout)\n", PORT, TIMEOUT_MS);
+    printf("[Server] Listening on port %d; start the client now\n", PORT);
 
-    dino_socket_t client = wait_readable("Server", server, TIMEOUT_MS)
-        ? dino_socket_accept(server, NULL, NULL)
-        : DINO_INVALID_SOCKET;
-    int           ok     = client != DINO_INVALID_SOCKET && expect_msg("Server", client, "Ping!")
+    // However long the user takes to start the client: poll in rounds, and
+    // keep the time limit for the exchange itself.
+    struct pollfd pfd = { server, POLLIN, 0 };
+    int           ready;
+    while ((ready = poll(&pfd, 1, TIMEOUT_MS)) == 0)
+        printf("[Server] Still waiting for the client...\n");
+    dino_socket_t client
+        = ready == 1 ? dino_socket_accept(server, NULL, NULL) : DINO_INVALID_SOCKET;
+    int ok = client != DINO_INVALID_SOCKET && expect_msg("Server", client, "Ping!")
         && send_msg("Server", client, "Pong!");
 
     if (client != DINO_INVALID_SOCKET)
@@ -147,13 +166,19 @@ static int check_hangup(dino_socket_t sock, dino_socket_t *closing)
 // peer is reported.
 static int run_self_test(void)
 {
-    dino_socket_t server = listen_on(PORT);
-    dino_socket_t client = connect_to(PORT);
-    dino_socket_t peer   = DINO_INVALID_SOCKET;
-    int           ok     = 0;
+    dino_socket_t server = listen_on(0);
+    dino_socket_t client
+        = server == DINO_INVALID_SOCKET ? DINO_INVALID_SOCKET : connect_to(bound_port(server));
+    dino_socket_t peer = DINO_INVALID_SOCKET;
+    int           ok   = 0;
 
-    if (server == DINO_INVALID_SOCKET || client == DINO_INVALID_SOCKET)
+    if (server == DINO_INVALID_SOCKET)
         goto done;
+    if (client == DINO_INVALID_SOCKET)
+    {
+        printf("[Client] Can't connect: %s (FAILED)\n", dino_error_message(dino_error()));
+        goto done;
+    }
     if (!wait_readable("Server", server, TIMEOUT_MS))
         goto done;
     peer = dino_socket_accept(server, NULL, NULL);

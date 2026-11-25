@@ -1,14 +1,17 @@
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 
+#include <dino/core/error.h>
 #include <dino/core/network.h>
 
 /* Sockets are the POSIX calls on every target: getaddrinfo, bind, listen,
    recv. The SDK provides the headers on Windows, and dino_socket_* for the
    calls the platforms can't agree on: create, close, accept, connect, send. */
 
+// The port of the two-terminal mode; the self-test lets the system pick one.
 #define PORT        8080
 #define BUFFER_SIZE 1024
 
@@ -26,9 +29,11 @@ static struct addrinfo *resolve(const char *host, int port, int passive)
     return getaddrinfo(host, service, &hints, &res) == 0 ? res : NULL;
 }
 
+// On loopback only: nothing outside this machine needs to reach it. Port 0
+// lets the system pick a free port; bound_port() says which.
 static dino_socket_t listen_on(int port)
 {
-    struct addrinfo *addr = resolve(NULL, port, 1);
+    struct addrinfo *addr = resolve("localhost", port, 1);
     if (!addr)
         return DINO_INVALID_SOCKET;
     dino_socket_t sock = dino_socket_create(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
@@ -37,12 +42,23 @@ static dino_socket_t listen_on(int port)
         dino_socket_set_reuseaddr(sock, 1);
         if (bind(sock, addr->ai_addr, addr->ai_addrlen) != 0 || listen(sock, 5) != 0)
         {
+            printf("[Server] Can't listen on port %d: %s (FAILED)\n", port,
+                dino_error_message(dino_socket_last_error()));
             dino_socket_close(sock);
             sock = DINO_INVALID_SOCKET;
         }
     }
     freeaddrinfo(addr);
     return sock;
+}
+
+static int bound_port(dino_socket_t sock)
+{
+    struct sockaddr_storage addr;
+    socklen_t               len = sizeof(addr);
+    if (getsockname(sock, (struct sockaddr *)&addr, &len) != 0)
+        return -1;
+    return ntohs(((struct sockaddr_in *)&addr)->sin_port);
 }
 
 static dino_socket_t connect_to(int port)
@@ -112,10 +128,13 @@ static int run_client(void)
 // before accept(), so interleaving the steps needs no threads.
 static int run_self_test(void)
 {
-    dino_socket_t server = listen_on(PORT);
-    dino_socket_t client = connect_to(PORT);
-    dino_socket_t peer   = server != DINO_INVALID_SOCKET ? dino_socket_accept(server, NULL, NULL)
-                                                         : DINO_INVALID_SOCKET;
+    dino_socket_t server = listen_on(0);
+    dino_socket_t client
+        = server != DINO_INVALID_SOCKET ? connect_to(bound_port(server)) : DINO_INVALID_SOCKET;
+    if (server != DINO_INVALID_SOCKET && client == DINO_INVALID_SOCKET)
+        printf("[Client] Can't connect: %s (FAILED)\n", dino_error_message(dino_error()));
+    dino_socket_t peer = client != DINO_INVALID_SOCKET ? dino_socket_accept(server, NULL, NULL)
+                                                       : DINO_INVALID_SOCKET;
 
     int ok = server != DINO_INVALID_SOCKET && client != DINO_INVALID_SOCKET
         && peer != DINO_INVALID_SOCKET && send_msg("Client", client, "Ping!")
