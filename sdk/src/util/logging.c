@@ -15,8 +15,10 @@
 #define MS_PER_DAY 86400000ULL
 #define UNRESOLVED (-1)
 
-static atomic_int current_level = UNRESOLVED;
-static FILE      *output;
+static atomic_int          current_level = UNRESOLVED;
+static FILE               *output;
+static dino_log_callback_t callback;
+static void               *callback_userdata;
 
 // Held while a line is written and while the output is switched, so once
 // dino_log_set_output returns no thread still writes to the old stream, and
@@ -100,6 +102,14 @@ void dino_log_set_output(FILE *stream)
     drop_lock();
 }
 
+void dino_log_set_callback(dino_log_callback_t fn, void *userdata)
+{
+    take_lock();
+    callback          = fn;
+    callback_userdata = userdata;
+    drop_lock();
+}
+
 static const char *base_name(const char *path)
 {
     const char *base = path;
@@ -149,9 +159,17 @@ void dino_log_write(dino_log_level_t level, const char *file, int line, const ch
     }
 
     take_lock();
-    FILE *out = output ? output : stderr;
-    fwrite(buf, 1, len, out);
-    fflush(out);
+    if (callback)
+    {
+        buf[len - 1] = '\0'; // the newline
+        callback(level, buf, callback_userdata);
+    }
+    else
+    {
+        FILE *out = output ? output : stderr;
+        fwrite(buf, 1, len, out);
+        fflush(out);
+    }
     drop_lock();
     errno = saved_errno;
 }

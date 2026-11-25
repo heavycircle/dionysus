@@ -53,17 +53,34 @@ aren't written.
 
 ## Functions and macros
 
-|                                                           | Does                                                                                                                                             |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DINO_LOG_TRACE(fmt, ...)` ... `DINO_LOG_ERROR(fmt, ...)` | Log a line at that level, `printf`-style. The format must be a string literal.                                                                   |
-| `dino_log_set_level(level)` / `dino_log_get_level()`      | Set or read the lowest level written.                                                                                                            |
-| `dino_log_set_output(FILE *stream)`                       | Write lines to `stream` instead of stderr; `NULL` goes back to stderr. Once it returns, no thread writes to the old stream, so it may be closed. |
-| `dino_log_write(level, file, line, fmt, ...)`             | What the macros call, for wrappers of your own.                                                                                                  |
+|                                                           | Does                                                                                                                                                                            |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DINO_LOG_TRACE(fmt, ...)` ... `DINO_LOG_ERROR(fmt, ...)` | Log a line at that level, `printf`-style. The format must be a string literal.                                                                                                  |
+| `dino_log_set_level(level)` / `dino_log_get_level()`      | Set or read the lowest level written.                                                                                                                                           |
+| `dino_log_set_output(FILE *stream)`                       | Write lines to `stream` instead of stderr; `NULL` goes back to stderr. Once it returns, no thread writes to the old stream, so it may be closed.                                |
+| `dino_log_set_callback(fn, userdata)`                     | Hand each line to `fn(level, line, userdata)` instead of a stream, without its newline: for syslog, the Windows event log or a log of your own. `NULL` goes back to the stream. |
+| `dino_log_write(level, file, line, fmt, ...)`             | What the macros call, for wrappers of your own.                                                                                                                                 |
 
 - **One write per line:** each line is written with a single call, so lines from different threads
   never interleave.
 - **Flushed every line**, so nothing is lost if the program crashes: each line costs what an `fprintf` plus `fflush` does, a system call. Below the current level a line costs only the level check. For many lines a second, raise the level or give `dino_log_set_output` a stream of your own.
 - **Length:** lines over 1 KB are truncated.
 - **`errno`** is left as it was, so logging inside error handling doesn't disturb it.
+- **A callback** runs in the thread that logged, one line at a time under the lock that keeps lines whole: it must not log itself, and should be quick. Since 0.10 (`#if DINO_VERSION_AT_LEAST(0, 10, 0)`).
+
+```c
+#include <syslog.h>
+
+#include <dino/util/logging.h>
+
+static void to_syslog(dino_log_level_t level, const char *line, void *userdata)
+{
+    (void)userdata;
+    static const int priority[] = { LOG_DEBUG, LOG_DEBUG, LOG_INFO, LOG_WARNING, LOG_ERR };
+    syslog(priority[level], "%s", line);
+}
+
+// At startup: dino_log_set_callback(to_syslog, NULL);
+```
 
 See also: [`examples/logging_example`](../../examples/logging_example/main.c).
