@@ -1,7 +1,7 @@
 # Rebuilds the `nightly` prerelease from main: dino archives for every platform
 # (dino-nightly-<platform>, so the download URLs never change), SHA256SUMS,
 # notes for everything since the last release, and the ghcr.io/<repo>:nightly
-# image. Runs only when ci.yml passed for main's head, and scheduled runs skip
+# image for linux/amd64 and linux/arm64. Runs only when ci.yml passed for main's head, and scheduled runs skip
 # when that commit is already published. The image goes first and the release
 # notes, which name the commit, last: a run that fails part-way is redone the
 # next night, and the assets are replaced in place so their URLs never 404.
@@ -14,22 +14,26 @@ on:
 
 permissions:
   actions: read
-  contents: write
-  packages: write
+  contents: read
 
 concurrency: nightly
 
 jobs:
-  nightly:
+  # Whether to publish, and the version every job builds.
+  check:
     # Forks don't publish nightlies.
     if: github.repository == 'heavycircle/dionysus'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 15
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          persist-credentials: false
           ref: main
-          # `git describe` (the version) and git-cliff need history and tags.
+          # `git describe` (the version) needs history and tags.
           fetch-depth: 0
 
       - name: Skip if main is already published or its ci didn't pass
@@ -55,18 +59,92 @@ jobs:
       - uses: ./.github/actions/setup-zig
         if: steps.check.outputs.skip != 'true'
 
-      - name: Test and build
-        id: build
+      - name: Version
+        id: version
         if: steps.check.outputs.skip != 'true'
         run: |
-          zig build test
           zig build
-          version=$(zig-out/bin/dino version | cut -d' ' -f2)
-          echo "version=$version" >>"$GITHUB_OUTPUT"
-          DINO_DIST_LABEL=nightly scripts/dist.sh "$version" dist
+          echo "version=$(zig-out/bin/dino version | cut -d' ' -f2)" >>"$GITHUB_OUTPUT"
+
+  # Each architecture on a runner of its own, pushed by digest only; publish
+  # puts both under :nightly.
+  image:
+    needs: check
+    if: needs.check.outputs.skip != 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        include:
+          - { arch: amd64, os: ubuntu-24.04 }
+          - { arch: arm64, os: ubuntu-24.04-arm }
+    name: image-${{ matrix.arch }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          ref: main
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - name: Push the image
+        id: push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          build-args: |
+            DINO_VERSION=${{ needs.check.outputs.version }}
+            WARM_ZIG_CACHE=1
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: ${{ matrix.arch == 'arm64' && 'type=gha,scope=arm64' || 'type=gha' }}
+          outputs: type=image,name=ghcr.io/${{ github.repository }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: mkdir -p "$RUNNER_TEMP/digests" && touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  nightly:
+    needs: [check, image]
+    if: needs.check.outputs.skip != 'true' && needs.image.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: main
+          # `git describe` (the version) and git-cliff need history and tags.
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-zig
+
+      - name: Test and build
+        env:
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          zig build test
+          DINO_DIST_LABEL=nightly scripts/dist.sh "$VERSION" dist
 
       - name: Generate release notes
-        if: steps.check.outputs.skip != 'true'
         uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
         with:
           # The action downloads git-cliff itself: pinned, so notes format alike.
@@ -76,33 +154,33 @@ jobs:
         env:
           OUTPUT: ${{ runner.temp }}/changes.md
 
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        if: steps.check.outputs.skip != 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-        if: steps.check.outputs.skip != 'true'
-
-      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        if: steps.check.outputs.skip != 'true'
-        with:
-          context: .
-          push: true
-          tags: ghcr.io/${{ github.repository }}:nightly
-          build-args: |
-            DINO_VERSION=${{ steps.build.outputs.version }}
-            WARM_ZIG_CACHE=1
-          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
-          cache-from: type=gha
+      # One tag for both architectures: Docker pulls the one for its host.
+      - name: Tag both architectures
+        run: |
+          image=ghcr.io/${GITHUB_REPOSITORY,,}
+          sources=()
+          for digest in "$RUNNER_TEMP"/digests/*; do sources+=("$image@sha256:${digest##*/}"); done
+          ((${#sources[@]} == 2)) || { echo "::error::expected 2 image digests, got ${#sources[@]}"; exit 1; }
+          docker buildx imagetools create -t "$image:nightly" "${sources[@]}"
 
       - name: Publish the nightly prerelease
-        if: steps.check.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.build.outputs.version }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           {
             echo "Built from \`main\` at $(git rev-parse HEAD): \`dino version\` reports $VERSION."

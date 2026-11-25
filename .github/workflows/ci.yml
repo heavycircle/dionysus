@@ -100,14 +100,25 @@ jobs:
       - name: Oldest supported CMake
         run: zig build && tests/cmake-minimum.sh
 
+  # Named for the target and how its binaries run: natively, under qemu-user
+  # or under wine. The amd64 image runs everything; the arm64 image, on an arm
+  # runner, runs arm64 natively.
   targets:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        target: [arm, arm64, i386, ppc, win32, win64, x86_64]
-    name: targets (${{ matrix.target }})
+        include:
+          - { target: arm, runner: qemu, os: ubuntu-24.04 }
+          - { target: arm64, runner: qemu, os: ubuntu-24.04 }
+          - { target: arm64, runner: native, os: ubuntu-24.04-arm }
+          - { target: i386, runner: native, os: ubuntu-24.04 }
+          - { target: ppc, runner: qemu, os: ubuntu-24.04 }
+          - { target: win32, runner: wine, os: ubuntu-24.04 }
+          - { target: win64, runner: wine, os: ubuntu-24.04 }
+          - { target: x86_64, runner: native, os: ubuntu-24.04 }
+    name: targets-${{ matrix.target }}-${{ matrix.runner }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -121,10 +132,10 @@ jobs:
           context: .
           load: true
           tags: dionysus:ci
-          cache-from: type=gha
-          # One job writes the cache: seven writing the same layers race each
-          # other and fill the Actions cache.
-          cache-to: ${{ matrix.target == 'x86_64' && 'type=gha,mode=max' || '' }}
+          # One cache per architecture, and one job writes each: several
+          # writing the same layers race each other and fill the Actions cache.
+          cache-from: ${{ matrix.os == 'ubuntu-24.04-arm' && 'type=gha,scope=arm64' || 'type=gha' }}
+          cache-to: ${{ matrix.os == 'ubuntu-24.04-arm' && 'type=gha,scope=arm64,mode=max' || matrix.target == 'x86_64' && 'type=gha,mode=max' || '' }}
 
       - name: Build and run every example
         run: |
@@ -155,14 +166,15 @@ jobs:
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
             dionysus:ci /repo/tests/docs.sh "${{ matrix.target }}"
 
+      # valgrind runs natively in both images.
       - name: Portability warnings against glibc
-        if: matrix.target == 'x86_64'
+        if: matrix.runner == 'native' && matrix.target != 'i386'
         run: |
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
             dionysus:ci /repo/tests/warnings.sh --memcheck
 
       - name: SDK tests under valgrind
-        if: matrix.target == 'x86_64'
+        if: matrix.runner == 'native' && matrix.target != 'i386'
         run: |
           docker run --rm -e CFLAGS="-Wall -Wextra -Werror" -v "$PWD:/repo:ro" \
             dionysus:ci /repo/tests/sdk.sh --memcheck
@@ -192,8 +204,15 @@ jobs:
         run: docker run --rm -v "$PWD:/repo:ro" dionysus:ci /repo/tests/cli.sh
 
   docker:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, os: ubuntu-24.04 }
+          - { arch: arm64, os: ubuntu-24.04-arm }
+    name: docker-${{ matrix.arch }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -206,7 +225,7 @@ jobs:
           context: .
           load: true
           tags: dionysus:ci
-          cache-from: type=gha
+          cache-from: ${{ matrix.arch == 'arm64' && 'type=gha,scope=arm64' || 'type=gha' }}
 
       # The image's entrypoint: files in a mounted project keep their owner.
       - name: Docker image ownership
@@ -214,6 +233,7 @@ jobs:
 
   # Cross-compiled here, as users do it, and run by the `windows` jobs.
   windows-build:
+    name: windows-cross-build
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -258,7 +278,7 @@ jobs:
       fail-fast: false
       matrix:
         target: [win32, win64]
-    name: windows (${{ matrix.target }})
+    name: windows-${{ matrix.target }}-native
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
