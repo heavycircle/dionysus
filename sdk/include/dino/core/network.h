@@ -101,6 +101,31 @@ dino_socket_t dino_socket_accept(dino_socket_t sock, struct sockaddr *addr, sock
  */
 int dino_socket_connect(dino_socket_t sock, const struct sockaddr *addr, socklen_t len);
 
+#ifndef DINO_TIMEOUT
+/** Returned when the time ran out (as in dino/core/thread.h). */
+#define DINO_TIMEOUT 1
+#endif
+
+/**
+ * Connect, giving up after timeout_ms. A plain blocking connect waits as long
+ * as the system's own limit, about 21 seconds on Windows and two minutes or
+ * more on Linux. Since 0.10.
+ *
+ * The socket is blocking afterwards, whatever it was before: Windows can't say
+ * which mode a socket is in, so the mode can't be put back. After
+ * DINO_TIMEOUT or a failure, close the socket; the connection attempt may
+ * still be going on in it.
+ *
+ * @param  sock        Socket to connect.
+ * @param  addr        Address, from getaddrinfo or filled in by hand.
+ * @param  len         Its length.
+ * @param  timeout_ms  Milliseconds to wait; -1 for the system's own limit.
+ * @return 0 when connected, DINO_TIMEOUT when the time ran out, -1 on failure
+ *         (dino_error(): DINO_ECONNREFUSED, DINO_EUNREACH, ...).
+ */
+int dino_socket_connect_timeout(
+    dino_socket_t sock, const struct sockaddr *addr, socklen_t len, int timeout_ms);
+
 /**
  * Send, as send(2) does, without raising SIGPIPE on Linux: a closed peer
  * fails the call with DINO_EPIPE on every platform.
@@ -151,6 +176,24 @@ int dino_socket_recvfrom(dino_socket_t sock, void *buf, size_t len, int flags,
  * @return 0 on success, -1 on error.
  */
 int dino_socket_set_reuseaddr(dino_socket_t sock, int enable);
+
+/**
+ * Limit how long a blocking receive or send on sock waits: SO_RCVTIMEO and
+ * SO_SNDTIMEO, which take a struct timeval on POSIX and a DWORD on Windows.
+ * Since 0.10.
+ *
+ * A dino_socket_recvfrom or dino_socket_send that runs out of time fails with
+ * DINO_ETIMEDOUT on every platform (raw recv() says EAGAIN on Linux and
+ * WSAETIMEDOUT on Windows). Then close the socket: Windows leaves it in an
+ * undefined state, where data may have been lost or only partly sent.
+ *
+ * @param  sock     Socket to configure.
+ * @param  recv_ms  Milliseconds a receive may wait; 0 for no limit, -1 to
+ *                  leave it as it is.
+ * @param  send_ms  The same for a send.
+ * @return 0 on success, -1 on error.
+ */
+int dino_socket_set_timeouts(dino_socket_t sock, int recv_ms, int send_ms);
 
 /**
  * Set sock to non-blocking or blocking mode: fcntl(O_NONBLOCK) on Linux,

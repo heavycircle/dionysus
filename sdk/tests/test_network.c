@@ -376,6 +376,120 @@ UTEST(network, nonblocking_recv_and_back_to_blocking)
     close_pair(&p);
 }
 
+/* ---- timeouts ---- */
+
+static uint64_t ms_since(uint64_t start)
+{
+    return (dino_time_monotonic_ns() - start) / 1000000;
+}
+
+UTEST(network, connect_timeout_connects_and_leaves_the_socket_blocking)
+{
+    dino_socket_t server = bound_socket(AF_INET, SOCK_STREAM, "127.0.0.1", 1);
+    dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    ASSERT_NE(DINO_INVALID_SOCKET, server);
+    struct sockaddr_storage ss;
+    socklen_t               len = addr_of(&ss, "127.0.0.1", local_port(server));
+    ASSERT_EQ(0, dino_socket_connect_timeout(client, (struct sockaddr *)&ss, len, 5000));
+    dino_socket_t peer = dino_socket_accept(server, NULL, NULL);
+    ASSERT_NE(DINO_INVALID_SOCKET, peer);
+
+    // Blocking: a receive waits for the byte instead of failing at once.
+    dino__thread_t sender;
+    ASSERT_EQ(0, dino__thread_create(&sender, send_later, &peer));
+    char buf[1];
+    EXPECT_EQ(1, dino_socket_recvfrom(client, buf, 1, 0, NULL, NULL));
+    int result = -1;
+    dino__thread_join(sender, &result);
+    EXPECT_EQ(0, result);
+    dino_socket_close(peer);
+    dino_socket_close(client);
+    dino_socket_close(server);
+}
+
+UTEST(network, connect_timeout_reports_a_refused_connection)
+{
+    dino_socket_t holder;
+    int           port   = refusing_port(&holder);
+    dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    ASSERT_GT(port, 0);
+    struct sockaddr_storage ss;
+    socklen_t               len = addr_of(&ss, "127.0.0.1", port);
+    // Windows retries a refused connect for about a second before giving up.
+    EXPECT_EQ(-1, dino_socket_connect_timeout(client, (struct sockaddr *)&ss, len, 10000));
+    EXPECT_EQ(DINO_ECONNREFUSED, dino_error());
+    dino_socket_close(client);
+    dino_socket_close(holder);
+}
+
+// 192.0.2.1 is TEST-NET-1, reserved for documentation: routed nowhere, so a
+// connect to it hangs until the time runs out. On a host with no route at all
+// it fails at once instead, which says nothing about the timeout.
+UTEST(network, connect_timeout_gives_up_in_time)
+{
+    dino_socket_t           client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_storage ss;
+    socklen_t               len   = addr_of(&ss, "192.0.2.1", 9);
+    uint64_t                start = dino_time_monotonic_ns();
+    int rc = dino_socket_connect_timeout(client, (struct sockaddr *)&ss, len, 300);
+    dino_socket_close(client);
+    if (rc == -1 && dino_error() == DINO_EUNREACH)
+        UTEST_SKIP("no route to 192.0.2.1 from this host");
+    EXPECT_EQ(DINO_TIMEOUT, rc);
+    EXPECT_GE(ms_since(start), 300u);
+    EXPECT_LT(ms_since(start), 5000u);
+}
+
+UTEST(network, a_receive_that_runs_out_of_time_is_etimedout)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
+    ASSERT_EQ(0, dino_socket_set_timeouts(p.peer, 100, -1));
+    char     buf[1];
+    uint64_t start = dino_time_monotonic_ns();
+    EXPECT_EQ(-1, dino_socket_recvfrom(p.peer, buf, 1, 0, NULL, NULL));
+    EXPECT_EQ(DINO_ETIMEDOUT, dino_error());
+    EXPECT_GE(ms_since(start), 90u); // Windows rounds to its timer tick
+    close_pair(&p);
+
+    // A non-blocking socket with nothing to read is still DINO_EAGAIN.
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
+    ASSERT_EQ(0, dino_socket_set_timeouts(p.peer, 100, 100));
+    ASSERT_EQ(0, dino_socket_set_nonblocking(p.peer, 1));
+    EXPECT_EQ(-1, dino_socket_recvfrom(p.peer, buf, 1, 0, NULL, NULL));
+    EXPECT_EQ(DINO_EAGAIN, dino_error());
+    close_pair(&p);
+}
+
+// Nobody reads, so the buffers fill and a send waits, until its limit.
+UTEST(network, a_send_that_runs_out_of_time_is_etimedout)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1"));
+    ASSERT_EQ(0, dino_socket_set_timeouts(p.client, -1, 100));
+    static char chunk[65536];
+    int         rc = 0;
+    for (int i = 0; i < 2000 && rc >= 0; i++)
+        rc = dino_socket_send(p.client, chunk, sizeof(chunk), 0);
+    EXPECT_EQ(-1, rc);
+    EXPECT_EQ(DINO_ETIMEDOUT, dino_error());
+    close_pair(&p);
+}
+
+UTEST(network, timeouts_reject_invalid_arguments)
+{
+    dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    ASSERT_NE(DINO_INVALID_SOCKET, s);
+    EXPECT_EQ(0, dino_socket_set_timeouts(s, -1, -1));
+    EXPECT_EQ(0, dino_socket_set_timeouts(s, 0, 0));
+    EXPECT_EQ(-1, dino_socket_set_timeouts(s, -2, 0));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(-1, dino_socket_set_timeouts(DINO_INVALID_SOCKET, 10, 10));
+    EXPECT_EQ(-1, dino_socket_connect_timeout(s, NULL, 0, 100));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    dino_socket_close(s);
+}
+
 // A length with no buffer behind it is refused before the system sees it.
 UTEST(network, null_buffers_are_rejected)
 {
