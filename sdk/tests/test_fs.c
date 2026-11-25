@@ -98,6 +98,24 @@ UTEST(file_size, devices_and_pipes_fail)
     EXPECT_EQ(0u, size);
 }
 
+#ifdef _WIN32
+// The reason dino_file_size opens with full sharing and no access rights: a
+// file another handle holds without sharing still has a size.
+UTEST(file_size, a_file_held_open_without_sharing)
+{
+    const char *path = "dino_test_unshared.bin";
+    ASSERT_EQ(0, resize(path, 77));
+    HANDLE held = CreateFileW(
+        L"dino_test_unshared.bin", GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ASSERT_TRUE(held != INVALID_HANDLE_VALUE);
+    uint64_t size = 0;
+    EXPECT_EQ(0, dino_file_size(path, &size));
+    EXPECT_EQ(77u, size);
+    CloseHandle(held);
+    remove(path);
+}
+#endif
+
 UTEST(file_size, null_arguments_fail)
 {
     uint64_t size;

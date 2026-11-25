@@ -32,6 +32,7 @@ for exe in "$dir"/test_*.exe; do
     vars=()
     case $name in
     test_logging_env) vars=(DINO_LOG=WaRnInG) ;;
+    test_logging_env_off) vars=(DINO_LOG=OFF) ;;
     test_logging_env_unknown) vars=(DINO_LOG=warnings) ;;
     esac
 

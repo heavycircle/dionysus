@@ -360,6 +360,27 @@ UTEST(network, accepted_sockets_are_blocking)
     close_pair(&p);
 }
 
+// Non-blocking, a recv with nothing to read fails at once; switched back, it
+// waits again.
+UTEST(network, nonblocking_recv_and_back_to_blocking)
+{
+    struct pair p;
+    ASSERT_EQ(0, open_pair(&p, AF_INET, "127.0.0.1", PORT + 21));
+    char buf[1];
+    ASSERT_EQ(0, dino_socket_set_nonblocking(p.peer, 1));
+    EXPECT_EQ(-1, dino_socket_recvfrom(p.peer, buf, 1, 0, NULL, NULL));
+    EXPECT_EQ(DINO_EAGAIN, dino_error());
+
+    ASSERT_EQ(0, dino_socket_set_nonblocking(p.peer, 0));
+    dino__thread_t sender;
+    ASSERT_EQ(0, dino__thread_create(&sender, send_later, &p.client));
+    EXPECT_EQ(1, dino_socket_recvfrom(p.peer, buf, 1, 0, NULL, NULL));
+    int result = -1;
+    dino__thread_join(sender, &result);
+    EXPECT_EQ(0, result);
+    close_pair(&p);
+}
+
 // A length with no buffer behind it is refused before the system sees it.
 UTEST(network, null_buffers_are_rejected)
 {

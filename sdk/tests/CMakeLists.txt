@@ -12,7 +12,11 @@ foreach(test ${tests})
     dino_test(${name} ${test})
 endforeach()
 
+# The version CMake reports to projects, which dino/version.h must agree with.
+target_compile_definitions(test_version PRIVATE SDK_VERSION="${DINO_SDK_VERSION}")
+
 set_tests_properties(test_logging_env PROPERTIES ENVIRONMENT DINO_LOG=WaRnInG)
 set_tests_properties(test_logging_env_unknown PROPERTIES ENVIRONMENT DINO_LOG=warnings)
+set_tests_properties(test_logging_env_off PROPERTIES ENVIRONMENT DINO_LOG=OFF)
 # Its sleeping threads are still running, holding their handles, at exit.
 set_tests_properties(test_sleep_forever PROPERTIES ENVIRONMENT DINO_LEAK_CHECK=0)

@@ -10,11 +10,18 @@
 #include <string.h>
 #include <utest.h>
 
+#include <dino/core/error.h>
 #include <dino/core/event.h>
 #include <dino/core/network.h>
 #include <dino/core/pipe.h>
 #include <dino/core/process.h>
 #include <dino/core/time.h>
+
+#ifndef _WIN32
+#include <fcntl.h>
+#include <pthread.h>
+#include <signal.h>
+#endif
 
 #include "../src/core/thread_internal.h"
 #include "net_helpers.h"
@@ -1231,6 +1238,416 @@ UTEST(event, destroy_with_a_process_still_registered)
     dino_sleep_ms(100);
     EXPECT_EQ(0, dino_process_wait(p, NULL));
 }
+
+/* ---- connections ---- */
+
+static dino_socket_t listener_on(int port)
+{
+    dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    if (s == DINO_INVALID_SOCKET)
+        return s;
+    dino_socket_set_reuseaddr(s, 1);
+    if (bind_to(s, "127.0.0.1", port) != 0 || listen(s, 4) != 0)
+    {
+        dino_socket_close(s);
+        return DINO_INVALID_SOCKET;
+    }
+    return s;
+}
+
+UTEST(event, listener_is_readable_with_a_connection_to_accept)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_socket_t server = listener_on(PORT + 2);
+    ASSERT_NE(DINO_INVALID_SOCKET, server);
+    ASSERT_EQ(0, dino_event_add_socket(loop, server, DINO_EVENT_READ, &server));
+
+    dino_event_t out[4];
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 50));
+    dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    ASSERT_EQ(0, connect_to(client, "127.0.0.1", PORT + 2));
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 5000));
+    EXPECT_TRUE(out[0].events & DINO_EVENT_READ);
+    EXPECT_EQ((void *)&server, out[0].userdata);
+
+    dino_socket_t peer = dino_socket_accept(server, NULL, NULL);
+    EXPECT_NE(DINO_INVALID_SOCKET, peer);
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 50));
+
+    dino_event_del_socket(loop, server);
+    dino_socket_close(peer);
+    dino_socket_close(client);
+    dino_socket_close(server);
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, nonblocking_connect_reports_write_once_connected)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_socket_t server = listener_on(PORT + 3);
+    ASSERT_NE(DINO_INVALID_SOCKET, server);
+    dino_socket_t client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    ASSERT_EQ(0, dino_socket_set_nonblocking(client, 1));
+
+    int rc = connect_to(client, "127.0.0.1", PORT + 3);
+    ASSERT_TRUE(rc == 0 || dino_error() == DINO_EINPROGRESS);
+    ASSERT_EQ(0, dino_event_add_socket(loop, client, DINO_EVENT_WRITE, NULL));
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 5000));
+    EXPECT_TRUE(out[0].events & DINO_EVENT_WRITE);
+    EXPECT_FALSE(out[0].events & (DINO_EVENT_ERROR | DINO_EVENT_HANGUP));
+    EXPECT_EQ(0, dino_socket_error(client));
+
+    dino_event_del_socket(loop, client);
+    dino_socket_close(client);
+    dino_socket_close(server);
+    dino_event_loop_destroy(loop);
+}
+
+// A port that refuses connections: bound, so nobody else takes it, but not
+// listening.
+static dino_socket_t refusing_port(int *port)
+{
+    dino_socket_t s = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    if (s == DINO_INVALID_SOCKET || bind_to(s, "127.0.0.1", 0) != 0)
+        return DINO_INVALID_SOCKET;
+    *port = local_port(s);
+    return s;
+}
+
+static uint32_t refused_connect_events(uint32_t interest)
+{
+    int           port;
+    dino_socket_t bound = refusing_port(&port);
+    if (bound == DINO_INVALID_SOCKET)
+        return 0;
+    dino_event_loop_t loop   = dino_event_loop_create();
+    dino_socket_t     client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    uint32_t          events = 0;
+    dino_socket_set_nonblocking(client, 1);
+    if (connect_to(client, "127.0.0.1", port) != 0 && dino_error() == DINO_EINPROGRESS
+        && dino_event_add_socket(loop, client, interest, NULL) == 0)
+    {
+        dino_event_t out[4];
+        // Windows retries a refused connect for about a second before it gives up.
+        if (dino_event_wait(loop, out, 4, 10000) == 1
+            && dino_socket_error(client) == DINO_ECONNREFUSED)
+            events = out[0].events;
+        dino_event_del_socket(loop, client);
+    }
+    dino_socket_close(client);
+    dino_socket_close(bound);
+    dino_event_loop_destroy(loop);
+    return events;
+}
+
+// As docs/sdk/event.md describes it: ERROR, with WRITE if watched for it; on
+// Linux HANGUP too, and READ if watched for it.
+UTEST(event, refused_nonblocking_connect_reports_error)
+{
+    uint32_t write_only = refused_connect_events(DINO_EVENT_WRITE);
+    EXPECT_TRUE(write_only & DINO_EVENT_ERROR);
+    EXPECT_TRUE(write_only & DINO_EVENT_WRITE);
+    EXPECT_FALSE(write_only & DINO_EVENT_READ);
+
+    uint32_t read_only = refused_connect_events(DINO_EVENT_READ);
+    EXPECT_TRUE(read_only & DINO_EVENT_ERROR);
+    EXPECT_FALSE(read_only & DINO_EVENT_WRITE);
+#ifndef _WIN32
+    EXPECT_TRUE(read_only & DINO_EVENT_HANGUP);
+    EXPECT_TRUE(read_only & DINO_EVENT_READ);
+#endif
+
+    EXPECT_TRUE(refused_connect_events(0) & DINO_EVENT_ERROR);
+}
+
+/* ---- more timers and waits ---- */
+
+// More timers than the heap starts with, added out of order, some deleted
+// from the middle before they fire.
+UTEST(event, many_timers_fire_in_order_after_deletes)
+{
+    enum
+    {
+        N = 24
+    };
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    static int         ids[N];
+    dino_event_timer_t timers[N];
+    for (int i = 0; i < N; i++)
+    {
+        int order = (i * 7) % N; // every order once, shuffled
+        ids[i]    = order;
+        timers[i] = dino_event_add_timer(loop, (uint32_t)(10 + 5 * order), 0, &ids[i]);
+        ASSERT_NE(DINO_INVALID_EVENT_TIMER, timers[i]);
+    }
+    for (int i = 0; i < N; i += 3)
+        ASSERT_EQ(0, dino_event_del_timer(loop, timers[i]));
+
+    int          last = -1, fired = 0;
+    dino_event_t out[4];
+    uint64_t     start = dino_time_monotonic_ns();
+    while (fired < N - (N + 2) / 3 && elapsed_ms(start) < 10000)
+    {
+        int n = dino_event_wait(loop, out, 4, 1000);
+        ASSERT_GE(n, 0);
+        for (int j = 0; j < n; j++)
+        {
+            int order = *(int *)out[j].userdata;
+            EXPECT_GT(order, last);
+            EXPECT_NE(0, (int)(((int *)out[j].userdata - ids) % 3));
+            last = order;
+            fired++;
+        }
+    }
+    EXPECT_EQ(N - (N + 2) / 3, fired);
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 50));
+    for (int i = 0; i < N; i++)
+        if (i % 3)
+            EXPECT_EQ(0, dino_event_del_timer(loop, timers[i]));
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, timers_deleted_right_after_they_fire_stay_quiet)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_event_timer_t once   = dino_event_add_timer(loop, 0, 0, NULL);
+    dino_event_timer_t repeat = dino_event_add_timer(loop, 0, 20, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, once);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, repeat);
+
+    dino_event_t out[4];
+    ASSERT_EQ(2, dino_event_wait(loop, out, 4, 1000));
+    EXPECT_EQ(0, dino_event_del_timer(loop, once));
+    EXPECT_EQ(0, dino_event_del_timer(loop, repeat));
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 100));
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, repeating_timer_that_falls_behind_fires_once)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_event_timer_t timer = dino_event_add_timer(loop, 100, 100, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
+
+    dino_sleep_ms(550); // five periods missed
+    dino_event_t out[8];
+    EXPECT_EQ(1, dino_event_wait(loop, out, 8, 0));
+    EXPECT_EQ(0, dino_event_wait(loop, out, 8, 0));
+    // And it keeps going.
+    EXPECT_EQ(1, dino_event_wait(loop, out, 8, 5000));
+    EXPECT_EQ(0, dino_event_del_timer(loop, timer));
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, wait_runs_out_no_earlier_than_the_timeout)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_event_t out[4];
+    for (int i = 0; i < 20; i++)
+    {
+        uint64_t start = dino_time_monotonic_ns();
+        ASSERT_EQ(0, dino_event_wait(loop, out, 4, 5));
+        ASSERT_GE(dino_time_monotonic_ns() - start, 5u * 1000000u);
+    }
+    dino_event_loop_destroy(loop);
+}
+
+UTEST(event, waiting_forever_returns_for_a_wake)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino__thread_t t;
+    ASSERT_EQ(0, dino__thread_create(&t, wake_later, &loop));
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, -1));
+    EXPECT_EQ((uint32_t)DINO_EVENT_WAKE, out[0].events);
+    int result = -1;
+    EXPECT_EQ(0, dino__thread_join(t, &result));
+    EXPECT_EQ(0, result);
+    dino_event_loop_destroy(loop);
+}
+
+static int wake_many_times(void *arg)
+{
+    for (int i = 0; i < 200; i++)
+        if (dino_event_wake(*(dino_event_loop_t *)arg) != 0)
+            return -1;
+    return 0;
+}
+
+UTEST(event, wakes_from_many_threads_merge)
+{
+    enum
+    {
+        THREADS = 8
+    };
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino__thread_t t[THREADS];
+    for (int i = 0; i < THREADS; i++)
+        ASSERT_EQ(0, dino__thread_create(&t[i], wake_many_times, &loop));
+
+    dino_event_t out[4];
+    ASSERT_EQ(1, dino_event_wait(loop, out, 4, 5000));
+    EXPECT_EQ((uint32_t)DINO_EVENT_WAKE, out[0].events);
+    for (int i = 0; i < THREADS; i++)
+    {
+        int result = -1;
+        EXPECT_EQ(0, dino__thread_join(t[i], &result));
+        EXPECT_EQ(0, result);
+    }
+    // Whatever arrived after that report is one more wake at most.
+    int n = dino_event_wait(loop, out, 4, 0);
+    EXPECT_TRUE(n == 0 || (n == 1 && out[0].events == (uint32_t)DINO_EVENT_WAKE));
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 50));
+    dino_event_loop_destroy(loop);
+}
+
+// More ready items than the loop collects in one batch, and an out array
+// bigger than that batch.
+UTEST(event, out_array_larger_than_the_internal_batch)
+{
+    enum
+    {
+        N = 150
+    };
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    static dino_socket_t socks[N];
+    static int           seen[N];
+    for (int i = 0; i < N; i++)
+    {
+        socks[i] = dino_socket_create(AF_INET, SOCK_DGRAM, 0);
+        ASSERT_NE(DINO_INVALID_SOCKET, socks[i]);
+        ASSERT_EQ(0,
+            dino_event_add_socket(
+                loop, socks[i], DINO_EVENT_WRITE | DINO_EVENT_ONESHOT, &socks[i]));
+    }
+    static dino_event_t out[N + 10];
+    int                 total = 0;
+    for (int round = 0; round < 20 && total < N; round++)
+    {
+        int n = dino_event_wait(loop, out, N + 10, 1000);
+        ASSERT_GE(n, 1);
+        ASSERT_LE(n, N);
+        for (int i = 0; i < n; i++)
+        {
+            int idx = (int)((dino_socket_t *)out[i].userdata - socks);
+            ASSERT_TRUE(idx >= 0 && idx < N);
+            EXPECT_EQ(0, seen[idx]++);
+            total++;
+        }
+    }
+    EXPECT_EQ(N, total);
+    for (int i = 0; i < N; i++)
+    {
+        dino_event_del_socket(loop, socks[i]);
+        dino_socket_close(socks[i]);
+    }
+    dino_event_loop_destroy(loop);
+}
+
+// The pipe outlives the loop and still works.
+UTEST(event, destroy_with_a_pipe_still_registered)
+{
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    ASSERT_EQ(0, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+    dino_event_t out[4];
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 0));
+    dino_event_loop_destroy(loop);
+
+    EXPECT_EQ(2, dino_pipe_write(w, "ok", 2));
+    char buf[4] = { 0 };
+    EXPECT_EQ(2, dino_pipe_read(r, buf, sizeof(buf)));
+    EXPECT_STREQ("ok", buf);
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+}
+
+#ifndef _WIN32
+static void ignore_signal(int sig)
+{
+    (void)sig;
+}
+
+static int signal_later(void *arg)
+{
+    dino_sleep_ms(30);
+    return pthread_kill(*(pthread_t *)arg, SIGUSR1);
+}
+
+// Interrupted by a signal, a wait goes on for the rest of its time.
+UTEST(event, a_signal_doesnt_cut_a_wait_short)
+{
+    struct sigaction sa = { 0 }, old;
+    sa.sa_handler       = ignore_signal; // no SA_RESTART: epoll_wait fails with EINTR
+    sigemptyset(&sa.sa_mask);
+    ASSERT_EQ(0, sigaction(SIGUSR1, &sa, &old));
+
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    pthread_t      self = pthread_self();
+    dino__thread_t t;
+    ASSERT_EQ(0, dino__thread_create(&t, signal_later, &self));
+    dino_event_t out[4];
+    uint64_t     start = dino_time_monotonic_ns();
+    EXPECT_EQ(0, dino_event_wait(loop, out, 4, 200));
+    EXPECT_GE(elapsed_ms(start), 200u);
+
+    int result = -1;
+    EXPECT_EQ(0, dino__thread_join(t, &result));
+    EXPECT_EQ(0, result);
+    dino_event_loop_destroy(loop);
+    sigaction(SIGUSR1, &old, NULL);
+}
+
+// Every descriptor a loop opens is close-on-exec.
+UTEST(event, loop_descriptors_are_not_inherited)
+{
+    enum
+    {
+        MAX_FD = 256
+    };
+    static char before[MAX_FD];
+    for (int fd = 0; fd < MAX_FD; fd++)
+        before[fd] = fcntl(fd, F_GETFD) >= 0;
+
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    dino_event_timer_t timer = dino_event_add_timer(loop, 1000, 0, NULL);
+    ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
+    dino_process_t    p;
+    const char *const argv[] = SHELL("exit 0");
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    ASSERT_EQ(0, dino_event_add_process(loop, p, NULL));
+
+    int added = 0;
+    for (int fd = 0; fd < MAX_FD; fd++)
+    {
+        int flags = fcntl(fd, F_GETFD);
+        if (flags < 0 || before[fd])
+            continue;
+        added++;
+        EXPECT_TRUE(flags & FD_CLOEXEC);
+    }
+    EXPECT_GE(added, 1);
+
+    dino_event_del_process(loop, p);
+    dino_process_wait(p, NULL);
+    dino_event_del_timer(loop, timer);
+    dino_event_loop_destroy(loop);
+}
+#endif
 
 UTEST_STATE();
 
