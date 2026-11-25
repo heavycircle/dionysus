@@ -44,7 +44,7 @@ int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end);
  * Create a pipe with an end, or both, meant for child processes' stdio, to
  * pass with DINO_STDIO_PIPE_END (dino/core/process.h): one child's output into
  * another's input (a | b, both flags), or a pipe whose other end the parent
- * keeps. Since 0.10.
+ * keeps. Since 1.0.
  *
  * A child's C runtime does blocking I/O on its standard handles, which Windows
  * doesn't allow on the overlapped handles dino_pipe_create makes; a marked end

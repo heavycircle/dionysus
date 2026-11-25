@@ -3,6 +3,30 @@
 What changed in the SDK between versions, and how to update code that uses it. The compiler finds
 almost everything here: a removed or renamed name fails to build, and the error points at the line.
 
+## To 1.0
+
+1.0 adds what the 1.0 audit found missing and keeps everything 0.9 had. Two changes can need a code update; the rest is new.
+
+### Changes
+
+- **`mkdir` takes two arguments on Windows too.** The SDK defines POSIX's `mkdir(path, mode)` there (see [fs](fs.md#creating-directories)), as a macro, so a Windows-only call with MinGW's one argument, `mkdir(path)`, no longer compiles: pass a mode (`mkdir(path, 0755)`, ignored on Windows), or build with `DINO_NO_LIBC_SHIMS` to keep MinGW's.
+- **A timed-out receive or send is `DINO_ETIMEDOUT` on Linux too.** After `SO_RCVTIMEO` or `SO_SNDTIMEO` ran out, `dino_socket_recvfrom` and `dino_socket_send` on a blocking socket reported `DINO_EAGAIN` on Linux and `DINO_ETIMEDOUT` on Windows; both now say `DINO_ETIMEDOUT`. A non-blocking socket with nothing to do is still `DINO_EAGAIN`.
+
+`dino_process_spawn_opts_t` has three new fields (`stdin_pipe`, `stdout_pipe`, `stderr_pipe`); code that zero-initializes it, as the header asks, needs nothing.
+
+### New
+
+| Area       | Added                                                                                                                                                                                                              |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Version    | `DINO_VERSION_NUMBER` and `DINO_VERSION_AT_LEAST(major, minor, patch)` in `dino/version.h`, to test for what later versions add ([SDK overview](README.md))                                                        |
+| Logging    | `dino_log_set_callback`: each line to a function instead of a stream, for syslog or the event log ([logging](logging.md))                                                                                          |
+| Event loop | `dino_event_reset_timer`: move a timer without deleting it, for idle timeouts ([event loop](event.md))                                                                                                             |
+| Sockets    | `dino_socket_connect_timeout`, and `dino_socket_set_timeouts` for receive and send ([network](network.md))                                                                                                         |
+| Files      | `mkdir(path, mode)` on Windows; `dino_mkdir_p` in the new `dino/util/fs.h`; `dino_path_temp` and `dino_path_executable` ([fs](fs.md))                                                                              |
+| Processes  | `dino_pipe_create_ex` with `DINO_STDIO_PIPE_END` for an existing pipe as a child's stdio (`a \| b`), `DINO_STDIO_STDOUT` for `2>&1`, `dino_process_detach`, and `dino_process_run_shell` ([processes](process.md)) |
+
+Outside the SDK: `dino test --memcheck` runs on aarch64 hosts too, and the Docker image is built for `linux/arm64` as well as `linux/amd64` (without wine on arm64; see [Docker](../guide/docker.md)).
+
 ## To 0.9
 
 0.9 brings the SDK back to plain C: a `dino_*` call stays only where the platforms can't be made to agree behind the standard name, where there is no standard name, or where it is measurably smaller or faster.

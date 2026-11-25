@@ -62,7 +62,7 @@ if (rename("conf.tmp", "conf") != 0)
 
 ## Creating directories
 
-Use POSIX's `mkdir(path, mode)` from `<sys/stat.h>`. On Windows MinGW's `mkdir` takes the path alone, since Windows has no permission bits, so `mkdir(path, 0755)` wouldn't compile there: the SDK defines the two-argument form, which takes UTF-8 paths, ignores `mode`, and sets `errno` as Linux would (`EEXIST`, `ENOENT`, ...). It's a macro over the SDK's function, so taking `mkdir`'s address (instead of calling it) still gets MinGW's one-argument version. Since 0.10; `DINO_NO_LIBC_SHIMS` turns it off with the other shims.
+Use POSIX's `mkdir(path, mode)` from `<sys/stat.h>`. On Windows MinGW's `mkdir` takes the path alone, since Windows has no permission bits, so `mkdir(path, 0755)` wouldn't compile there: the SDK defines the two-argument form, which takes UTF-8 paths, ignores `mode`, and sets `errno` as Linux would (`EEXIST`, `ENOENT`, ...). It's a macro over the SDK's function, so taking `mkdir`'s address (instead of calling it) still gets MinGW's one-argument version. Since 1.0; `DINO_NO_LIBC_SHIMS` turns it off with the other shims.
 
 To create every missing directory on the way, as `mkdir -p` does, use `dino_mkdir_p` from `dino/util/fs.h` (`dino_util`). A directory that already exists is fine, and on Windows it takes either separator and a drive (`C:\`) or share (`\\server\share\`) at the start.
 
@@ -75,9 +75,9 @@ if (dino_mkdir_p("out/logs/2026", 0755) != 0)
     fprintf(stderr, "can't create out/logs/2026: %s\n", dino_error_message(dino_error()));
 ```
 
-| Function                                                             | Returns                                                                                                      |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `int dino_mkdir_p(const char *path, mode_t mode)` (`dino/util/fs.h`) | `0`, or `-1` with `dino_error()`: `DINO_EEXIST` when a file that isn't a directory is in the way. Since 0.10 |
+| Function                                                             | Returns                                                                                                     |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `int dino_mkdir_p(const char *path, mode_t mode)` (`dino/util/fs.h`) | `0`, or `-1` with `dino_error()`: `DINO_EEXIST` when a file that isn't a directory is in the way. Since 1.0 |
 
 ## The temporary directory and the program's own path
 
@@ -90,10 +90,10 @@ if (len < 0 || (size_t)len >= sizeof(tmp))
     return 1; // failed, or longer than the buffer
 ```
 
-| Function                                           | Returns                                                                                                              |
-| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `int dino_path_temp(char *buf, size_t size)`       | The temporary directory, UTF-8, without a trailing separator; its length, or `-1`. Since 0.10                        |
-| `int dino_path_executable(char *buf, size_t size)` | The running program's full path, UTF-8 (under qemu-user, the program's, not qemu's); its length, or `-1`. Since 0.10 |
+| Function                                           | Returns                                                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `int dino_path_temp(char *buf, size_t size)`       | The temporary directory, UTF-8, without a trailing separator; its length, or `-1`. Since 1.0                        |
+| `int dino_path_executable(char *buf, size_t size)` | The running program's full path, UTF-8 (under qemu-user, the program's, not qemu's); its length, or `-1`. Since 1.0 |
 
 Create files in the temporary directory with `mkstemp`, or a directory with `mkdtemp`, so two programs never pick the same name.
 

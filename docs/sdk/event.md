@@ -136,20 +136,20 @@ and a client each with their own loop, holding 1000 connections at once.
 
 ## Functions
 
-| Function                                                     | Does                                                                                                             |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `dino_event_loop_create()` / `dino_event_loop_destroy(loop)` | Create a loop, or destroy it. Destroying drops what's registered without closing it.                             |
-| `dino_event_add_socket(loop, sock, events, ud)`              | Watch a socket for `DINO_EVENT_READ` and/or `DINO_EVENT_WRITE`.                                                  |
-| `dino_event_mod_socket(loop, sock, events, ud)`              | Change what it's watched for and its userdata. Rearms a fired `ONESHOT`.                                         |
-| `dino_event_del_socket(loop, sock)`                          | Stop watching it. Do this before closing the socket.                                                             |
-| `dino_event_add_pipe`, `_mod_pipe`, `_del_pipe`              | The same for the read end of a [pipe](pipe.md), `READ` only.                                                     |
-| `dino_event_add_process(loop, process, ud)`                  | Report `DINO_EVENT_EXIT` once when a [process](process.md) ends.                                                 |
-| `dino_event_del_process(loop, process)`                      | Stop watching it. Must come before `dino_process_wait`.                                                          |
-| `dino_event_add_timer(loop, delay_ms, interval_ms, ud)`      | A timer firing after `delay_ms`, then every `interval_ms` (`0`: once). Returns a handle.                         |
-| `dino_event_reset_timer(loop, timer, delay_ms, interval_ms)` | Move a timer's next firing to `delay_ms` from now, with a new interval; arms a fired one-shot again. Since 0.10. |
-| `dino_event_del_timer(loop, timer)`                          | Delete a timer, fired or not. Every timer must be deleted (or the loop destroyed).                               |
-| `dino_event_wait(loop, out, max, timeout_ms)`                | Wait. Returns how many items it wrote to `out`, `0` on timeout, `-1` on error.                                   |
-| `dino_event_wake(loop)`                                      | Make a wait return a `DINO_EVENT_WAKE` item, from any thread.                                                    |
+| Function                                                     | Does                                                                                                            |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `dino_event_loop_create()` / `dino_event_loop_destroy(loop)` | Create a loop, or destroy it. Destroying drops what's registered without closing it.                            |
+| `dino_event_add_socket(loop, sock, events, ud)`              | Watch a socket for `DINO_EVENT_READ` and/or `DINO_EVENT_WRITE`.                                                 |
+| `dino_event_mod_socket(loop, sock, events, ud)`              | Change what it's watched for and its userdata. Rearms a fired `ONESHOT`.                                        |
+| `dino_event_del_socket(loop, sock)`                          | Stop watching it. Do this before closing the socket.                                                            |
+| `dino_event_add_pipe`, `_mod_pipe`, `_del_pipe`              | The same for the read end of a [pipe](pipe.md), `READ` only.                                                    |
+| `dino_event_add_process(loop, process, ud)`                  | Report `DINO_EVENT_EXIT` once when a [process](process.md) ends.                                                |
+| `dino_event_del_process(loop, process)`                      | Stop watching it. Must come before `dino_process_wait`.                                                         |
+| `dino_event_add_timer(loop, delay_ms, interval_ms, ud)`      | A timer firing after `delay_ms`, then every `interval_ms` (`0`: once). Returns a handle.                        |
+| `dino_event_reset_timer(loop, timer, delay_ms, interval_ms)` | Move a timer's next firing to `delay_ms` from now, with a new interval; arms a fired one-shot again. Since 1.0. |
+| `dino_event_del_timer(loop, timer)`                          | Delete a timer, fired or not. Every timer must be deleted (or the loop destroyed).                              |
+| `dino_event_wait(loop, out, max, timeout_ms)`                | Wait. Returns how many items it wrote to `out`, `0` on timeout, `-1` on error.                                  |
+| `dino_event_wake(loop)`                                      | Make a wait return a `DINO_EVENT_WAKE` item, from any thread.                                                   |
 
 The other functions return `0` on success and `-1` on error (adding an item twice, or deleting one that isn't there, is an error). The exceptions are `dino_event_loop_create` and `dino_event_add_timer`, which return a handle or its invalid value, `dino_event_wait`, which returns a count, and `dino_event_loop_destroy`, which returns nothing.
 

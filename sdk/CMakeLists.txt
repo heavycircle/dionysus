@@ -6,7 +6,7 @@ if(TARGET dino_core)
     return()
 endif()
 
-project(DinoSDK VERSION 0.10.0 LANGUAGES C)
+project(DinoSDK VERSION 1.0.0 LANGUAGES C)
 # Dropped only on the release commit; must match build.zig.zon (CONTRIBUTING.md#versioning).
 set(DINO_VERSION_PRERELEASE "-dev")
 
