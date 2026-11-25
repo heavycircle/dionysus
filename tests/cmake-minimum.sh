@@ -14,6 +14,11 @@ trap 'rm -rf "$work"' EXIT
 
 uv venv -q "$work/cmake"
 uv pip install -q -p "$work/cmake" "cmake==$version"
+# This checkout's dino, never another one on PATH.
+[[ -x $repo/zig-out/bin/dino ]] || {
+    echo "tests/cmake-minimum.sh: no zig-out/bin/dino; run \`zig build\` first" >&2
+    exit 1
+}
 export PATH=$work/cmake/bin:$repo/zig-out/bin:$PATH
 export DINO_SDK_PATH=$repo/sdk DINO_HOME=$work/home
 
