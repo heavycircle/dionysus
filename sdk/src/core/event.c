@@ -148,6 +148,42 @@ dino_event_timer_t dino_event_add_timer(
     return (dino_event_timer_t)tm;
 }
 
+int dino_event_reset_timer(
+    dino_event_loop_t loop, dino_event_timer_t timer, uint32_t delay_ms, uint32_t interval_ms)
+{
+    if (loop == DINO_INVALID_EVENT_LOOP || timer == DINO_INVALID_EVENT_TIMER)
+        return dino__fail(DINO_EINVAL);
+    struct dino__event_timers *t  = (struct dino__event_timers *)loop;
+    struct dino__event_timer  *tm = (struct dino__event_timer *)timer;
+    if (tm->owner != t)
+        return dino__fail(DINO_EINVAL);
+
+    dino__mutex_lock(t->lock);
+    tm->deadline_ns = dino_time_monotonic_ns() + (uint64_t)delay_ms * 1000000;
+    tm->interval_ns = (uint64_t)interval_ms * 1000000;
+    int ok          = 1;
+    if (tm->index == NOT_IN_HEAP)
+    {
+        ok = push(t, tm) == 0; // a fired one-shot, armed again
+    }
+    else
+    {
+        // Either way, earlier or later: one of the two sifts moves it.
+        size_t i = tm->index;
+        sift_up(t, i);
+        sift_down(t, tm->index);
+    }
+    // As for an add: a waiter computed its timeout from the old earliest.
+    int interrupt = ok && tm->index == 0 && atomic_load(&t->waiting) > 0;
+    dino__mutex_unlock(t->lock);
+
+    if (!ok)
+        return dino__fail(DINO_ENOMEM);
+    if (interrupt)
+        dino__event_interrupt(loop);
+    return 0;
+}
+
 int dino_event_del_timer(dino_event_loop_t loop, dino_event_timer_t timer)
 {
     if (loop == DINO_INVALID_EVENT_LOOP || timer == DINO_INVALID_EVENT_TIMER)

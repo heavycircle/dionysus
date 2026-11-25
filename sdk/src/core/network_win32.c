@@ -122,6 +122,69 @@ int dino_socket_connect(dino_socket_t sock, const struct sockaddr *addr, socklen
     return dino__fail_os();
 }
 
+int dino_socket_connect_timeout(
+    dino_socket_t sock, const struct sockaddr *addr, socklen_t len, int timeout_ms)
+{
+    if (!addr || timeout_ms < -1)
+        return dino__fail(DINO_EINVAL);
+    if (dino_socket_set_nonblocking(sock, 1) != 0)
+        return -1;
+    int rc = 0;
+    if (connect((SOCKET)sock, addr, len) == SOCKET_ERROR)
+    {
+        if (WSAGetLastError() != WSAEWOULDBLOCK)
+        {
+            rc = dino__fail_os();
+        }
+        else
+        {
+            // select, not WSAPoll: before Windows 10 2004 WSAPoll never
+            // reports a connect that failed. A failure lands in the except set.
+            fd_set writable, failed;
+            FD_ZERO(&writable);
+            FD_ZERO(&failed);
+            FD_SET((SOCKET)sock, &writable);
+            FD_SET((SOCKET)sock, &failed);
+            struct timeval tv    = { timeout_ms / 1000, (long)(timeout_ms % 1000) * 1000 };
+            int            ready = select(0, NULL, &writable, &failed, timeout_ms < 0 ? NULL : &tv);
+            if (ready == SOCKET_ERROR)
+                rc = dino__fail_os();
+            else if (ready == 0)
+                rc = DINO_TIMEOUT;
+            else
+            {
+                int code = dino_socket_error(sock);
+                rc       = code ? dino__fail(code) : 0;
+            }
+        }
+    }
+    // Blocking again, keeping the reason a failure was reported.
+    int code = dino_error();
+    dino_socket_set_nonblocking(sock, 0);
+    dino__error_set(code);
+    return rc;
+}
+
+// A DWORD of milliseconds, where POSIX takes a struct timeval; 0 is no limit
+// on both.
+int dino_socket_set_timeouts(dino_socket_t sock, int recv_ms, int send_ms)
+{
+    if (recv_ms < -1 || send_ms < -1)
+        return dino__fail(DINO_EINVAL);
+    const int options[2] = { SO_RCVTIMEO, SO_SNDTIMEO };
+    const int values[2]  = { recv_ms, send_ms };
+    for (int i = 0; i < 2; i++)
+    {
+        if (values[i] < 0)
+            continue;
+        DWORD ms = (DWORD)values[i];
+        if (setsockopt((SOCKET)sock, SOL_SOCKET, options[i], (const char *)&ms, sizeof(ms))
+            == SOCKET_ERROR)
+            return dino__fail_os();
+    }
+    return 0;
+}
+
 int dino_socket_send(dino_socket_t sock, const void *buf, size_t len, int flags)
 {
     if (len > 0 && !buf)

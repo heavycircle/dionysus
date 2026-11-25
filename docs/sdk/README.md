@@ -31,6 +31,16 @@ Also: [dino vs libc](libc.md), when the C library is already portable,
 `dino/version.h` has the SDK's version as the numbers `DINO_VERSION_MAJOR`, `DINO_VERSION_MINOR`
 and `DINO_VERSION_PATCH`, and the string `DINO_VERSION` (for example `"0.9.0"`, or `"0.10.0-dev"` between releases). The suffix alone, empty in a release, is `DINO_VERSION_PRERELEASE`.
 
+To use something only where it exists, test the version in `#if`: `DINO_VERSION_AT_LEAST(major, minor, patch)`, or compare `DINO_VERSION_NUMBER` (`MAJOR * 10000 + MINOR * 100 + PATCH`) yourself. A `-dev` build counts as the version it leads to, so code built against `main` can use what is being added. Each page says from which version a function exists when it's newer than 0.9.
+
+```c
+#include <dino/version.h>
+
+#if DINO_VERSION_AT_LEAST(0, 10, 0)
+    dino_log_set_callback(to_syslog, NULL);
+#endif
+```
+
 ## Conventions
 
 These hold across every module, so each page only mentions exceptions.

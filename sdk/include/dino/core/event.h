@@ -218,6 +218,21 @@ dino_event_timer_t dino_event_add_timer(
     dino_event_loop_t loop, uint32_t delay_ms, uint32_t interval_ms, void *userdata);
 
 /**
+ * Move a timer's next firing to delay_ms from now, then every interval_ms (0:
+ * once). For an idle timeout, push it back on every packet: it keeps its
+ * handle and allocates nothing. A one-shot timer that already fired is armed
+ * again, and a firing that was due but not yet reported is dropped. Since 0.10.
+ *
+ * @param  loop         Loop the timer was added to.
+ * @param  timer        Timer from dino_event_add_timer, not yet deleted.
+ * @param  delay_ms     Milliseconds until the next firing; 0 fires at the next wait.
+ * @param  interval_ms  Milliseconds between later firings; 0 fires once.
+ * @return 0 on success, -1 on error, including a timer of another loop.
+ */
+int dino_event_reset_timer(
+    dino_event_loop_t loop, dino_event_timer_t timer, uint32_t delay_ms, uint32_t interval_ms);
+
+/**
  * Delete a timer, fired or not. No wait that starts after this returns
  * reports it, as for dino_event_del_socket.
  *
