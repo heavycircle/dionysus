@@ -1,5 +1,7 @@
 // Before utest.h, which declares QueryPerformanceCounter itself on Windows.
 #ifdef _WIN32
+#include <winsock2.h>
+
 #include <windows.h>
 #else
 #include <fcntl.h>
@@ -11,6 +13,7 @@
 #include <string.h>
 #include <utest.h>
 
+#include <dino/core/event.h>
 #include <dino/core/pipe.h>
 #include <dino/core/time.h>
 
@@ -377,6 +380,48 @@ UTEST(pipe, invalid_arguments_are_rejected)
     EXPECT_EQ(-1, dino_pipe_write(w, NULL, 4));
     EXPECT_EQ(0, dino_pipe_write(w, buf, 0));
     EXPECT_EQ(0, dino_pipe_read(r, buf, 0));
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+}
+
+/* ---- pipes for children ---- */
+
+// A marked end is a blocking one on Windows, so it can't be waited for or put
+// in a loop there, and the same holds here, on every platform.
+UTEST(pipe, an_end_marked_for_a_child_reads_and_writes_but_isnt_waited_for)
+{
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create_ex(&r, &w, DINO_PIPE_CHILD_READS | DINO_PIPE_CHILD_WRITES));
+    EXPECT_EQ(2, dino_pipe_write(w, "ok", 2));
+    char buf[4] = { 0 };
+    EXPECT_EQ(2, dino_pipe_read(r, buf, sizeof(buf)));
+    EXPECT_STREQ("ok", buf);
+    EXPECT_EQ(-1, dino_pipe_wait(r, 0));
+
+    dino_event_loop_t loop = dino_event_loop_create();
+    ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
+    EXPECT_EQ(-1, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+    dino_event_loop_destroy(loop);
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+
+    // Only the marked end changes: the parent's end can still be waited for.
+    ASSERT_EQ(0, dino_pipe_create_ex(&r, &w, DINO_PIPE_CHILD_WRITES));
+    EXPECT_EQ(1, dino_pipe_write(w, "x", 1));
+    EXPECT_EQ(0, dino_pipe_wait(r, 1000));
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+}
+
+UTEST(pipe, create_ex_rejects_unknown_flags)
+{
+    dino_pipe_t r = (dino_pipe_t)1, w = (dino_pipe_t)1;
+    EXPECT_EQ(-1, dino_pipe_create_ex(&r, &w, 4));
+    EXPECT_EQ(DINO_INVALID_PIPE, r);
+    EXPECT_EQ(DINO_INVALID_PIPE, w);
+    EXPECT_EQ(-1, dino_pipe_create_ex(NULL, &w, 0));
+    ASSERT_EQ(0, dino_pipe_create_ex(&r, &w, 0));
+    EXPECT_EQ(0, dino_pipe_wait(r, 0) == 0 ? -1 : 0); // an ordinary pipe: empty, so it times out
     dino_pipe_close(r);
     dino_pipe_close(w);
 }

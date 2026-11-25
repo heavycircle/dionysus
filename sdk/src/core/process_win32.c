@@ -252,9 +252,16 @@ static HANDLE open_null(void)
 
 static const DWORD std_ids[3] = { STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE };
 
-// The child's handle for stream i: always a new inheritable handle.
-static HANDLE child_handle(int i, dino_stdio_t mode, dino_process_pipes_t *pipes)
+// The child's handle for stream i: always a new inheritable handle. given is
+// the caller's pipe end for DINO_STDIO_PIPE_END (a blocking one: see
+// dino_pipe_create_ex), stdout the child's stdout for DINO_STDIO_STDOUT.
+static HANDLE child_handle(
+    int i, dino_stdio_t mode, dino_process_pipes_t *pipes, dino_pipe_t given, HANDLE stdout_handle)
 {
+    if (mode == DINO_STDIO_PIPE_END)
+        return inheritable((HANDLE)dino__pipe_to_os(given));
+    if (mode == DINO_STDIO_STDOUT)
+        return inheritable(stdout_handle);
     if (mode == DINO_STDIO_PIPE)
     {
         dino_pipe_t end;
@@ -277,7 +284,34 @@ static HANDLE child_handle(int i, dino_stdio_t mode, dino_process_pipes_t *pipes
     return open_null();
 }
 
-int dino_process_spawn(dino_process_t *process, const char *const argv[],
+// cmd.exe from the system directory with the command line as written: /s
+// strips the outer quotes and keeps every other character, so quotes inside
+// the command work; /d skips AutoRun scripts, /v:OFF keeps ! literal.
+static wchar_t *shell_command_line(const char *command, wchar_t **application)
+{
+    struct buf b        = { 0 };
+    const char prefix[] = "cmd.exe /d /s /v:OFF /c \"";
+    int ok = put(&b, prefix, sizeof(prefix) - 1) == 0 && put(&b, command, strlen(command)) == 0
+        && put(&b, "\"", 1) == 0;
+
+    wchar_t dir[MAX_PATH];
+    UINT    len  = GetSystemDirectoryW(dir, MAX_PATH);
+    *application = ok && len > 0 && len < MAX_PATH - 8 ? malloc((len + 9) * sizeof(wchar_t)) : NULL;
+    wchar_t *w   = *application ? widen(b.data, (int)b.len) : NULL;
+    free(b.data);
+    if (!w)
+    {
+        free(*application);
+        *application = NULL;
+        return NULL;
+    }
+    wcscpy(*application, dir);
+    wcscat(*application, L"\\cmd.exe");
+    return w;
+}
+
+// Either argv, or a shell command line (dino__process_spawn_shell).
+static int spawn(dino_process_t *process, const char *const argv[], const char *shell,
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
 {
     if (!process)
@@ -292,15 +326,18 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
     }
     pipes->in = pipes->out = pipes->err = DINO_INVALID_PIPE;
     dino_stdio_t modes[3];
-    if (!argv || !argv[0] || !dino__process_modes(opts, modes)
+    dino_pipe_t  given[3];
+    if ((!shell && (!argv || !argv[0])) || !dino__process_modes(opts, modes, given)
         || !dino__process_valid_env(opts ? opts->env : NULL))
         return dino__fail(DINO_EINVAL);
 
-    HANDLE   std[3] = { NULL, NULL, NULL };
-    wchar_t *app    = NULL;
-    wchar_t *cmd    = is_batch(argv[0]) ? batch_command_line(argv, &app) : command_line(argv);
-    wchar_t *cwd    = opts && opts->cwd ? widen(opts->cwd, -1) : NULL;
-    wchar_t *env    = opts && opts->env ? environment_block(opts->env) : NULL;
+    HANDLE                       std[3]  = { NULL, NULL, NULL };
+    wchar_t                     *app     = NULL;
+    wchar_t                     *cmd     = shell    ? shell_command_line(shell, &app)
+                                : is_batch(argv[0]) ? batch_command_line(argv, &app)
+                                                    : command_line(argv);
+    wchar_t                     *cwd     = opts && opts->cwd ? widen(opts->cwd, -1) : NULL;
+    wchar_t                     *env     = opts && opts->env ? environment_block(opts->env) : NULL;
     LPPROC_THREAD_ATTRIBUTE_LIST attrs   = NULL;
     int                          started = 0;
     // What failed is recorded at the end, after the cleanup, whose own calls
@@ -315,7 +352,7 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
         goto done;
     }
     // A batch file's app is cmd.exe, which already finds it from the new cwd.
-    if (!app && cwd && is_relative_path(argv[0]))
+    if (!app && cwd && !shell && is_relative_path(argv[0]))
     {
         app = find_in(cwd, argv[0]);
         if (!app)
@@ -326,7 +363,7 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
     }
     for (int i = 0; i < 3; i++)
     {
-        std[i] = child_handle(i, modes[i], pipes);
+        std[i] = child_handle(i, modes[i], pipes, given[i], std[1]);
         if (!std[i])
         {
             reason = dino__error_from_os();
@@ -395,6 +432,18 @@ done:
     if (!started)
         dino__process_close_parent_ends(pipes);
     return started ? 0 : dino__fail(reason);
+}
+
+int dino_process_spawn(dino_process_t *process, const char *const argv[],
+    const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
+{
+    return spawn(process, argv, NULL, opts, pipes);
+}
+
+int dino__process_spawn_shell(dino_process_t *process, const char *command,
+    const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
+{
+    return spawn(process, NULL, command, opts, pipes);
 }
 
 // The code dino_process_kill gives TerminateProcess: the one Windows uses
@@ -471,6 +520,14 @@ int dino_process_kill(dino_process_t process)
     DWORD why = GetLastError();
     return WaitForSingleObject((HANDLE)process, 0) == WAIT_OBJECT_0 ? 0
                                                                     : dino__fail_code((long)why);
+}
+
+// Windows reaps a process itself once nothing holds a handle to it.
+int dino_process_detach(dino_process_t process)
+{
+    if (process == DINO_INVALID_PROCESS)
+        return dino__fail(DINO_EINVAL);
+    return CloseHandle((HANDLE)process) ? 0 : dino__fail_os();
 }
 
 uint64_t dino_process_id(dino_process_t process)

@@ -11,18 +11,15 @@
 #define NAME "DINO_TEST_ENV_VAR"
 
 #ifdef _WIN32
-#define SHELL(cmd) { "cmd.exe", "/d", "/c", cmd, NULL }
-#define SHOW_VAR   SHELL("echo [%" NAME "%]")
+#define SHOW_VAR "echo [%" NAME "%]"
 #else
-#define SHELL(cmd) { "/bin/sh", "-c", cmd, NULL }
-#define SHOW_VAR   SHELL("echo \"[${" NAME "-unset}]\"")
+#define SHOW_VAR "echo \"[${" NAME "-unset}]\""
 #endif
 
 static void child_sees(int *utest_result, const char *expected)
 {
-    const char *const     argv[] = SHOW_VAR;
     dino_process_result_t r;
-    ASSERT_EQ(0, dino_process_run(argv, NULL, &r));
+    ASSERT_EQ(0, dino_process_run_shell(SHOW_VAR, NULL, &r));
     char *cr = strchr(r.out, '\r');
     if (cr)
         memmove(cr, cr + 1, strlen(cr));

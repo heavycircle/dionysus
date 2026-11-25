@@ -146,8 +146,9 @@ static char *take(struct collector *c, size_t *len)
     return data;
 }
 
-int dino_process_run(
-    const char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result)
+// Either argv, or a shell command line.
+static int run(const char *const argv[], const char *command, const dino_process_run_opts_t *opts,
+    dino_process_result_t *result)
 {
     if (!result)
         return dino__fail(DINO_EINVAL);
@@ -163,7 +164,9 @@ int dino_process_run(
 
     dino_process_t       process;
     dino_process_pipes_t pipes;
-    if (dino_process_spawn(&process, argv, &spawn, &pipes) != 0)
+    int spawned = command ? dino__process_spawn_shell(&process, command, &spawn, &pipes)
+                          : dino_process_spawn(&process, argv, &spawn, &pipes);
+    if (spawned != 0)
         return -1;
 
     int      timeout     = opts && opts->timeout_ms > 0 ? opts->timeout_ms : -1;
@@ -227,6 +230,28 @@ int dino_process_run(
         status = -1;
     }
     return status == -1 ? dino__fail(reason) : status;
+}
+
+int dino_process_run(
+    const char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result)
+{
+    return run(argv, NULL, opts, result);
+}
+
+int dino_process_run_shell(
+    const char *command, const dino_process_run_opts_t *opts, dino_process_result_t *result)
+{
+    if (result)
+        memset(result, 0, sizeof(*result));
+    // cmd.exe ends a command at a line break, where sh runs the next line: one
+    // line on both, so the same command means the same thing.
+    if (!command || strpbrk(command, "\r\n"))
+    {
+        if (result)
+            result->status.code = -1;
+        return dino__fail(DINO_EINVAL);
+    }
+    return run(NULL, command, opts, result);
 }
 
 void dino_process_result_free(dino_process_result_t *result)

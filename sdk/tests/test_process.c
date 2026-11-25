@@ -1006,6 +1006,186 @@ UTEST(process, run_reports_a_missing_program)
     EXPECT_EQ(-1, dino_process_run(argv, NULL, NULL));
 }
 
+/* ---- stdio from existing pipes, 2>&1, detach, shell ---- */
+
+// a | b: one pipe, marked for children at both ends, from a's stdout to b's
+// stdin. The parent closes its copies once both have started.
+UTEST(process, one_childs_output_into_anothers_input)
+{
+#ifdef _WIN32
+    const char *const writer[] = { self_path, "--child-argv", "hi", NULL };
+    const char *const reader[] = { self_path, "--child-cat", NULL };
+#else
+    const char *const writer[] = SHELL("printf '[hi]\\n'");
+    const char *const reader[] = SHELL("cat");
+#endif
+    dino_pipe_t r, w;
+    ASSERT_EQ(0, dino_pipe_create_ex(&r, &w, DINO_PIPE_CHILD_READS | DINO_PIPE_CHILD_WRITES));
+    dino_process_spawn_opts_t a = { 0 }, b = { 0 };
+    a.stdout_mode = DINO_STDIO_PIPE_END;
+    a.stdout_pipe = w;
+    b.stdin_mode  = DINO_STDIO_PIPE_END;
+    b.stdin_pipe  = r;
+    b.stdout_mode = DINO_STDIO_PIPE;
+    b.stderr_mode = DINO_STDIO_NULL;
+    dino_process_t       pa, pb;
+    dino_process_pipes_t pipes;
+    ASSERT_EQ(0, dino_process_spawn(&pa, writer, &a, NULL));
+    ASSERT_EQ(0, dino_process_spawn(&pb, reader, &b, &pipes));
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+
+    char out[64];
+    read_all(pipes.out, out, sizeof(out));
+    strip_cr(out);
+    EXPECT_STREQ("[hi]\n", out);
+    dino_pipe_close(pipes.out);
+    EXPECT_EQ(0, dino_process_wait(pa, NULL));
+    EXPECT_EQ(0, dino_process_wait(pb, NULL));
+}
+
+// The child gets one end; the parent reads the other, which it can still wait
+// for, since only the child's end is marked.
+UTEST(process, child_writes_into_a_pipe_the_parent_made)
+{
+    const char *const argv[] = SHELL("echo made");
+    dino_pipe_t       r, w;
+    ASSERT_EQ(0, dino_pipe_create_ex(&r, &w, DINO_PIPE_CHILD_WRITES));
+    dino_process_spawn_opts_t opts = { 0 };
+    opts.stdout_mode               = DINO_STDIO_PIPE_END;
+    opts.stdout_pipe               = w;
+    dino_process_t p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, &opts, NULL));
+    dino_pipe_close(w);
+    EXPECT_EQ(0, dino_pipe_wait(r, 10000));
+    char out[64];
+    read_all(r, out, sizeof(out));
+    strip_cr(out);
+    EXPECT_STREQ("made\n", out);
+    dino_pipe_close(r);
+    EXPECT_EQ(0, dino_process_wait(p, NULL));
+}
+
+UTEST(process, stderr_into_stdout_keeps_the_order)
+{
+#ifdef _WIN32
+    // Copies stdin to stdout, then writes "oops" to stderr.
+    const char *const argv[] = { self_path, "--child-cat", NULL };
+#else
+    const char *const argv[] = SHELL("cat; echo oops >&2");
+#endif
+    dino_process_spawn_opts_t opts = { 0 };
+    opts.stdin_mode                = DINO_STDIO_PIPE;
+    opts.stdout_mode               = DINO_STDIO_PIPE;
+    opts.stderr_mode               = DINO_STDIO_STDOUT;
+    dino_process_t       p;
+    dino_process_pipes_t pipes;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, &opts, &pipes));
+    EXPECT_EQ(DINO_INVALID_PIPE, pipes.err);
+    EXPECT_EQ(4, dino_pipe_write(pipes.in, "out\n", 4));
+    dino_pipe_close(pipes.in);
+    char out[64];
+    read_all(pipes.out, out, sizeof(out));
+    strip_cr(out);
+    EXPECT_STREQ("out\noops\n", out);
+    dino_pipe_close(pipes.out);
+    EXPECT_EQ(0, dino_process_wait(p, NULL));
+}
+
+UTEST(process, stdio_from_pipes_is_checked)
+{
+    const char *const         argv[] = SHELL("exit 0");
+    dino_process_spawn_opts_t opts   = { 0 };
+    dino_process_t            p;
+    dino_pipe_t               r, w;
+
+    // An end not marked for a child: a Windows child couldn't use it.
+    ASSERT_EQ(0, dino_pipe_create(&r, &w));
+    opts.stdout_mode = DINO_STDIO_PIPE_END;
+    opts.stdout_pipe = w;
+    EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+
+    // The wrong direction: a read end as stdout, a write end as stdin.
+    ASSERT_EQ(0, dino_pipe_create_ex(&r, &w, DINO_PIPE_CHILD_READS | DINO_PIPE_CHILD_WRITES));
+    opts.stdout_pipe = r;
+    EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
+    opts            = (dino_process_spawn_opts_t) { 0 };
+    opts.stdin_mode = DINO_STDIO_PIPE_END;
+    opts.stdin_pipe = w;
+    EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
+    // No end at all.
+    opts.stdin_pipe = DINO_INVALID_PIPE;
+    EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
+    dino_pipe_close(r);
+    dino_pipe_close(w);
+
+    // DINO_STDIO_STDOUT is for stderr only.
+    opts             = (dino_process_spawn_opts_t) { 0 };
+    opts.stdout_mode = DINO_STDIO_STDOUT;
+    EXPECT_EQ(-1, dino_process_spawn(&p, argv, &opts, NULL));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+}
+
+UTEST(process, detached_child_runs_on_and_is_reaped)
+{
+#ifdef _WIN32
+    const char *const argv[] = { self_path, "--child-exit", "0", NULL };
+#else
+    const char *const argv[] = SHELL("sleep 0.2");
+#endif
+    dino_process_t p;
+    ASSERT_EQ(0, dino_process_spawn(&p, argv, NULL, NULL));
+    uint64_t id = dino_process_id(p);
+    ASSERT_EQ(0, dino_process_detach(p));
+#ifndef _WIN32
+    // Reaped, not left a zombie: once it ends, its pid is gone (a zombie's
+    // would still accept a signal).
+    int gone = 0;
+    for (int i = 0; i < 100 && !gone; i++)
+    {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // probing a pid, not ending a child
+        gone = kill((pid_t)id, 0) != 0 && errno == ESRCH;
+#pragma GCC diagnostic pop
+        if (!gone)
+            dino_sleep_ms(50);
+    }
+    EXPECT_TRUE(gone);
+#else
+    (void)id;
+#endif
+    EXPECT_EQ(-1, dino_process_detach(DINO_INVALID_PROCESS));
+}
+
+UTEST(process, run_shell_runs_a_command_line)
+{
+    dino_process_result_t r;
+    ASSERT_EQ(0, dino_process_run_shell("echo hi", NULL, &r));
+    strip_cr(r.out);
+    EXPECT_STREQ("hi\n", r.out);
+    EXPECT_EQ(0, r.status.code);
+    dino_process_result_free(&r);
+
+    ASSERT_EQ(0, dino_process_run_shell("exit 3", NULL, &r));
+    EXPECT_EQ(3, r.status.code);
+    dino_process_result_free(&r);
+
+    // Quotes reach the shell as written: cmd.exe keeps them in what it echoes,
+    // and the & inside stays text on both.
+    ASSERT_EQ(0, dino_process_run_shell("echo \"a&b\"", NULL, &r));
+    EXPECT_NE(NULL, strstr(r.out, "a&b"));
+    EXPECT_EQ(NULL, strstr(r.out, "is not recognized"));
+    dino_process_result_free(&r);
+
+    EXPECT_EQ(-1, dino_process_run_shell("echo a\necho b", NULL, &r));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    EXPECT_EQ(-1, dino_process_run_shell(NULL, NULL, &r));
+    dino_process_result_free(&r);
+}
+
 UTEST_STATE();
 
 #ifdef _WIN32

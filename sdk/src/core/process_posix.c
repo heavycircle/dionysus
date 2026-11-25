@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdlib.h>
@@ -102,11 +103,16 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
     }
     pipes->in = pipes->out = pipes->err = DINO_INVALID_PIPE;
     dino_stdio_t modes[3];
-    if (!argv || !argv[0] || !dino__process_modes(opts, modes)
+    dino_pipe_t  given[3];
+    if (!argv || !argv[0] || !dino__process_modes(opts, modes, given)
         || !dino__process_valid_env(opts ? opts->env : NULL))
         return dino__fail(DINO_EINVAL);
 
     dino_pipe_t child[3] = { DINO_INVALID_PIPE, DINO_INVALID_PIPE, DINO_INVALID_PIPE };
+    // A caller's pipe end on fd 0-2 (its own stdio was closed) would be
+    // replaced by the child's other redirections before it is moved into
+    // place: a copy above them is used instead, and closed after the spawn.
+    int                        moved[3] = { -1, -1, -1 };
     posix_spawn_file_actions_t actions;
     posix_spawnattr_t          attr;
     int                        started   = 0;
@@ -133,6 +139,26 @@ int dino_process_spawn(dino_process_t *process, const char *const argv[],
         {
             rc = posix_spawn_file_actions_addopen(
                 &actions, fd, "/dev/null", fd == 0 ? O_RDONLY : O_WRONLY, 0);
+        }
+        else if (modes[fd] == DINO_STDIO_PIPE_END)
+        {
+            int source = (int)dino__pipe_to_os(given[fd]);
+            if (source <= 2)
+            {
+                moved[fd] = fcntl(source, F_DUPFD_CLOEXEC, 3);
+                if (moved[fd] < 0)
+                {
+                    reason = dino__error_from_os();
+                    goto done;
+                }
+                source = moved[fd];
+            }
+            rc = posix_spawn_file_actions_adddup2(&actions, source, fd);
+        }
+        else if (modes[fd] == DINO_STDIO_STDOUT)
+        {
+            // After stdout's own redirection, so it follows wherever that went.
+            rc = posix_spawn_file_actions_adddup2(&actions, 1, 2);
         }
         if (rc != 0)
             goto failed;
@@ -186,11 +212,22 @@ done:
         posix_spawnattr_destroy(&attr);
     posix_spawn_file_actions_destroy(&actions);
     for (int fd = 0; fd < 3; fd++)
+    {
         if (child[fd] != DINO_INVALID_PIPE)
             dino_pipe_close(child[fd]);
+        if (moved[fd] >= 0)
+            close(moved[fd]);
+    }
     if (!started)
         dino__process_close_parent_ends(pipes);
     return started ? 0 : dino__fail(reason);
+}
+
+int dino__process_spawn_shell(dino_process_t *process, const char *command,
+    const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes)
+{
+    const char *const argv[] = { "/bin/sh", "-c", command, NULL };
+    return dino_process_spawn(process, argv, opts, pipes);
 }
 
 int dino_process_wait(dino_process_t process, dino_process_status_t *out)
@@ -211,6 +248,53 @@ int dino_process_kill(dino_process_t process)
     if (process == DINO_INVALID_PROCESS)
         return dino__fail(DINO_EINVAL);
     return kill(TO_PID(process), SIGKILL) == 0 ? 0 : dino__fail_os();
+}
+
+// One small thread per detached child, ending when the child does: no state
+// shared between children, and nothing left running once they're all gone.
+static void *reap(void *arg)
+{
+    pid_t pid = (pid_t)(uintptr_t)arg;
+    while (waitpid(pid, NULL, 0) < 0 && errno == EINTR)
+        ;
+    return NULL;
+}
+
+int dino_process_detach(dino_process_t process)
+{
+    if (process == DINO_INVALID_PROCESS)
+        return dino__fail(DINO_EINVAL);
+    pid_t pid = TO_PID(process);
+    // Already gone: reaped here, no thread needed.
+    if (waitpid(pid, NULL, WNOHANG) == pid)
+        return 0;
+    // A small stack: all the thread does is wait. glibc refuses one below its
+    // own minimum plus the program's TLS, which can be more (under valgrind,
+    // for one), so then the default size it is.
+    pthread_attr_t attr;
+    pthread_t      thread;
+    int            rc = pthread_attr_init(&attr);
+    if (rc == 0)
+    {
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+        if (pthread_attr_setstacksize(&attr, (size_t)64 * 1024) == 0)
+        {
+            rc = pthread_create(&thread, &attr, reap, (void *)(uintptr_t)pid);
+            if (rc == EINVAL)
+            {
+                pthread_attr_destroy(&attr);
+                pthread_attr_init(&attr);
+                pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+                rc = pthread_create(&thread, &attr, reap, (void *)(uintptr_t)pid);
+            }
+        }
+        else
+        {
+            rc = pthread_create(&thread, &attr, reap, (void *)(uintptr_t)pid);
+        }
+        pthread_attr_destroy(&attr);
+    }
+    return rc == 0 ? 0 : dino__fail_code(rc);
 }
 
 uint64_t dino_process_id(dino_process_t process)

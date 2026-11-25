@@ -44,6 +44,13 @@ typedef enum
     DINO_STDIO_INHERIT = 0, /**< The parent's own stream (the default). */
     DINO_STDIO_NULL,        /**< /dev/null or NUL: reads see end of file, writes vanish. */
     DINO_STDIO_PIPE,        /**< A new pipe; the parent's end is in dino_process_pipes_t. */
+    /** An existing pipe end, from dino_pipe_create_ex with the flag for this
+     *  direction, in the options' stdin_pipe, stdout_pipe or stderr_pipe: a
+     *  read end for stdin, a write end for stdout and stderr. The caller keeps
+     *  it, and closes its copy once the spawn returns. Since 0.10. */
+    DINO_STDIO_PIPE_END,
+    /** stderr only: wherever stdout goes, as 2>&1 does. Since 0.10. */
+    DINO_STDIO_STDOUT,
 } dino_stdio_t;
 
 /** Options for dino_process_spawn; zero-initialize and set what you need. */
@@ -59,6 +66,8 @@ typedef struct
      */
     const char *const *env;
     dino_stdio_t       stdin_mode, stdout_mode, stderr_mode;
+    /** The pipe ends for streams set to DINO_STDIO_PIPE_END. Since 0.10. */
+    dino_pipe_t stdin_pipe, stdout_pipe, stderr_pipe;
 } dino_process_spawn_opts_t;
 
 /**
@@ -122,7 +131,9 @@ typedef struct
  * @return 0 on success, -1 if the program couldn't be started. dino_error()
  *         (dino/core/error.h) says why: DINO_ENOENT when the program or the
  *         cwd isn't there, DINO_EACCES when it can't be executed, DINO_EINVAL
- *         for bad arguments or a stdio mode outside dino_stdio_t.
+ *         for bad arguments, a stdio mode outside dino_stdio_t, DINO_STDIO_STDOUT
+ *         for stdin or stdout, or a DINO_STDIO_PIPE_END end that isn't marked
+ *         for a child or goes the wrong way.
  */
 int dino_process_spawn(dino_process_t *process, const char *const argv[],
     const dino_process_spawn_opts_t *opts, dino_process_pipes_t *pipes);
@@ -176,6 +187,23 @@ int dino_process_wait(dino_process_t process, dino_process_status_t *status);
  * @return 0 on success (including when it had already exited), -1 on error.
  */
 int dino_process_kill(dino_process_t process);
+
+/**
+ * Let a process run on without waiting for it: start and forget. The handle
+ * is released, and the process is reaped by the SDK when it ends, so it never
+ * lingers as a zombie on POSIX (there, a small thread waits for it) or holds a
+ * handle on Windows. Its exit code is lost. Since 0.10.
+ *
+ * Pipes from the spawn stay the caller's: close them, or the child may block
+ * writing to a full one.
+ *
+ * @param  process  Handle from dino_process_spawn, not yet waited for. Not
+ *                  usable afterwards, whatever the result.
+ * @return 0 on success, -1 on error (on POSIX, when no thread could be
+ *         started to reap it: it is then reaped by nobody until this process
+ *         ends).
+ */
+int dino_process_detach(dino_process_t process);
 
 /**
  * Get the OS process ID, for logs or OS tools.
@@ -254,6 +282,22 @@ typedef struct
  */
 int dino_process_run(
     const char *const argv[], const dino_process_run_opts_t *opts, dino_process_result_t *result);
+
+/**
+ * dino_process_run for a shell command line: /bin/sh -c command on POSIX,
+ * cmd.exe /d /s /c "command" on Windows, with the line passed to cmd.exe as
+ * written, quotes included (a { "cmd.exe", "/c", command } argv would quote
+ * it again). Pipes, redirections and variables follow each shell's own rules,
+ * so a command that uses them is as portable as its syntax. Since 0.10.
+ *
+ * @param  command  One line, UTF-8; a line break is refused with DINO_EINVAL
+ *                  (cmd.exe would end the command there).
+ * @param  opts     As for dino_process_run.
+ * @param  result   As for dino_process_run.
+ * @return As dino_process_run.
+ */
+int dino_process_run_shell(
+    const char *command, const dino_process_run_opts_t *opts, dino_process_result_t *result);
 
 /**
  * Free what dino_process_run collected. Safe on a zeroed result.
