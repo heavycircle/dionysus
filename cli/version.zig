@@ -97,4 +97,6 @@ test fromDescribe {
     try expectError(error.TagMismatch, fromDescribe(arena, "1.0.0", "v1.0.0-rc1"));
     try expectError(error.UnexpectedDescribe, fromDescribe(arena, "0.2.0-dev", "v0.1.0-2-1a2b3c4d5"));
     try expectError(error.UnexpectedDescribe, fromDescribe(arena, "0.2.0-dev", "fatal: not a git repository"));
+    // A height that isn't a number is no describe suffix: the whole text is a tag.
+    try expectError(error.TagMismatch, fromDescribe(arena, "0.2.0-dev", "v0.1.0-x-g1a2b3c4d5"));
 }

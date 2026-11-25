@@ -275,6 +275,12 @@ test splitCommand {
     try expectArgs(a, &.{ "/opt/zig/zig", "cc", "-target", "x86_64-linux-musl", "-c", "a.c" }, "/opt/zig/zig cc -target x86_64-linux-musl  -c a.c");
     try expectArgs(a, &.{ "zig", "-DMSG=hello world", "-I/my dir" }, "zig \"-DMSG=hello world\" -I/my\\ dir");
     try expectArgs(a, &.{ "zig", "-DQ=\"x\"", "it's" }, "zig -DQ=\\\"x\\\" 'it'\\''s'");
+    // An empty quoted argument is still an argument.
+    try expectArgs(a, &.{ "zig", "", "-c" }, "zig \"\" -c");
+    // Malformed input never fails: an unterminated quote runs to the end, and
+    // a trailing backslash stays.
+    try expectArgs(a, &.{ "zig", "-DX=a b" }, "zig \"-DX=a b");
+    try expectArgs(a, &.{ "zig", "a\\" }, "zig a\\");
 }
 
 test parseProbe {

@@ -56,8 +56,12 @@ check_links() {
             echo "  ${file#"$repo"/}: no heading for #$anchor ($link)"
             failed=1
         fi
-    done < <(awk '/^```/ { fence = !fence; next } !fence { gsub(/`[^`]*`/, ""); print }' "$file" |
-        grep -oE '\]\([^) ]+\)' | sed -E 's/^\]\(//; s/\)$//')
+    done < <(
+        text=$(awk '/^```/ { fence = !fence; next } !fence { gsub(/`[^`]*`/, ""); print }' "$file")
+        grep -oE '\]\([^) ]+\)' <<<"$text" | sed -E 's/^\]\(//; s/\)$//'
+        # HTML links and images too, as README.md's header uses.
+        grep -oE '(href|src|srcset)="[^"]+"' <<<"$text" | sed -E 's/^[a-z]+="//; s/"$//'
+    )
 }
 
 echo "links:"
@@ -91,9 +95,10 @@ for src in "$proj"/*.c; do
     programs+=("$(basename "$src" .c)")
 done
 
+# None at all means the pages or their fences moved, not that there's nothing to test.
 if ((${#programs[@]} == 0)); then
-    echo "programs: none found"
-    exit $failed
+    echo "programs: none found in docs/"
+    exit 1
 fi
 {
     echo 'cmake_minimum_required(VERSION 3.15)'

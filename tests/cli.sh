@@ -278,6 +278,111 @@ case_usage_errors() {
     [[ $code == 1 ]] || { echo "dino build without a project: exit $code"; return 1; }
 }
 
+# One target that fails doesn't stop the others: they're built, the summary
+# names the failure, and dino exits 1.
+case_one_target_fails() {
+    project one_fails
+    echo 'if(CMAKE_SYSTEM_PROCESSOR STREQUAL i686)
+    message(FATAL_ERROR "no i386 here")
+endif()' >>CMakeLists.txt
+    dino build x86_64 i386 arm64 >out 2>&1
+    local code=$?
+    [[ $code == 1 ]] || { echo "exit $code"; cat out; return 1; }
+    grep -q '^    FAILED   i386$' out || { cat out; return 1; }
+    grep -q '^    ok       x86_64$' out || { cat out; return 1; }
+    grep -q '^    ok       arm64$' out || { cat out; return 1; }
+    [[ -x build/x86_64/one_fails && -x build/arm64/one_fails ]]
+}
+
+# Arguments after `--` reach the program unchanged, dino's own options and
+# empty ones included, and its exit code is dino's.
+case_run_arguments_and_exit_code() {
+    project run_args
+    cat >src/main.c <<'C'
+#include <stdio.h>
+int main(int argc, char **argv)
+{
+    for (int i = 1; i < argc; i++)
+        printf("[%s]\n", argv[i]);
+    return 3;
+}
+C
+    dino run -- -C elsewhere --debug 'two words' '' -- >out 2>/dev/null
+    local code=$?
+    [[ $code == 3 ]] || { echo "exit $code"; cat out; return 1; }
+    [[ $(cat out) == $'[-C]\n[elsewhere]\n[--debug]\n[two words]\n[]\n[--]' ]] || { cat out; return 1; }
+}
+
+# With two programs dino run asks which; --exe picks one.
+case_run_several_executables() {
+    project run_several
+    mkdir -p other && echo 'int main(void) { return 4; }' >other/other.c
+    echo 'dino_executable(other other/other.c)' >>CMakeLists.txt
+    dino run >out 2>&1 && { cat out; return 1; }
+    grep -q 'the project builds several executables; choose one with --exe (.*other.*)' out ||
+        grep -q 'the project builds several executables; choose one with --exe (.*run_several.*)' out ||
+        { cat out; return 1; }
+    dino run --exe other >/dev/null 2>&1
+    local code=$?
+    [[ $code == 4 ]] || { echo "--exe other: exit $code"; return 1; }
+    dino run --exe run_several 2>/dev/null | grep -qx 'Hello from run_several!'
+}
+
+# A failing test fails dino test; -R and ctest's own arguments choose tests.
+case_test_selection_and_failure() {
+    project test_select
+    printf '#include <utest.h>\nUTEST(app, fails) { EXPECT_EQ(1, 2); }\nUTEST_MAIN()\n' >tests/test_broken.c
+    dino test >out 2>&1
+    local code=$?
+    [[ $code == 1 ]] || { echo "exit $code"; cat out; return 1; }
+    grep -q 'Test #.*test_broken .*Failed' out || { cat out; return 1; }
+    dino test -R test_main >out 2>&1 || { cat out; return 1; }
+    ! grep -q 'Start .*test_broken' out || { cat out; return 1; }
+    dino test -- -E test_broken >out 2>&1 || { cat out; return 1; }
+    grep -q 'Test #.*test_main .*Passed' out || { cat out; return 1; }
+}
+
+# A project without tests has nothing to pass: dino test fails.
+case_test_without_tests() {
+    project no_test_files
+    rm -r tests
+    dino test >out 2>&1 && { cat out; return 1; }
+    grep -qi 'no tests' out || { cat out; return 1; }
+}
+
+# dino clean removes only what dino built, and only the targets named.
+case_clean_scope() {
+    project clean_scope
+    dino build x86_64 arm64 >/dev/null 2>&1 || return 1
+    mkdir -p build/mine && touch build/mine/keep
+    mkdir -p "$work/outside" && ln -s "$work/outside" build/link
+    dino clean arm64 >out 2>&1 || { cat out; return 1; }
+    [[ ! -e build/arm64 && -d build/x86_64 ]] || { ls build; return 1; }
+    dino clean >out 2>&1 || { cat out; return 1; }
+    [[ ! -e build/x86_64 && -e build/mine/keep && -L build/link && -d $work/outside ]] || { ls -la build; return 1; }
+}
+
+# -C works the same for every command, given a relative path from elsewhere.
+case_dash_c_from_elsewhere() {
+    project dash_c
+    cd "$work" || return 1
+    dino build -C dash_c >out 2>&1 || { cat out; return 1; }
+    dino run -C dash_c --no-build 2>/dev/null | grep -qx 'Hello from dash_c!' || return 1
+    dino test -C dash_c >out 2>&1 || { cat out; return 1; }
+    dino clean -C dash_c >out 2>&1 || { cat out; return 1; }
+    [[ ! -e dash_c/build/x86_64 && ! -e build ]]
+}
+
+# A required tool that's missing makes doctor fail, and says which.
+case_doctor_missing_cmake() {
+    mkdir -p "$work/nocmake/bin" && cd "$work/nocmake" || return 1
+    ln -sf "$(command -v zig)" bin/zig
+    local dino
+    dino=$(command -v dino)
+    PATH=$work/nocmake/bin "$dino" doctor >out 2>&1 && { cat out; return 1; }
+    grep -q '\[MISS\] cmake ' out || { cat out; return 1; }
+}
+
 # Every command has help, help and version included.
 case_help() {
     local c

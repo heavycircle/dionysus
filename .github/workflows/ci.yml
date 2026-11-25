@@ -68,6 +68,12 @@ jobs:
           cd "$RUNNER_TEMP/formatted"
           uvx --from clang-format==14.0.6 clang-format --dry-run --Werror src/main.c tests/test_main.c
 
+      - name: Version pins agree
+        run: tests/pins.sh
+
+      - name: Commit message linter
+        run: tests/lintcommit.sh
+
       - name: Commit messages
         if: github.event_name == 'pull_request'
         run: scripts/lintcommit.sh "${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
