@@ -14,8 +14,7 @@ that matter are handled for you:
   the SDK closes them in the child by listing `/proc/self/fd`, or, without `/proc` (a chroot, an initramfs, a container that doesn't mount it), by checking every descriptor up to the limit, which is slower. One another thread opens during the spawn can still get through. On Windows the SDK's own spawns are airtight, but a `CreateProcess` with inheritance on another thread outside the SDK (`system()`, `_popen`, a library) can inherit the child's pipe ends while a spawn runs; the pipe then sees no end of file until that program exits.
 - **Console windows:** on Windows, a parent without a console (a GUI program, a service) starts console programs without a window of their own, instead of flashing one per child.
 
-The program you run is still platform-specific. There's no `/bin/sh` on Windows, so the examples
-pick the shell per platform.
+The program you run is still platform-specific: there's no `/bin/sh` on Windows. For a shell command, `dino_process_run_shell` picks the shell (`/bin/sh -c` or `cmd.exe /d /s /c`), so a command both shells read the same way, like the one below, needs no `#ifdef`.
 
 ## Example: run a command and collect its output
 
@@ -25,20 +24,14 @@ pick the shell per platform.
 
 #include <dino/core/process.h>
 
-#ifdef _WIN32
-#define SHELL(cmd) { "cmd.exe", "/d", "/c", cmd, NULL }
-#else
-#define SHELL(cmd) { "/bin/sh", "-c", cmd, NULL }
-#endif
-
 int main(void)
 {
-    const char *const       argv[] = SHELL("echo out&& echo err 1>&2&& exit 3");
-    dino_process_run_opts_t opts   = { 0 };
+    dino_process_run_opts_t opts = { 0 };
     dino_process_result_t   result;
     opts.timeout_ms = 10000; // killed if it takes longer
 
-    int rc = dino_process_run(argv, &opts, &result);
+    // sh and cmd.exe both read this line the same way.
+    int rc = dino_process_run_shell("echo out&& echo err 1>&2&& exit 3", &opts, &result);
     if (rc == -1) // couldn't start it: out and err may be NULL
     {
         dino_process_result_free(&result);
@@ -70,6 +63,7 @@ everything it writes to stdout and stderr, and waits for it to exit.
 - **Return value:** `0` when the child ran to the end, `DINO_TIMEOUT` when it was killed for taking
   too long (`result` still holds what it wrote first), or `-1` if it couldn't be started or something failed afterwards: reading an output, waiting for the child, running out of memory (then `dino_error()` says why; `out` and `err` may be `NULL`, or hold what was read so far). Call
   `dino_process_result_free` in every case.
+- **A shell command:** `dino_process_run_shell(command, opts, &result)` is `dino_process_run` for one command line, run by `/bin/sh -c` on POSIX and by `cmd.exe /d /s /c "command"` on Windows, with the line passed to `cmd.exe` as written, quotes included. Pipes, redirections and variables follow each shell's rules, so a command using them is as portable as its syntax. A line break is refused with `DINO_EINVAL`, since `cmd.exe` would end the command there. Since 0.10.
 - **Background processes:** a process the child started that keeps stdout, stderr or stdin open
   keeps `dino_process_run` waiting after the child exits. With a timeout it stops at the deadline
   and returns `DINO_TIMEOUT`, with what was read so far and the child's own `status`. Without
@@ -98,13 +92,14 @@ dino_process_status_t status;
 dino_process_wait(child, &status);
 ```
 
-| Function                                            | Does                                                                                                       | Returns                             |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `dino_process_spawn(&p, argv, opts, &pipes)`        | Start `argv[0]` with arguments. `opts` may be `NULL`, and `pipes` too when no stream is `DINO_STDIO_PIPE`. | `0`, `-1` if it couldn't be started |
-| `dino_process_wait(p, &status)`                     | Wait for it to end, store how it ended, release it.                                                        | `0`, `-1`                           |
-| `dino_process_wait_timeout(p, timeout_ms, &status)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid.     | `0`, `DINO_TIMEOUT`, `-1`           |
-| `dino_process_kill(p)`                              | End it now (`SIGKILL` / `TerminateProcess`); `0` if it already exited. Still wait for it afterwards.       | `0`, `-1`                           |
-| `dino_process_id(p)`                                | Its OS process ID, for logs.                                                                               | the ID                              |
+| Function                                            | Does                                                                                                                             | Returns                             |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `dino_process_spawn(&p, argv, opts, &pipes)`        | Start `argv[0]` with arguments. `opts` may be `NULL`, and `pipes` too when no stream is `DINO_STDIO_PIPE`.                       | `0`, `-1` if it couldn't be started |
+| `dino_process_wait(p, &status)`                     | Wait for it to end, store how it ended, release it.                                                                              | `0`, `-1`                           |
+| `dino_process_wait_timeout(p, timeout_ms, &status)` | The same, giving up after `timeout_ms`. On `DINO_TIMEOUT` it keeps running and the handle stays valid.                           | `0`, `DINO_TIMEOUT`, `-1`           |
+| `dino_process_kill(p)`                              | End it now (`SIGKILL` / `TerminateProcess`); `0` if it already exited. Still wait for it afterwards.                             | `0`, `-1`                           |
+| `dino_process_id(p)`                                | Its OS process ID, for logs.                                                                                                     | the ID                              |
+| `dino_process_detach(p)`                            | Let it run on without waiting for it; the SDK reaps it when it ends (its exit code is lost). The handle is released. Since 0.10. | `0`, `-1`                           |
 
 - **`argv[0]`:** a path, or a bare name looked up on `PATH`. Windows also adds `.exe` and looks in a
   few system directories first. A relative path such as `./tool` or `bin/tool` is found from `cwd`
@@ -116,8 +111,27 @@ dino_process_wait(child, &status);
   untrusted input to a batch file is still risky, since the script itself may expand `%~1` unquoted.
 - **Stdio modes:** each of `stdin_mode`, `stdout_mode` and `stderr_mode` is `DINO_STDIO_INHERIT` (the
   parent's own, the default), `DINO_STDIO_NULL` (`/dev/null` or `NUL`) or `DINO_STDIO_PIPE` (a new
-  [pipe](pipe.md), whose parent end appears in `pipes.in`, `.out` or `.err`).
-- **Wait for every process exactly once.** On Linux an unwaited child stays a zombie.
+  [pipe](pipe.md), whose parent end appears in `pipes.in`, `.out` or `.err`). Since 0.10 also:
+  - `DINO_STDIO_PIPE_END`: an existing pipe end, in `stdin_pipe`, `stdout_pipe` or `stderr_pipe`, made by `dino_pipe_create_ex` with `DINO_PIPE_CHILD_READS` (for stdin) or `DINO_PIPE_CHILD_WRITES` (for stdout and stderr). The caller keeps it, and closes its copy once the spawn returns. A child's C runtime needs a blocking handle, which `dino_pipe_create`'s overlapped Windows handles aren't, so an end that isn't marked is refused on every platform.
+  - `DINO_STDIO_STDOUT`, for stderr only: wherever stdout goes, as `2>&1` does, in order.
+
+  One child's output into another's input (`a | b`) is one pipe marked at both ends:
+
+  ```c
+  dino_pipe_t r, w;
+  dino_pipe_create_ex(&r, &w, DINO_PIPE_CHILD_READS | DINO_PIPE_CHILD_WRITES);
+  dino_process_spawn_opts_t a = { 0 }, b = { 0 };
+  a.stdout_mode = DINO_STDIO_PIPE_END;
+  a.stdout_pipe = w;
+  b.stdin_mode  = DINO_STDIO_PIPE_END;
+  b.stdin_pipe  = r;
+  dino_process_spawn(&pa, writer_argv, &a, NULL);
+  dino_process_spawn(&pb, reader_argv, &b, NULL);
+  dino_pipe_close(r); // the children have their own copies
+  dino_pipe_close(w);
+  ```
+
+- **Wait for every process exactly once,** or detach it. On Linux an unwaited child stays a zombie. `dino_process_detach` hands it to the SDK, which reaps it (with a small thread per detached child on Linux, until it ends).
 - **A handle is dead after a successful wait.** It is the raw process ID (a `HANDLE` on Windows), and the system may give that ID to another process, so a `dino_process_kill` or a second wait on it can reach a stranger. Set it to `DINO_INVALID_PROCESS` right after the wait, and have cleanup paths kill only a handle that isn't:
 
   ```c
@@ -134,7 +148,7 @@ dino_process_wait(child, &status);
 - **Leave `SIGCHLD` alone, and let nothing else wait for the child** (Linux). If the program ignores `SIGCHLD` (`SIG_IGN` or `SA_NOCLDWAIT`), or other code in it calls `wait()` or `waitpid(-1, ...)`, the exit status goes there. Every wait then returns `-1` although the child ran, `dino_process_run` included, and the exit code is lost. The process ID may also be reused by then, so don't `dino_process_kill` that handle afterwards.
 - **Killing ends one process, not what it started.** `dino_process_kill` and the timeout of `dino_process_run` end the process you spawned. Programs it started keep running: whatever a `sh -c` command launched without `exec`, and everything a `.bat` or `.cmd` file started, because the process you hold there is the `cmd.exe` that runs the script.
 - **A watchdog doesn't kill from another thread.** While one thread is in `dino_process_wait`, a `dino_process_kill` from another can land after the wait ended the process, and reach whatever got its ID next. Wait with `dino_process_wait_timeout` instead, and kill from that thread when the time runs out.
-- **`cmd.exe` and quotes:** `cmd.exe` parses its command line itself and doesn't understand the `\"` that the SDK's quoting produces. `{ "cmd.exe", "/d", "/c", command, NULL }` works as long as `command` contains no `"`; a command with a quoted path in it (`dir "C:\Program Files"`) arrives mangled. Put such a command in a `.bat` file and run that.
+- **`cmd.exe` and quotes:** `cmd.exe` parses its command line itself and doesn't understand the `\"` that the SDK's quoting produces. `{ "cmd.exe", "/d", "/c", command, NULL }` works as long as `command` contains no `"`; a command with a quoted path in it (`dir "C:\Program Files"`) arrives mangled. Use `dino_process_run_shell`, which passes the line as written.
 - **Read every pipe you asked for.** A child that fills a 64 KB stderr pipe nobody reads blocks
   forever, while the parent waits on stdout. Read both (or use `dino_process_run`), or send the one
   you don't need to `DINO_STDIO_NULL`.

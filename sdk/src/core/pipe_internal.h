@@ -22,6 +22,9 @@ int dino__pipe_create_for_child(dino_pipe_t *parent_end, dino_pipe_t *child_end,
 int dino__pipe_write_timeout(
     dino_pipe_t pipe, const void *buf, size_t len, int timeout_ms, int *written);
 
+// 1 for an end dino_pipe_create_ex marked for a child's stdio, 0 otherwise.
+int dino__pipe_for_child(dino_pipe_t pipe);
+
 // 1 for a read end, 0 for a write end, -1 on error.
 int dino__pipe_is_read_end(dino_pipe_t pipe);
 

@@ -35,6 +35,31 @@ typedef struct dino_pipe *dino_pipe_t;
  */
 int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end);
 
+/** dino_pipe_create_ex: the read end goes to a child process's stdin. */
+#define DINO_PIPE_CHILD_READS 1
+/** dino_pipe_create_ex: the write end goes to a child's stdout or stderr. */
+#define DINO_PIPE_CHILD_WRITES 2
+
+/**
+ * Create a pipe with an end, or both, meant for child processes' stdio, to
+ * pass with DINO_STDIO_PIPE_END (dino/core/process.h): one child's output into
+ * another's input (a | b, both flags), or a pipe whose other end the parent
+ * keeps. Since 0.10.
+ *
+ * A child's C runtime does blocking I/O on its standard handles, which Windows
+ * doesn't allow on the overlapped handles dino_pipe_create makes; a marked end
+ * is an ordinary blocking one. So, on every platform alike, a marked end can't
+ * be waited for with dino_pipe_wait or added to an event loop; read and write
+ * work. dino_process_spawn refuses an end that isn't marked.
+ *
+ * @param  read_end   Receives the reading end, or DINO_INVALID_PIPE on failure.
+ * @param  write_end  Receives the writing end, or DINO_INVALID_PIPE on failure.
+ * @param  flags      DINO_PIPE_CHILD_READS and/or DINO_PIPE_CHILD_WRITES; 0 is
+ *                    dino_pipe_create.
+ * @return 0 on success, -1 on failure.
+ */
+int dino_pipe_create_ex(dino_pipe_t *read_end, dino_pipe_t *write_end, int flags);
+
 /**
  * Read up to len bytes, blocking until at least one is available.
  *
@@ -71,7 +96,8 @@ int dino_pipe_write(dino_pipe_t pipe, const void *buf, size_t len);
  * @param  pipe        Reading end.
  * @param  timeout_ms  Milliseconds to wait; -1 to wait forever; 0 to check.
  * @return 0 when readable, DINO_TIMEOUT when the time ran out, -1 on error,
- *         including for a write end.
+ *         including for a write end, or an end marked for a child
+ *         (dino_pipe_create_ex).
  */
 int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms);
 

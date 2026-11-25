@@ -16,10 +16,13 @@
 #include <unistd.h>
 
 // Handles are fd + 1, so fd 0 (possible when stdin was closed) isn't
-// DINO_INVALID_PIPE. The value only travels in the pointer type; nothing is
-// allocated and it is never dereferenced.
-#define TO_HANDLE(fd) ((dino_pipe_t)(uintptr_t)((fd) + 1))
-#define TO_FD(pipe)   ((int)((uintptr_t)(pipe) - 1))
+// DINO_INVALID_PIPE, shifted left past a low bit that marks an end for a
+// child's stdio (dino_pipe_create_ex). The value only travels in the pointer
+// type; nothing is allocated and it is never dereferenced.
+#define TO_HANDLE(fd)       ((dino_pipe_t)(((uintptr_t)(fd) + 1) << 1))
+#define TO_CHILD_HANDLE(fd) ((dino_pipe_t)((((uintptr_t)(fd) + 1) << 1) | 1))
+#define TO_FD(pipe)         ((int)(((uintptr_t)(pipe) >> 1) - 1))
+#define FOR_CHILD(pipe)     ((int)((uintptr_t)(pipe) & 1))
 
 int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
 {
@@ -36,6 +39,27 @@ int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
     fcntl(fds[1], F_SETPIPE_SZ, PIPE_BYTES);
     *read_end  = TO_HANDLE(fds[0]);
     *write_end = TO_HANDLE(fds[1]);
+    return 0;
+}
+
+int dino_pipe_create_ex(dino_pipe_t *read_end, dino_pipe_t *write_end, int flags)
+{
+    if (flags & ~(DINO_PIPE_CHILD_READS | DINO_PIPE_CHILD_WRITES))
+    {
+        if (read_end)
+            *read_end = DINO_INVALID_PIPE;
+        if (write_end)
+            *write_end = DINO_INVALID_PIPE;
+        return dino__fail(DINO_EINVAL);
+    }
+    if (dino_pipe_create(read_end, write_end) != 0)
+        return -1;
+    // Linux needs nothing different for a child's end; the mark keeps the
+    // rules the same as on Windows, where it does.
+    if (flags & DINO_PIPE_CHILD_READS)
+        *read_end = TO_CHILD_HANDLE(TO_FD(*read_end));
+    if (flags & DINO_PIPE_CHILD_WRITES)
+        *write_end = TO_CHILD_HANDLE(TO_FD(*write_end));
     return 0;
 }
 
@@ -137,8 +161,9 @@ int dino__pipe_write_timeout(
 int dino_pipe_wait(dino_pipe_t pipe, int timeout_ms)
 {
     // Only a read end can be waited for, as on Windows. A write end would
-    // time out, or report readable once its reader is gone.
-    if (dino__pipe_is_read_end(pipe) != 1)
+    // time out, or report readable once its reader is gone. An end marked for
+    // a child can't be on Windows, so it can't be here either.
+    if (dino__pipe_is_read_end(pipe) != 1 || FOR_CHILD(pipe))
         return dino__fail(DINO_EINVAL);
 
     struct pollfd pfd      = { TO_FD(pipe), POLLIN, 0 };
@@ -198,6 +223,11 @@ int dino__pipe_create_for_child(dino_pipe_t *parent_end, dino_pipe_t *child_end,
     }
     *child_end = TO_HANDLE(moved);
     return 0;
+}
+
+int dino__pipe_for_child(dino_pipe_t pipe)
+{
+    return pipe != DINO_INVALID_PIPE && FOR_CHILD(pipe);
 }
 
 int dino__pipe_is_read_end(dino_pipe_t pipe)

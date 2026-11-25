@@ -5,7 +5,10 @@
 #include <dino/core/process.h>
 
 // Runs a shell command two ways and checks its output and exit code. The
-// command line differs per OS; the dino calls don't.
+// command line works in both sh and cmd.exe.
+#define COMMAND "echo hello from the child&& echo a warning 1>&2&& exit 3"
+
+// dino_process_spawn takes an argv, so the shell is picked per OS.
 #ifdef _WIN32
 #define SHELL(cmd) { "cmd.exe", "/d", "/c", cmd, NULL }
 #else
@@ -13,13 +16,13 @@
 #endif
 
 // The simple case: run to completion, collecting stdout and stderr.
+// dino_process_run_shell picks the shell itself.
 static int run_and_collect(void)
 {
-    const char *const argv[] = SHELL("echo hello from the child&& echo a warning 1>&2&& exit 3");
     dino_process_run_opts_t opts = { 0 };
     dino_process_result_t   result;
     opts.timeout_ms = 10000;
-    if (dino_process_run(argv, &opts, &result) != 0)
+    if (dino_process_run_shell(COMMAND, &opts, &result) != 0)
     {
         fprintf(stderr, "run failed\n");
         dino_process_result_free(&result);

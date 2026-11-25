@@ -174,7 +174,8 @@ int dino_event_del_socket(dino_event_loop_t loop, dino_socket_t sock)
 static int pipe_ctl(
     dino_event_loop_t loop, int op, dino_pipe_t pipe, uint32_t events, void *userdata)
 {
-    if (!dino__event_pipe_args_valid(loop, events) || dino__pipe_is_read_end(pipe) != 1)
+    if (!dino__event_pipe_args_valid(loop, events) || dino__pipe_is_read_end(pipe) != 1
+        || dino__pipe_for_child(pipe))
         return dino__fail(DINO_EINVAL);
     return ctl(((struct dino_event_loop *)loop)->pipe_epfd, op, (int)dino__pipe_to_os(pipe), events,
         userdata);

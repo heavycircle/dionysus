@@ -46,8 +46,8 @@ static dino_pipe_t wrap(HANDLE h, int read_end, int overlapped)
 
 // Neither handle is inheritable: a process spawn duplicates the child's end
 // into an inheritable handle itself.
-static int create_pair(
-    dino_pipe_t *server_end, dino_pipe_t *client_end, int server_reads, int client_overlapped)
+static int create_pair(dino_pipe_t *server_end, dino_pipe_t *client_end, int server_reads,
+    int server_overlapped, int client_overlapped)
 {
     *server_end = *client_end = DINO_INVALID_PIPE;
 
@@ -64,7 +64,7 @@ static int create_pair(
     // FIRST_PIPE_INSTANCE and one instance: nobody else can create or hold a
     // second end under this name.
     DWORD open_mode = (server_reads ? PIPE_ACCESS_INBOUND : PIPE_ACCESS_OUTBOUND)
-        | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE;
+        | (server_overlapped ? FILE_FLAG_OVERLAPPED : 0) | FILE_FLAG_FIRST_PIPE_INSTANCE;
     DWORD  pipe_mode = PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS;
     HANDLE server
         = CreateNamedPipeW(name, open_mode, pipe_mode, 1, PIPE_BYTES, PIPE_BYTES, 0, NULL);
@@ -79,7 +79,7 @@ static int create_pair(
         return -1;
     }
 
-    *server_end = wrap(server, server_reads, 1);
+    *server_end = wrap(server, server_reads, server_overlapped);
     *client_end = wrap(client, !server_reads, client_overlapped);
     if (*server_end == DINO_INVALID_PIPE || *client_end == DINO_INVALID_PIPE)
     {
@@ -96,12 +96,29 @@ int dino_pipe_create(dino_pipe_t *read_end, dino_pipe_t *write_end)
 {
     if (!read_end || !write_end)
         return dino__fail(DINO_EINVAL);
-    return create_pair(read_end, write_end, 1, 1);
+    return create_pair(read_end, write_end, 1, 1, 1);
+}
+
+// A child's end is a blocking handle: its C runtime does blocking I/O on its
+// standard handles, which is undefined on an overlapped one. Either end can be
+// the server's, so either can be opened that way.
+int dino_pipe_create_ex(dino_pipe_t *read_end, dino_pipe_t *write_end, int flags)
+{
+    if (!read_end || !write_end)
+        return dino__fail(DINO_EINVAL);
+    if (flags & ~(DINO_PIPE_CHILD_READS | DINO_PIPE_CHILD_WRITES))
+    {
+        *read_end = *write_end = DINO_INVALID_PIPE;
+        return dino__fail(DINO_EINVAL);
+    }
+    int read_overlapped  = !(flags & DINO_PIPE_CHILD_READS);
+    int write_overlapped = !(flags & DINO_PIPE_CHILD_WRITES);
+    return create_pair(read_end, write_end, 1, read_overlapped, write_overlapped);
 }
 
 int dino__pipe_create_for_child(dino_pipe_t *parent_end, dino_pipe_t *child_end, int parent_reads)
 {
-    return create_pair(parent_end, child_end, parent_reads, 0);
+    return create_pair(parent_end, child_end, parent_reads, 1, 0);
 }
 
 // Blocking I/O on an overlapped handle: wait on an event of our own. Its low
@@ -278,6 +295,11 @@ intptr_t dino__pipe_to_os(dino_pipe_t pipe)
 {
     return pipe == DINO_INVALID_PIPE ? (intptr_t)INVALID_HANDLE_VALUE
                                      : (intptr_t)((struct dino_pipe *)pipe)->handle;
+}
+
+int dino__pipe_for_child(dino_pipe_t pipe)
+{
+    return pipe != DINO_INVALID_PIPE && !((struct dino_pipe *)pipe)->overlapped;
 }
 
 int dino__pipe_is_read_end(dino_pipe_t pipe)
