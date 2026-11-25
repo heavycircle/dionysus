@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <stdio.h>
@@ -6,10 +7,9 @@
 
 #include <dino/core/network.h>
 
-#define PORT 8090
-
 /* IPv4 and IPv6 with the same code: getaddrinfo picks the family and fills in
-   the address, on every target. */
+   the address, on every target. Every listener asks for port 0, a free port the
+   system picks, and getsockname says which. */
 
 static struct addrinfo *numeric(const char *ip, int port)
 {
@@ -26,7 +26,7 @@ static struct addrinfo *numeric(const char *ip, int port)
 // backlog before accept(), so a blocking echo needs no threads.
 static int echo(const char *ip)
 {
-    struct addrinfo *addr   = numeric(ip, PORT);
+    struct addrinfo *addr   = numeric(ip, 0);
     dino_socket_t    server = DINO_INVALID_SOCKET, client = DINO_INVALID_SOCKET;
     dino_socket_t    peer   = DINO_INVALID_SOCKET;
     char             buf[8] = { 0 };
@@ -38,10 +38,13 @@ static int echo(const char *ip)
     client = dino_socket_create(addr->ai_family, SOCK_STREAM, 0);
     if (server == DINO_INVALID_SOCKET || client == DINO_INVALID_SOCKET)
         goto done;
-    dino_socket_set_reuseaddr(server, 1);
     if (bind(server, addr->ai_addr, addr->ai_addrlen) != 0 || listen(server, 1) != 0)
         goto done;
-    if (dino_socket_connect(client, addr->ai_addr, addr->ai_addrlen) != 0)
+    // The address with the port filled in, for the client to connect to.
+    struct sockaddr_storage bound;
+    socklen_t               bound_len = sizeof(bound);
+    if (getsockname(server, (struct sockaddr *)&bound, &bound_len) != 0
+        || dino_socket_connect(client, (struct sockaddr *)&bound, bound_len) != 0)
         goto done;
     peer = dino_socket_accept(server, NULL, NULL);
     if (peer == DINO_INVALID_SOCKET)
@@ -71,17 +74,20 @@ done:
 // every platform; clearing IPV6_V6ONLY makes this one take the IPv4 client too.
 static int dual_stack(void)
 {
-    struct addrinfo *any = numeric("::", PORT + 1), *v4 = numeric("127.0.0.1", PORT + 1);
-    dino_socket_t    server = dino_socket_create(AF_INET6, SOCK_STREAM, 0);
-    dino_socket_t    client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
-    dino_socket_t    peer   = DINO_INVALID_SOCKET;
-    char             buf[8] = { 0 };
-    int              off    = 0;
+    struct addrinfo    *any = numeric("::", 0), *v4 = NULL;
+    dino_socket_t       server = dino_socket_create(AF_INET6, SOCK_STREAM, 0);
+    dino_socket_t       client = dino_socket_create(AF_INET, SOCK_STREAM, 0);
+    dino_socket_t       peer   = DINO_INVALID_SOCKET;
+    char                buf[8] = { 0 };
+    int                 off    = 0;
+    struct sockaddr_in6 bound;
+    socklen_t           bound_len = sizeof(bound);
 
-    dino_socket_set_reuseaddr(server, 1);
-    int ok = any && v4
+    int ok = any
         && setsockopt(server, IPPROTO_IPV6, IPV6_V6ONLY, (const char *)&off, sizeof(off)) == 0
         && bind(server, any->ai_addr, any->ai_addrlen) == 0 && listen(server, 1) == 0
+        && getsockname(server, (struct sockaddr *)&bound, &bound_len) == 0
+        && (v4 = numeric("127.0.0.1", ntohs(bound.sin6_port))) != NULL
         && dino_socket_connect(client, v4->ai_addr, v4->ai_addrlen) == 0;
     if (ok)
         peer = dino_socket_accept(server, NULL, NULL);
