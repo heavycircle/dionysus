@@ -46,6 +46,7 @@ jobs:
     # otherwise, here and in the jobs below.
     if: ${{ !cancelled() && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     outputs:
       version: ${{ steps.version.outputs.version }}
       newest: ${{ steps.version.outputs.newest }}
@@ -100,6 +101,7 @@ jobs:
     needs: build
     if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -167,6 +169,7 @@ jobs:
     needs: [build, image]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.image.result == 'success' }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:

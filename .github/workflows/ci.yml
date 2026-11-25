@@ -28,9 +28,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number && format('pr-{0}', github.event.pull_request.number) || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Every job has a limit well above its usual time, so a hung qemu or wine
+# test stops there instead of running to GitHub's six hours.
 jobs:
   lint:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
         with:
@@ -80,6 +83,7 @@ jobs:
 
   unit:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
         with:
@@ -96,6 +100,7 @@ jobs:
 
   targets:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -114,7 +119,9 @@ jobs:
           load: true
           tags: dionysus:ci
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # One job writes the cache: seven writing the same layers race each
+          # other and fill the Actions cache.
+          cache-to: ${{ matrix.target == 'x86_64' && 'type=gha,mode=max' || '' }}
 
       - name: Build and run every example
         run: |
@@ -162,6 +169,7 @@ jobs:
   # three times as long as the others.
   cli:
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
         with:
@@ -181,6 +189,7 @@ jobs:
 
   docker:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
         with:
@@ -201,6 +210,7 @@ jobs:
   # Cross-compiled here, as users do it, and run by the `windows` jobs.
   windows-build:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
         with:
@@ -237,6 +247,7 @@ jobs:
   windows:
     needs: windows-build
     runs-on: windows-2025
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
