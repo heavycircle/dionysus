@@ -21,13 +21,13 @@ failed=0
 parallel_wine='pids=; for i in 1 2 3 4 5 6; do wine cmd /c exit 0 & pids="$pids $!"; done
     for pid in $pids; do wait "$pid" || exit 1; done'
 
-# Usage: check NAME OWNER_UID [docker run args...]
+# Usage: check NAME UID[:GID] [docker run args...] (GID defaults to UID)
 check() {
-    local name=$1 owner=$2
+    local name=$1 owner=${2%%:*} group=${2#*:}
     shift 2
     local dir=$work/$name
     mkdir -p "$dir"
-    docker run --rm -v "$dir:/p" --entrypoint chown "$image" "$owner:$owner" /p
+    docker run --rm -v "$dir:/p" --entrypoint chown "$image" "$owner:$group" /p
 
     if ! docker run --rm "$@" -v "$dir:/work" "$image" sh -c \
         "dino init app >/dev/null && dino build -C app >/dev/null && $parallel_wine" \
@@ -38,24 +38,41 @@ check() {
         return
     fi
     local foreign
-    foreign=$(docker run --rm -v "$dir:/p" --entrypoint find "$image" /p ! -uid "$owner" -printf '%u %p\n') || {
+    foreign=$(docker run --rm -v "$dir:/p" --entrypoint find "$image" /p \( ! -uid "$owner" -o ! -gid "$group" \) -printf '%U:%G %p\n') || {
         echo "FAILED: $name: couldn't list the project's files"
         failed=1
         return
     }
     if [[ -n $foreign ]]; then
-        echo "FAILED: $name: files not owned by UID $owner:"
+        echo "FAILED: $name: files not owned by $owner:$group:"
         echo "$foreign" | head -n 5 | sed 's/^/        /'
         failed=1
         return
     fi
-    echo "ok      $name: project files owned by UID $owner, parallel wine starts"
+    echo "ok      $name: project files owned by $owner:$group, parallel wine starts"
 }
 
 check uid-1000 1000
 check other-uid 4321
 check root-owned 0
-check explicit-user 4321 --user 4321
+check explicit-user 4321:4321 --user 4321:4321
+# The image's UID with another group, as on hosts whose users share group 100.
+check uid-1000-gid-100 1000:100
+
+# A read-only root filesystem, where dino can't be remapped: the command runs
+# as the project's owner directly, with HOME in the tmpfs. No wine: its shared
+# prefix in /opt can't be written then.
+mkdir -p "$work/read-only"
+docker run --rm -v "$work/read-only:/p" --entrypoint chown "$image" 4321:4321 /p
+if docker run --rm --read-only --tmpfs /tmp -v "$work/read-only:/work" "$image" sh -c \
+    'dino init app >/dev/null && dino build -C app >/dev/null && echo "$(id -u):$(id -g)"' \
+    >"$work/read-only.log" 2>&1 && [[ $(tail -n 1 "$work/read-only.log") == 4321:4321 ]]; then
+    echo "ok      read-only: runs as the project's owner"
+else
+    echo "FAILED: read-only"
+    sed 's/^/        /' "$work/read-only.log" | tail -n 20
+    failed=1
+fi
 
 # A mount under /home/dino (a zig cache, say) isn't re-owned when dino is
 # remapped, and a read-only one doesn't stop the run. One owned by the image's
@@ -86,6 +103,9 @@ check_home_mount() {
 
 check_home_mount home-mount /home/dino/.cache/zig 5555
 check_home_mount home-mount-ro /home/dino/reference:ro 1000
+# Mounted at /home/dino itself: its files are on the mount's device, not the
+# image's, so they're left alone too.
+check_home_mount home-itself /home/dino 1000
 
 # --user 0 runs as root, even though /work belongs to another UID.
 mkdir -p "$work/user-root"
