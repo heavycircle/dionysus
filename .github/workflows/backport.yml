@@ -26,14 +26,14 @@ jobs:
     steps:
       # PRs opened with the default GITHUB_TOKEN don't trigger other workflows,
       # so backport PRs only get CI when a GitHub App token is configured.
-      - uses: actions/create-github-app-token@v3.2.0
+      - uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
         id: app-token
         if: vars.BACKPORT_APP != ''
         with:
           app-id: ${{ vars.BACKPORT_APP }}
           private-key: ${{ secrets.BACKPORT_KEY }}
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # Trusted base-branch code only; never the PR's head.
           ref: ${{ github.event.pull_request.base.ref }}

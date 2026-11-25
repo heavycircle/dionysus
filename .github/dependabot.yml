@@ -1,0 +1,23 @@
+# Moves the pins: every action is pinned to a commit (with its version in a
+# comment, which dependabot updates too), and the Dockerfile's base image to a
+# digest. Weekly, one pull request per ecosystem.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories: ["/", "/.github/actions/*"]
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+    labels: [dependencies, ci]
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+    labels: [dependencies, distribution]

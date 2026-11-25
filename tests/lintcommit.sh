@@ -38,6 +38,14 @@ for subject in 'Feat: add' 'feat: Add a thing' 'feat: add a thing.' 'feature: ad
     expect 1 "$subject"
 done
 
+# A pull request's title, checked by the same rules without a commit.
+"$repo/scripts/lintcommit.sh" --subject 'feat(cli): a good title' >/dev/null ||
+    { echo "FAILED: --subject rejected a good title"; failed=1; }
+if "$repo/scripts/lintcommit.sh" --subject 'Fix the thing' >/dev/null; then
+    echo "FAILED: --subject accepted 'Fix the thing'"
+    failed=1
+fi
+
 # Merges are skipped; a range git can't resolve is an error, not a pass.
 git switch -q -c side && git commit -q --allow-empty -m 'fix: side' && git switch -q -
 git merge -q --no-ff -m 'Merge branch side' side

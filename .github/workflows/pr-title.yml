@@ -1,0 +1,27 @@
+# A squash merge lands the pull request's title as the commit subject, which
+# feeds the release notes (cliff.toml), so it follows the same rules as every
+# commit (CONTRIBUTING.md#commit-messages). Its own workflow: editing a title
+# reruns this check alone, not all of ci.yml.
+name: pr-title
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      # Through the environment: a title is untrusted text, never pasted into
+      # the script.
+      - name: Check the title
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: scripts/lintcommit.sh --subject "$TITLE"

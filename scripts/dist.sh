@@ -46,7 +46,7 @@ for platform in "${platforms[@]}"; do
     echo "==> $dir"
     zig build -Drelease -Dtarget="$triple" -Dversion-string="$version" --prefix "$work/prefix-$name"
     mkdir "$work/$dir"
-    cp "$work/prefix-$name"/bin/dino* LICENSE README.md "$work/$dir/"
+    cp "$work/prefix-$name"/bin/dino* LICENSE THIRD-PARTY-LICENSES README.md "$work/$dir/"
     if [[ $triple == *windows* ]]; then
         # zip has no --mtime/--sort: normalize the files and feed it a sorted list.
         chmod -R u=rwX,go=rX "$work/$dir"
