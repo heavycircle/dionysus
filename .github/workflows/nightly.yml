@@ -28,6 +28,8 @@ jobs:
     outputs:
       skip: ${{ steps.check.outputs.skip }}
       version: ${{ steps.version.outputs.version }}
+      # Every job builds this commit, even if main moves on during the run.
+      sha: ${{ steps.check.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -42,6 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           head=$(git rev-parse HEAD)
+          echo "sha=$head" >>"$GITHUB_OUTPUT"
           last=$(git rev-parse -q --verify 'refs/tags/nightly^{commit}' || true)
           notes=$(gh release view nightly --json body --jq .body 2>/dev/null || true)
           if [[ $GITHUB_EVENT_NAME == schedule && $head == "$last" && $notes == *"$head"* ]]; then
@@ -86,7 +89,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          ref: main
+          ref: ${{ needs.check.outputs.sha }}
 
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
@@ -96,6 +99,26 @@ jobs:
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
+      # Tested as a release's is, so a broken image is found the night it
+      # breaks rather than on release day.
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          load: true
+          tags: dionysus:nightly
+          build-args: |
+            DINO_VERSION=${{ needs.check.outputs.version }}
+            WARM_ZIG_CACHE=1
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: ${{ matrix.arch == 'arm64' && 'type=gha,scope=arm64' || 'type=gha' }}
+
+      - name: Test the image
+        env:
+          DINO_IMAGE_WARM: 1
+        run: tests/image.sh dionysus:nightly "${{ needs.check.outputs.version }}"
+
+      # The same build again, from the builder's cache of the one just tested.
       - name: Push the image
         id: push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -131,7 +154,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: main
+          ref: ${{ needs.check.outputs.sha }}
           # `git describe` (the version) and git-cliff need history and tags.
           fetch-depth: 0
 
