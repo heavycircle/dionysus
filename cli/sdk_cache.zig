@@ -103,7 +103,8 @@ fn unpack(ctx: *Ctx, dir: []const u8) Ctx.Error!void {
     }
     cwd.writeFile(ctx.io, .{ .sub_path = ctx.join(&.{ tmp, marker }), .data = build_options.sdk_version }) catch |e|
         return ctx.fail("writing SDK marker in {s}: {t}", .{ tmp, e });
-    removeLeftovers(ctx, dir, tmp);
+    const now = (Io.Dir.cwd().statFile(ctx.io, ctx.join(&.{ tmp, marker }), .{}) catch null);
+    if (now) |stat| if (std.fs.path.dirname(dir)) |parent| removeLeftovers(ctx, parent, stat.mtime.nanoseconds, 10 * std.time.ns_per_min);
 
     if (ctx.exists(ctx.join(&.{ dir, marker }))) return;
     // Never delete a complete SDK: another dino may have renamed its own into
@@ -121,21 +122,19 @@ fn unpack(ctx: *Ctx, dir: []const u8) Ctx.Error!void {
     };
 }
 
-/// Temporaries of unpacks that were killed (Ctrl-C on a first run) and stale
-/// directories whose removal failed. Only ones older than ten minutes, measured
-/// against `tmp` just written, so a concurrent unpack's are left alone.
-fn removeLeftovers(ctx: *Ctx, dir: []const u8, tmp: []const u8) void {
-    const cwd = Io.Dir.cwd();
-    const now = (cwd.statFile(ctx.io, ctx.join(&.{ tmp, marker }), .{}) catch return).mtime.nanoseconds;
-    const parent_path = std.fs.path.dirname(dir) orelse return;
-    var parent = cwd.openDir(ctx.io, parent_path, .{ .iterate = true }) catch return;
+/// Temporaries of unpacks or prebuilt SDK builds that were killed (Ctrl-C on a
+/// first run) and stale directories whose removal failed, in `parent_path`.
+/// Only ones older than `age` measured against `now`, the time of a file just
+/// written, so a concurrent dino's are left alone.
+pub fn removeLeftovers(ctx: *Ctx, parent_path: []const u8, now: i96, age: i96) void {
+    var parent = Io.Dir.cwd().openDir(ctx.io, parent_path, .{ .iterate = true }) catch return;
     defer parent.close(ctx.io);
     var it = parent.iterate();
     while (it.next(ctx.io) catch return) |entry| {
         if (entry.kind != .directory) continue;
         if (std.mem.indexOf(u8, entry.name, ".tmp-") == null and std.mem.indexOf(u8, entry.name, ".stale-") == null) continue;
         const stat = parent.statFile(ctx.io, entry.name, .{}) catch continue;
-        if (now - stat.mtime.nanoseconds < 10 * std.time.ns_per_min) continue;
+        if (now - stat.mtime.nanoseconds < age) continue;
         parent.deleteTree(ctx.io, entry.name) catch {};
     }
 }

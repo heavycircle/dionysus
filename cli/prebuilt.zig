@@ -7,6 +7,7 @@ const std = @import("std");
 const Io = std.Io;
 const Ctx = @import("Ctx.zig");
 const cmake = @import("cmake.zig");
+const sdk_cache = @import("sdk_cache.zig");
 const targets = @import("targets.zig");
 const Target = targets.Target;
 
@@ -65,6 +66,11 @@ fn build(ctx: *Ctx, sdk: []const u8, target: Target, mode: cmake.Mode, out: []co
     const tree = ctx.join(&.{ tmp, "build" });
     const result = ctx.join(&.{ tmp, "out" });
     cwd.createDirPath(ctx.io, tmp) catch |e| return skip(ctx, "creating {s}: {t}", .{ tmp, e });
+    // Those of builds that were interrupted: a signal ends dino before the
+    // defer above. An hour, as a cold build of a set takes minutes.
+    if (cwd.statFile(ctx.io, tmp, .{})) |stat| {
+        if (std.fs.path.dirname(out)) |parent| sdk_cache.removeLeftovers(ctx, parent, stat.mtime.nanoseconds, std.time.ns_per_hour);
+    } else |_| {}
 
     // None of the user's flags: the set is shared by every project.
     const env = ctx.arena.create(std.process.Environ.Map) catch @panic("OOM");

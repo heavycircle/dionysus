@@ -62,8 +62,13 @@ add_library(dino__utf8 INTERFACE)
 if(WIN32 AND NOT DINO_NO_UTF8_MANIFEST)
     set(_dino_rc "${CMAKE_BINARY_DIR}/CMakeFiles/dino_utf8.rc")
     set(_dino_res "${CMAKE_BINARY_DIR}/CMakeFiles/dino_utf8.res")
-    file(WRITE "${_dino_rc}" "1 24 \"${DINO__SDK_DIR}/cmake/utf8.manifest\"\n")
+    # The manifest sits next to the .rc and is named relative to it: rc reads
+    # the .rc in the Windows code page, so a non-ASCII path written into it
+    # (the SDK's or the project's) would name a file that doesn't exist.
+    configure_file("${DINO__SDK_DIR}/cmake/utf8.manifest" "${CMAKE_BINARY_DIR}/CMakeFiles/dino_utf8.manifest" COPYONLY)
+    file(WRITE "${_dino_rc}" "1 24 \"dino_utf8.manifest\"\n")
     execute_process(COMMAND "${DINO_ZIG}" rc /fo "${_dino_res}" "${_dino_rc}"
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/CMakeFiles"
         RESULT_VARIABLE _dino_rc_failed ERROR_VARIABLE _dino_rc_error)
     if(_dino_rc_failed)
         message(FATAL_ERROR "dino: compiling the UTF-8 manifest failed: ${_dino_rc_error}")

@@ -57,6 +57,7 @@ const usage = blk: {
         \\    DINO_HOME          Where dino keeps its unpacked SDK (default: user cache dir)
         \\    DINO_SDK_PATH      Build against this SDK checkout instead of the embedded one
         \\    DINO_LIBRARY_PATH  Library directories every project can link (like PATH)
+        \\    DINO_SDK_PREBUILT  1: build the SDK once per target and import it in every project
         \\
     ;
     break :blk text;

@@ -40,7 +40,7 @@ pub const Options = struct {
     mode_given: bool = false,
     run: cmake.RunOptions = .{},
     extra: []const []const u8 = &.{},
-    /// Refresh the project's compile_commands.json from the first target;
+    /// Refresh the project's compile_commands.json from one target (editorTarget);
     /// `dino test --memcheck` doesn't, since editors want a normal build.
     export_compdb: bool = true,
 };
@@ -136,6 +136,7 @@ pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
     const project = try setup(ctx, opts);
 
     const results = ctx.arena.alloc(Result, opts.targets.len) catch @panic("OOM");
+    const exported = editorTarget(opts.targets);
     for (opts.targets, results, 0..) |target, *result, i| {
         if (ctx.interrupted != null) return results[0..i];
         const cfg = try config(ctx, opts, project, target);
@@ -148,9 +149,9 @@ pub fn buildTargets(ctx: *Ctx, opts: Options) Ctx.Error![]const Result {
 
         if (cmake.needsConfigure(ctx, cfg) and !try cmake.configure(ctx, cfg, opts.run)) continue;
         // Before compiling: editors need the compile database most when the code
-        // doesn't build. Only the first target's, even if it fails to configure:
-        // the editor shouldn't switch to another target's view.
-        if (i == 0 and opts.export_compdb) exportCompileCommands(ctx, cfg, opts.project);
+        // doesn't build. Only one target's, even if it fails to configure: the
+        // editor shouldn't switch to another target's view.
+        if (i == exported and opts.export_compdb) exportCompileCommands(ctx, cfg, opts.project);
         if (!try cmake.build(ctx, cfg, opts.run)) continue;
 
         result.executables = try cmake.executables(ctx, cfg);
@@ -256,6 +257,16 @@ fn requireTools(ctx: *Ctx) Ctx.Error!void {
 }
 
 /// clangd and similar tools look for compile_commands.json at the project root.
+/// Which target's compile database the editor gets: the host's when it's among
+/// them (`--all` starts with arm), else the first named.
+fn editorTarget(list: []const Target) usize {
+    const host = targets.host() orelse return 0;
+    for (list, 0..) |t, i| {
+        if (std.mem.eql(u8, t.name, host.name)) return i;
+    }
+    return 0;
+}
+
 fn exportCompileCommands(ctx: *Ctx, cfg: cmake.Config, project: []const u8) void {
     const src = ctx.join(&.{ cfg.build_dir, "compile_commands.json" });
     if (!ctx.exists(src)) return;
