@@ -161,8 +161,10 @@ void dino_log_write(dino_log_level_t level, const char *file, int line, const ch
     take_lock();
     if (callback)
     {
-        buf[len - 1] = '\0'; // the newline
-        callback(level, buf, callback_userdata);
+        // The message alone: the callback's sink adds its own time and level.
+        buf[len - 1]        = '\0'; // the newline
+        const char *message = (size_t)prefix < len ? buf + prefix : "";
+        callback(level, base_name(file), line, message, callback_userdata);
     }
     else
     {

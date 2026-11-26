@@ -261,37 +261,45 @@ struct received
 {
     int              calls;
     dino_log_level_t level;
-    char             line[1100];
+    char             file[64];
+    int              line;
+    char             message[1100];
 };
 
-static void receive(dino_log_level_t level, const char *line, void *userdata)
+static void receive(
+    dino_log_level_t level, const char *file, int line, const char *message, void *userdata)
 {
     struct received *r = userdata;
     r->calls++;
     r->level = level;
-    snprintf(r->line, sizeof(r->line), "%s", line);
+    snprintf(r->file, sizeof(r->file), "%s", file);
+    r->line = line;
+    snprintf(r->message, sizeof(r->message), "%s", message);
     errno = EBADF; // the logger restores the caller's
 }
 
-UTEST(logging, a_callback_gets_each_line_instead_of_the_stream)
+UTEST(logging, a_callback_gets_each_message_instead_of_the_stream)
 {
     struct received r = { 0 };
     char            buf[256];
     dino_log_set_level(DINO_LOG_LEVEL_INFO);
     dino_log_set_callback(receive, &r);
-    errno = ERANGE;
-    DINO_LOG_WARN("to the callback %d", 3);
+    errno    = ERANGE;
+    int line = __LINE__ + 1;
+    DINO_LOG_WARN("to the callback %d\n", 3);
     EXPECT_EQ(ERANGE, errno);
     DINO_LOG_DEBUG("filtered out");
     EXPECT_EQ(1, r.calls);
     EXPECT_EQ(DINO_LOG_LEVEL_WARN, r.level);
-    EXPECT_NE(NULL, strstr(r.line, "[W] test_logging.c:"));
-    EXPECT_NE(NULL, strstr(r.line, ": to the callback 3"));
-    EXPECT_EQ(NULL, strchr(r.line, '\n'));
+    EXPECT_STREQ("test_logging.c", r.file);
+    EXPECT_EQ(line, r.line);
+    // The message alone: no time, level or place, and no newline.
+    EXPECT_STREQ("to the callback 3", r.message);
 
     // While a callback is set, the stream gets nothing; NULL brings it back.
     EXPECT_EQ(0u, capture(buf, sizeof buf, emit_one));
     EXPECT_EQ(2, r.calls);
+    EXPECT_STREQ("value 42", r.message);
     dino_log_set_callback(NULL, NULL);
     EXPECT_NE(0u, capture(buf, sizeof buf, emit_one));
     EXPECT_EQ(2, r.calls);

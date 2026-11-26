@@ -66,8 +66,9 @@ dino_socket_t dino_socket_create(int domain, int type, int protocol);
  *
  * Not a way to stop another thread blocked in an accept or receive on it:
  * Windows wakes that thread, Linux doesn't (there shutdown(2) does, and the
- * descriptor may meanwhile be reused). To stop such a thread, wait with poll,
- * a receive timeout or the event loop instead of blocking.
+ * descriptor may meanwhile be reused). To stop such a thread, wait with poll
+ * or the event loop instead of blocking (a receive timeout doesn't apply to
+ * accept on Windows).
  *
  * @param  sock  Socket to close.
  * @return 0 on success, -1 on failure.
@@ -119,9 +120,11 @@ int dino_socket_connect(dino_socket_t sock, const struct sockaddr *addr, socklen
  * @param  sock        Socket to connect.
  * @param  addr        Address, from getaddrinfo or filled in by hand.
  * @param  len         Its length.
- * @param  timeout_ms  Milliseconds to wait; -1 for the system's own limit.
- * @return 0 when connected, DINO_TIMEOUT when the time ran out, -1 on failure
- *         (dino_error(): DINO_ECONNREFUSED, DINO_EUNREACH, ...).
+ * @param  timeout_ms  Milliseconds to wait; -1 for as long as the system
+ *                     allows, as a blocking connect waits; 0 to check once.
+ * @return 0 when connected, DINO_TIMEOUT when the time ran out (timeout_ms,
+ *         or the system's own limit), -1 on failure (dino_error():
+ *         DINO_ECONNREFUSED, DINO_EUNREACH, ...).
  */
 int dino_socket_connect_timeout(
     dino_socket_t sock, const struct sockaddr *addr, socklen_t len, int timeout_ms);
@@ -187,11 +190,17 @@ int dino_socket_set_reuseaddr(dino_socket_t sock, int enable);
  * WSAETIMEDOUT on Windows). Then close the socket: Windows leaves it in an
  * undefined state, where data may have been lost or only partly sent.
  *
+ * Receives and sends only. Linux also applies the receive limit to accept
+ * and the send limit to a blocking connect, Windows to neither: for those, use
+ * poll, the event loop or dino_socket_connect_timeout.
+ *
  * @param  sock     Socket to configure.
- * @param  recv_ms  Milliseconds a receive may wait; 0 for no limit, -1 to
- *                  leave it as it is.
+ * @param  recv_ms  Milliseconds a receive may wait; -1 for no limit (the
+ *                  default). 0 is refused: it would mean no limit on Linux
+ *                  and on Windows alike, not "check once".
  * @param  send_ms  The same for a send.
- * @return 0 on success, -1 on error.
+ * @return 0 on success, -1 on error (DINO_EINVAL for a value below 1 other
+ *         than -1).
  */
 int dino_socket_set_timeouts(dino_socket_t sock, int recv_ms, int send_ms);
 

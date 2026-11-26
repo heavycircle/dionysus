@@ -115,6 +115,9 @@ static int copy_out_wide(char *buf, size_t size, const WCHAR *text, int wlen)
 
 int dino_path_temp(char *buf, size_t size)
 {
+    // An empty string on every failure, as the SDK's out-parameters are.
+    if (buf && size)
+        buf[0] = '\0';
     if (!buf && size)
         return dino__fail(DINO_EINVAL);
     WCHAR path[MAX_PATH + 2];
@@ -130,11 +133,14 @@ int dino_path_temp(char *buf, size_t size)
 
 int dino_path_executable(char *buf, size_t size)
 {
+    // An empty string on every failure, as the SDK's out-parameters are.
+    if (buf && size)
+        buf[0] = '\0';
     if (!buf && size)
         return dino__fail(DINO_EINVAL);
     // GetModuleFileNameW cuts a long path short and says so only by filling
     // the buffer: grow until it fits, up to the 32767 characters a path has.
-    for (DWORD cap = MAX_PATH; cap <= 32768; cap *= 2)
+    for (DWORD cap = 512; cap <= 65536; cap *= 2)
     {
         WCHAR *path = malloc(cap * sizeof(WCHAR));
         if (!path)

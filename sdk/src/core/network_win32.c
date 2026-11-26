@@ -5,6 +5,8 @@
 
 #include <windows.h>
 
+#include <dino/core/time.h>
+
 #include "error_internal.h"
 
 // SIO_UDP_CONNRESET from mstcpip.h, which not every MinGW ships.
@@ -140,21 +142,39 @@ int dino_socket_connect_timeout(
         {
             // select, not WSAPoll: before Windows 10 2004 WSAPoll never
             // reports a connect that failed. A failure lands in the except set.
-            fd_set writable, failed;
-            FD_ZERO(&writable);
-            FD_ZERO(&failed);
-            FD_SET((SOCKET)sock, &writable);
-            FD_SET((SOCKET)sock, &failed);
-            struct timeval tv    = { timeout_ms / 1000, (long)(timeout_ms % 1000) * 1000 };
-            int            ready = select(0, NULL, &writable, &failed, timeout_ms < 0 ? NULL : &tv);
+            // select can return up to a timer tick early, so the time left is
+            // measured on the monotonic clock and a wait cut short repeated,
+            // as poll's is on POSIX.
+            uint64_t deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
+            fd_set   writable, failed;
+            int      ready;
+            for (;;)
+            {
+                FD_ZERO(&writable);
+                FD_ZERO(&failed);
+                FD_SET((SOCKET)sock, &writable);
+                FD_SET((SOCKET)sock, &failed);
+                struct timeval tv = { 0, 0 };
+                if (timeout_ms >= 0)
+                {
+                    uint64_t now  = dino_time_monotonic_ns();
+                    uint64_t left = now >= deadline ? 0 : (deadline - now + 999) / 1000;
+                    tv.tv_sec     = (long)(left / 1000000);
+                    tv.tv_usec    = (long)(left % 1000000);
+                }
+                ready = select(0, NULL, &writable, &failed, timeout_ms < 0 ? NULL : &tv);
+                if (ready != 0 || timeout_ms < 0 || dino_time_monotonic_ns() >= deadline)
+                    break;
+            }
             if (ready == SOCKET_ERROR)
                 rc = dino__fail_os();
             else if (ready == 0)
                 rc = DINO_TIMEOUT;
             else
             {
+                // The system's own limit running out is a timeout too.
                 int code = dino_socket_error(sock);
-                rc       = code ? dino__fail(code) : 0;
+                rc       = code == DINO_ETIMEDOUT ? DINO_TIMEOUT : code ? dino__fail(code) : 0;
             }
         }
     }
@@ -169,16 +189,16 @@ int dino_socket_connect_timeout(
 // on both.
 int dino_socket_set_timeouts(dino_socket_t sock, int recv_ms, int send_ms)
 {
-    if (recv_ms < -1 || send_ms < -1)
+    // -1 is no limit, as everywhere in the SDK; to the system that's 0.
+    if (recv_ms == 0 || recv_ms < -1 || send_ms == 0 || send_ms < -1)
         return dino__fail(DINO_EINVAL);
     const int options[2] = { SO_RCVTIMEO, SO_SNDTIMEO };
     const int values[2]  = { recv_ms, send_ms };
     for (int i = 0; i < 2; i++)
     {
-        if (values[i] < 0)
-            continue;
-        DWORD ms = (DWORD)values[i];
-        if (setsockopt((SOCKET)sock, SOL_SOCKET, options[i], (const char *)&ms, sizeof(ms))
+        int   ms    = values[i] < 0 ? 0 : values[i];
+        DWORD limit = (DWORD)ms;
+        if (setsockopt((SOCKET)sock, SOL_SOCKET, options[i], (const char *)&limit, sizeof(limit))
             == SOCKET_ERROR)
             return dino__fail_os();
     }

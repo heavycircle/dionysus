@@ -53,20 +53,25 @@ dino_log_level_t dino_log_get_level(void);
 void dino_log_set_output(FILE *stream);
 
 /**
- * Called with each log line instead of writing it to a stream: to send lines
- * to syslog, the Windows event log or a log of your own.
+ * Called with each log message instead of writing a line to a stream: to send
+ * messages to syslog, the Windows event log or a log of your own, which add
+ * their own time and level. The parts come separately, so nothing is said
+ * twice.
  *
- * @param level     The line's level.
- * @param line      The whole line, as dino_log_write formats it, without the
- *                  trailing newline. Valid only during the call.
+ * @param level     The message's level.
+ * @param file      Source file, without its directory (as in the line).
+ * @param line      Source line.
+ * @param message   The formatted message, without a trailing newline; cut at
+ *                  the same 1 KB limit as a line. Valid only during the call.
  * @param userdata  As given to dino_log_set_callback.
  */
-typedef void (*dino_log_callback_t)(dino_log_level_t level, const char *line, void *userdata);
+typedef void (*dino_log_callback_t)(
+    dino_log_level_t level, const char *file, int line, const char *message, void *userdata);
 
 /**
- * Hand log lines to fn instead of writing them to the output stream.
+ * Hand log messages to fn instead of writing lines to the output stream.
  *
- * fn is called for one line at a time, in the thread that logged it, under the
+ * fn is called for one message at a time, in the thread that logged it, under the
  * same lock that keeps lines whole: it must not log itself, and should return
  * quickly. errno is preserved around it. Once this returns, the previous
  * callback is no longer called, as for dino_log_set_output.

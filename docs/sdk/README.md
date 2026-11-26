@@ -60,15 +60,15 @@ start something or produce more than one result take out-parameters and return `
 
 **Waits** come in two kinds, and `0` means opposite things in them:
 
-- Waits for one thing return `0` when it happened and `DINO_TIMEOUT` (`1`) when the time ran out: `dino_pipe_wait`, `dino_cond_timedwait`, and `dino_process_wait_timeout`.
+- Waits for one thing return `0` when it happened and `DINO_TIMEOUT` (`1`) when the time ran out: `dino_pipe_wait`, `dino_cond_timedwait`, `dino_process_wait_timeout` and `dino_socket_connect_timeout`, and `dino_process_run` and `dino_process_run_shell` with a timeout in their options.
 - Waits for any of several things return how many are ready, so `0` is the timeout: `dino_event_wait`, as `poll` and `select` do.
 
-**Timeouts** are in milliseconds: `-1` waits forever, `0` checks and returns at once. The one exception is `timeout_ms` in the options of `dino_process_run`, where `0` (the value a zeroed struct has) means no timeout.
+**Timeouts** are in milliseconds: `-1` waits forever, `0` checks and returns at once. Two exceptions: `timeout_ms` in the options of `dino_process_run`, where `0` (the value a zeroed struct has) means no timeout, and `dino_socket_set_timeouts`, which refuses `0` (a socket limit of 0 would mean no limit to the system, not "check once"). A receive or send that runs out of a socket limit fails with `DINO_ETIMEDOUT`, since the socket can't be used after it.
 
 **Arguments.** A null pointer where the function needs one, an invalid handle, or a value outside an enum fails with `-1` (or the invalid handle) and `dino_error()` of `DINO_EINVAL`, never a crash. Out-parameters are set even on failure: handles to their invalid value, strings to empty.
 
 **Ownership.** Whatever creates a handle must release it exactly once: close sockets and pipes,
-join or detach threads, wait for processes, destroy mutexes and loops. Functions that allocate
+join or detach threads, wait for processes (or detach them with `dino_process_detach`), destroy mutexes and loops. Functions that allocate
 for you (`dino_process_run`) have a matching free.
 
 **Threads.** Unless a page says otherwise, functions are safe to call from any thread on different

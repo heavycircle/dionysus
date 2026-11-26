@@ -13,6 +13,7 @@
 #include <string.h>
 #include <utest.h>
 
+#include <dino/core/error.h>
 #include <dino/core/event.h>
 #include <dino/core/pipe.h>
 #include <dino/core/time.h>
@@ -401,6 +402,10 @@ UTEST(pipe, an_end_marked_for_a_child_reads_and_writes_but_isnt_waited_for)
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
     EXPECT_EQ(-1, dino_event_add_pipe(loop, r, DINO_EVENT_READ, NULL));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
+    // The same reason from a mod, on every platform, not "not in the loop".
+    EXPECT_EQ(-1, dino_event_mod_pipe(loop, r, DINO_EVENT_READ, NULL));
+    EXPECT_EQ(DINO_EINVAL, dino_error());
     dino_event_loop_destroy(loop);
     dino_pipe_close(r);
     dino_pipe_close(w);

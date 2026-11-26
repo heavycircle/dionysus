@@ -120,8 +120,9 @@ int dino_socket_connect_timeout(
                 rc = DINO_TIMEOUT;
             else
             {
+                // The system's own limit running out is a timeout too.
                 int code = dino_socket_error(sock);
-                rc       = code ? dino__fail(code) : 0;
+                rc       = code == DINO_ETIMEDOUT ? DINO_TIMEOUT : code ? dino__fail(code) : 0;
             }
         }
     }
@@ -148,15 +149,15 @@ static int fail_timed_out(dino_socket_t sock, int flags)
 
 int dino_socket_set_timeouts(dino_socket_t sock, int recv_ms, int send_ms)
 {
-    if (recv_ms < -1 || send_ms < -1)
+    // -1 is no limit, as everywhere in the SDK; to the system that's 0.
+    if (recv_ms == 0 || recv_ms < -1 || send_ms == 0 || send_ms < -1)
         return dino__fail(DINO_EINVAL);
     const int options[2] = { SO_RCVTIMEO, SO_SNDTIMEO };
     const int values[2]  = { recv_ms, send_ms };
     for (int i = 0; i < 2; i++)
     {
-        if (values[i] < 0)
-            continue;
-        struct timeval tv = { (time_t)(values[i] / 1000), (suseconds_t)(values[i] % 1000) * 1000 };
+        int            ms = values[i] < 0 ? 0 : values[i];
+        struct timeval tv = { (time_t)(ms / 1000), (suseconds_t)(ms % 1000) * 1000 };
         if (setsockopt((int)sock, SOL_SOCKET, options[i], &tv, sizeof(tv)) != 0)
             return dino__fail_os();
     }

@@ -661,7 +661,7 @@ UTEST(event, timer_del_through_another_loop_fails)
 
 /* ---- timer reset ---- */
 
-UTEST(event, reset_timer_pushes_the_deadline_back)
+UTEST(event, mod_timer_pushes_the_deadline_back)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
@@ -670,7 +670,7 @@ UTEST(event, reset_timer_pushes_the_deadline_back)
     ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
 
     uint64_t start = dino_time_monotonic_ns();
-    ASSERT_EQ(0, dino_event_reset_timer(loop, timer, 300, 0));
+    ASSERT_EQ(0, dino_event_mod_timer(loop, timer, 300, 0));
     dino_event_t out[4];
     EXPECT_EQ(0, dino_event_wait(loop, out, 4, 150));
     ASSERT_EQ(1, dino_event_wait(loop, out, 4, 5000));
@@ -680,7 +680,7 @@ UTEST(event, reset_timer_pushes_the_deadline_back)
     dino_event_loop_destroy(loop);
 }
 
-UTEST(event, reset_timer_arms_a_fired_one_shot_again)
+UTEST(event, mod_timer_arms_a_fired_one_shot_again)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
@@ -692,7 +692,7 @@ UTEST(event, reset_timer_arms_a_fired_one_shot_again)
 
     for (int round = 0; round < 3; round++)
     {
-        ASSERT_EQ(0, dino_event_reset_timer(loop, timer, 10, 0));
+        ASSERT_EQ(0, dino_event_mod_timer(loop, timer, 10, 0));
         EXPECT_EQ(1, dino_event_wait(loop, out, 4, 1000));
         EXPECT_EQ(0, dino_event_wait(loop, out, 4, 50));
     }
@@ -701,27 +701,27 @@ UTEST(event, reset_timer_arms_a_fired_one_shot_again)
 }
 
 // Due, but no wait has reported it yet: the reset moves it, so nothing fires.
-UTEST(event, reset_timer_drops_a_firing_not_yet_reported)
+UTEST(event, mod_timer_drops_a_firing_not_yet_reported)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
     dino_event_timer_t timer = dino_event_add_timer(loop, 0, 0, NULL);
     ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
     dino_sleep_ms(20);
-    ASSERT_EQ(0, dino_event_reset_timer(loop, timer, 5000, 0));
+    ASSERT_EQ(0, dino_event_mod_timer(loop, timer, 5000, 0));
     dino_event_t out[4];
     EXPECT_EQ(0, dino_event_wait(loop, out, 4, 50));
     EXPECT_EQ(0, dino_event_del_timer(loop, timer));
     dino_event_loop_destroy(loop);
 }
 
-UTEST(event, reset_timer_changes_the_interval)
+UTEST(event, mod_timer_changes_the_interval)
 {
     dino_event_loop_t loop = dino_event_loop_create();
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, loop);
     dino_event_timer_t timer = dino_event_add_timer(loop, 10000, 0, NULL);
     ASSERT_NE(DINO_INVALID_EVENT_TIMER, timer);
-    ASSERT_EQ(0, dino_event_reset_timer(loop, timer, 10, 10));
+    ASSERT_EQ(0, dino_event_mod_timer(loop, timer, 10, 10));
 
     dino_event_t out[4];
     int          fired = 0;
@@ -734,7 +734,7 @@ UTEST(event, reset_timer_changes_the_interval)
     }
     EXPECT_EQ(3, fired);
     // And back to a one-shot.
-    ASSERT_EQ(0, dino_event_reset_timer(loop, timer, 10, 0));
+    ASSERT_EQ(0, dino_event_mod_timer(loop, timer, 10, 0));
     EXPECT_EQ(1, dino_event_wait(loop, out, 4, 1000));
     EXPECT_EQ(0, dino_event_wait(loop, out, 4, 100));
     EXPECT_EQ(0, dino_event_del_timer(loop, timer));
@@ -743,7 +743,7 @@ UTEST(event, reset_timer_changes_the_interval)
 
 // Earlier while another thread waits: that wait ends at the new deadline, not
 // the one it started with.
-UTEST(event, reset_timer_earlier_shortens_a_running_wait)
+UTEST(event, mod_timer_earlier_shortens_a_running_wait)
 {
     struct blocked_wait w = { 0 };
     w.loop                = dino_event_loop_create();
@@ -755,7 +755,7 @@ UTEST(event, reset_timer_earlier_shortens_a_running_wait)
     dino_sleep_ms(50);
 
     uint64_t start = dino_time_monotonic_ns();
-    ASSERT_EQ(0, dino_event_reset_timer(w.loop, timer, 10, 0));
+    ASSERT_EQ(0, dino_event_mod_timer(w.loop, timer, 10, 0));
     EXPECT_EQ(0, dino__thread_join(t, NULL));
     EXPECT_LT(elapsed_ms(start), 5000u);
     EXPECT_EQ(1, w.n);
@@ -764,7 +764,7 @@ UTEST(event, reset_timer_earlier_shortens_a_running_wait)
     dino_event_loop_destroy(w.loop);
 }
 
-UTEST(event, reset_timer_invalid_args)
+UTEST(event, mod_timer_invalid_args)
 {
     dino_event_loop_t a = dino_event_loop_create();
     dino_event_loop_t b = dino_event_loop_create();
@@ -772,9 +772,9 @@ UTEST(event, reset_timer_invalid_args)
     ASSERT_NE(DINO_INVALID_EVENT_LOOP, b);
     dino_event_timer_t t = dino_event_add_timer(a, 10000, 0, NULL);
     ASSERT_NE(DINO_INVALID_EVENT_TIMER, t);
-    EXPECT_EQ(-1, dino_event_reset_timer(DINO_INVALID_EVENT_LOOP, t, 0, 0));
-    EXPECT_EQ(-1, dino_event_reset_timer(a, DINO_INVALID_EVENT_TIMER, 0, 0));
-    EXPECT_EQ(-1, dino_event_reset_timer(b, t, 0, 0));
+    EXPECT_EQ(-1, dino_event_mod_timer(DINO_INVALID_EVENT_LOOP, t, 0, 0));
+    EXPECT_EQ(-1, dino_event_mod_timer(a, DINO_INVALID_EVENT_TIMER, 0, 0));
+    EXPECT_EQ(-1, dino_event_mod_timer(b, t, 0, 0));
     EXPECT_EQ(0, dino_event_del_timer(a, t));
     dino_event_loop_destroy(a);
     dino_event_loop_destroy(b);

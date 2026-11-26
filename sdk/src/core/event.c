@@ -75,21 +75,27 @@ static void sift_down(struct dino__event_timers *t, size_t i)
     place(t, i, tm);
 }
 
-static int push(struct dino__event_timers *t, struct dino__event_timer *tm)
+// Room in the heap for one more timer, taken when it's added: every timer has
+// its slot from then on, so putting one back (dino_event_mod_timer on a fired
+// one-shot) can't fail.
+static int reserve(struct dino__event_timers *t)
 {
-    if (t->len == t->cap)
-    {
-        size_t                     cap = t->cap ? t->cap * 2 : 8;
-        struct dino__event_timer **heap
-            = (struct dino__event_timer **)realloc((void *)t->heap, cap * sizeof(*heap));
-        if (!heap)
-            return -1;
-        t->heap = heap;
-        t->cap  = cap;
-    }
+    if (t->count < t->cap)
+        return 0;
+    size_t                     cap = t->cap ? t->cap * 2 : 8;
+    struct dino__event_timer **heap
+        = (struct dino__event_timer **)realloc((void *)t->heap, cap * sizeof(*heap));
+    if (!heap)
+        return -1;
+    t->heap = heap;
+    t->cap  = cap;
+    return 0;
+}
+
+static void push(struct dino__event_timers *t, struct dino__event_timer *tm)
+{
     place(t, t->len++, tm);
     sift_up(t, tm->index);
-    return 0;
 }
 
 static void remove_at(struct dino__event_timers *t, size_t i)
@@ -123,9 +129,11 @@ dino_event_timer_t dino_event_add_timer(
     tm->owner       = t;
 
     dino__mutex_lock(t->lock);
-    int ok = push(t, tm) == 0;
+    int ok = reserve(t) == 0;
     if (ok)
     {
+        t->count++;
+        push(t, tm);
         tm->next = t->all;
         if (t->all)
             t->all->prev = tm;
@@ -148,7 +156,7 @@ dino_event_timer_t dino_event_add_timer(
     return (dino_event_timer_t)tm;
 }
 
-int dino_event_reset_timer(
+int dino_event_mod_timer(
     dino_event_loop_t loop, dino_event_timer_t timer, uint32_t delay_ms, uint32_t interval_ms)
 {
     if (loop == DINO_INVALID_EVENT_LOOP || timer == DINO_INVALID_EVENT_TIMER)
@@ -161,10 +169,9 @@ int dino_event_reset_timer(
     dino__mutex_lock(t->lock);
     tm->deadline_ns = dino_time_monotonic_ns() + (uint64_t)delay_ms * 1000000;
     tm->interval_ns = (uint64_t)interval_ms * 1000000;
-    int ok          = 1;
     if (tm->index == NOT_IN_HEAP)
     {
-        ok = push(t, tm) == 0; // a fired one-shot, armed again
+        push(t, tm); // a fired one-shot, armed again, into its reserved slot
     }
     else
     {
@@ -174,11 +181,9 @@ int dino_event_reset_timer(
         sift_down(t, tm->index);
     }
     // As for an add: a waiter computed its timeout from the old earliest.
-    int interrupt = ok && tm->index == 0 && atomic_load(&t->waiting) > 0;
+    int interrupt = tm->index == 0 && atomic_load(&t->waiting) > 0;
     dino__mutex_unlock(t->lock);
 
-    if (!ok)
-        return dino__fail(DINO_ENOMEM);
     if (interrupt)
         dino__event_interrupt(loop);
     return 0;
@@ -195,6 +200,7 @@ int dino_event_del_timer(dino_event_loop_t loop, dino_event_timer_t timer)
     dino__mutex_lock(t->lock);
     if (tm->index != NOT_IN_HEAP)
         remove_at(t, tm->index);
+    t->count--;
     if (tm->prev)
         tm->prev->next = tm->next;
     else
