@@ -1,3 +1,4 @@
+#pragma GCC system_header
 // POSIX poll() on Windows, where MinGW ships no <poll.h>. Winsock defines
 // struct pollfd and the POLL* flags; the SDK defines poll() over WSAPoll
 // (sdk/src/libc/poll_win32.c). Like WSAPoll, it waits on sockets only.

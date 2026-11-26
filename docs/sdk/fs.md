@@ -62,7 +62,14 @@ if (rename("conf.tmp", "conf") != 0)
 
 ## Creating directories
 
-Use POSIX's `mkdir(path, mode)` from `<sys/stat.h>`. On Windows MinGW's `mkdir` takes the path alone, since Windows has no permission bits, so `mkdir(path, 0755)` wouldn't compile there: the SDK defines the two-argument form, which takes UTF-8 paths, ignores `mode`, and sets `errno` as Linux would (`EEXIST`, `ENOENT`, ...). It's a macro over the SDK's function, so taking `mkdir`'s address (instead of calling it) still gets MinGW's one-argument version. Since 1.0; `DINO_NO_LIBC_SHIMS` turns it off with the other shims.
+Use POSIX's `mkdir(path, mode)` from `<sys/stat.h>`. On Windows MinGW's `mkdir` takes the path alone, since Windows has no permission bits, so `mkdir(path, 0755)` wouldn't compile there: the SDK defines the two-argument form, which takes UTF-8 paths, ignores `mode`, and sets `errno` as Linux would (`EEXIST`, `ENOENT`, `ENOTDIR`, ...). MinGW's own one-argument `mkdir(path)` keeps working too. Since 1.0.
+
+It's a macro, since C can't declare a second `mkdir`, which shows in a few places:
+
+- **A project's own `mkdir` macro** wins when it's defined before `<sys/stat.h>` is included; defined after, it redefines the SDK's (a `-Wmacro-redefined` warning). Wrap it in `#ifndef mkdir`, or turn the SDK's off.
+- **A member called `mkdir`**, such as `ops->mkdir(path, mode)` in a table of functions, is caught by the macro too. Call it as `(ops->mkdir)(path, mode)`.
+- **Taking `mkdir`'s address** (instead of calling it) gets MinGW's one-argument version.
+- **Turning it off:** set `DINO_NO_MKDIR_SHIM` before `project()` to leave only this one out, or `DINO_NO_LIBC_SHIMS` for every shim (see [projects](../guide/projects.md)).
 
 To create every missing directory on the way, as `mkdir -p` does, use `dino_mkdir_p` from `dino/util/fs.h` (`dino_util`). A directory that already exists is fine, and on Windows it takes either separator and a drive (`C:\`) or share (`\\server\share\`) at the start.
 

@@ -59,10 +59,11 @@ static inline int dino__libc_errno(void)
         return ENOMEM;
     case ERROR_WRITE_PROTECT:
         return EROFS;
+    case ERROR_FILENAME_EXCED_RANGE:
+        return ENAMETOOLONG;
     case ERROR_INVALID_NAME:
     case ERROR_BAD_PATHNAME:
     case ERROR_INVALID_PARAMETER:
-    case ERROR_FILENAME_EXCED_RANGE:
         return EINVAL;
     default:
         return EIO;
