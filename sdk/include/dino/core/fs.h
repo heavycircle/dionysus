@@ -25,7 +25,7 @@ int dino_file_size(const char *path, uint64_t *size);
 /**
  * The directory for temporary files: $TMPDIR, or /tmp, on POSIX; what
  * GetTempPathW says on Windows (%TMP%, %TEMP%, or the user's own). UTF-8,
- * without a trailing separator. Since 0.10.
+ * without a trailing separator. Since 1.0.
  *
  * Like snprintf: writes as much as fits in buf, always NUL-terminated when
  * size > 0, and returns the full length, so a result >= size means it was cut.
@@ -40,7 +40,7 @@ int dino_path_temp(char *buf, size_t size);
 /**
  * The full path of the running program's executable: /proc/self/exe on Linux
  * (under qemu-user too, which reports the program, not itself),
- * GetModuleFileNameW on Windows. UTF-8. Since 0.10.
+ * GetModuleFileNameW on Windows. UTF-8. Since 1.0.
  *
  * Returns as dino_path_temp does.
  *

@@ -7,8 +7,8 @@
 #define DINO_VERSION_PRERELEASE "@DINO_VERSION_PRERELEASE@"
 #define DINO_VERSION            "@PROJECT_VERSION@@DINO_VERSION_PRERELEASE@"
 
-/* The version as one number, MAJOR * 10000 + MINOR * 100 + PATCH (0.10.0 is
-   1000), for #if. A -dev build counts as the version it leads to. */
+/* The version as one number, MAJOR * 10000 + MINOR * 100 + PATCH (1.2.3 is
+   10203), for #if. A -dev build counts as the version it leads to. */
 #define DINO_VERSION_NUMBER \
     (DINO_VERSION_MAJOR * 10000 + DINO_VERSION_MINOR * 100 + DINO_VERSION_PATCH)
 
