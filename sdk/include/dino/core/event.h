@@ -221,7 +221,7 @@ dino_event_timer_t dino_event_add_timer(
  * Move a timer's next firing to delay_ms from now, then every interval_ms (0:
  * once). For an idle timeout, push it back on every packet: it keeps its
  * handle and allocates nothing. A one-shot timer that already fired is armed
- * again, and a firing that was due but not yet reported is dropped. Since 0.10.
+ * again, and a firing that was due but not yet reported is dropped. Since 1.0.
  *
  * @param  loop         Loop the timer was added to.
  * @param  timer        Timer from dino_event_add_timer, not yet deleted.

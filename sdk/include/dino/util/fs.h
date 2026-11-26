@@ -10,7 +10,7 @@ extern "C"
 
 /**
  * Create a directory and every missing directory above it, as `mkdir -p`
- * does. Since 0.10.
+ * does. Since 1.0.
  *
  * A directory that already exists is fine, the last one included. Paths are
  * UTF-8; on Windows both / and \ separate, and a drive (C:\) or share

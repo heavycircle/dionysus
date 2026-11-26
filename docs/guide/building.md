@@ -57,7 +57,7 @@ architecture, with nothing installed. The Windows binaries are PE files linked a
 that need only the DLLs every Windows installation has.
 
 Release builds are optimized for size (`-Oz`, unused sections dropped, symbols stripped), so a hello
-world is around 5 to 8 KiB on Linux and about 60 KiB on Windows.
+world is around 5 to 8 KiB on Linux and about 60 KiB on Windows. Most of a Windows binary is Zig's compiler runtime that nothing calls: since Zig 0.17, a bug in how its runtime is built for Windows keeps about 38 KB of it alive in every program, which no linker flag can drop ([#26](https://github.com/heavycircle/dionysus/issues/26), reported upstream). Linux targets aren't affected.
 
 ## Debug and release
 
