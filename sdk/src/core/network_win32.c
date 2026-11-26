@@ -5,6 +5,8 @@
 
 #include <windows.h>
 
+#include <dino/core/time.h>
+
 #include "error_internal.h"
 
 // SIO_UDP_CONNRESET from mstcpip.h, which not every MinGW ships.
@@ -140,13 +142,30 @@ int dino_socket_connect_timeout(
         {
             // select, not WSAPoll: before Windows 10 2004 WSAPoll never
             // reports a connect that failed. A failure lands in the except set.
-            fd_set writable, failed;
-            FD_ZERO(&writable);
-            FD_ZERO(&failed);
-            FD_SET((SOCKET)sock, &writable);
-            FD_SET((SOCKET)sock, &failed);
-            struct timeval tv    = { timeout_ms / 1000, (long)(timeout_ms % 1000) * 1000 };
-            int            ready = select(0, NULL, &writable, &failed, timeout_ms < 0 ? NULL : &tv);
+            // select can return up to a timer tick early, so the time left is
+            // measured on the monotonic clock and a wait cut short repeated,
+            // as poll's is on POSIX.
+            uint64_t deadline = dino_time_monotonic_ns() + (uint64_t)timeout_ms * 1000000;
+            fd_set   writable, failed;
+            int      ready;
+            for (;;)
+            {
+                FD_ZERO(&writable);
+                FD_ZERO(&failed);
+                FD_SET((SOCKET)sock, &writable);
+                FD_SET((SOCKET)sock, &failed);
+                struct timeval tv = { 0, 0 };
+                if (timeout_ms >= 0)
+                {
+                    uint64_t now  = dino_time_monotonic_ns();
+                    uint64_t left = now >= deadline ? 0 : (deadline - now + 999) / 1000;
+                    tv.tv_sec     = (long)(left / 1000000);
+                    tv.tv_usec    = (long)(left % 1000000);
+                }
+                ready = select(0, NULL, &writable, &failed, timeout_ms < 0 ? NULL : &tv);
+                if (ready != 0 || timeout_ms < 0 || dino_time_monotonic_ns() >= deadline)
+                    break;
+            }
             if (ready == SOCKET_ERROR)
                 rc = dino__fail_os();
             else if (ready == 0)
